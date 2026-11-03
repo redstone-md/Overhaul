@@ -47,6 +47,7 @@ tasks.register('prepareBackendSmoke') {
             delete file("run/${targetName}/overhaul-terrain-smoke-latest.json")
             delete file("run/${targetName}/overhaul-occlusion-smoke-latest.json")
             delete file("run/${targetName}/overhaul-particle-smoke-latest.json")
+            delete file("run/${targetName}/overhaul-weather-smoke-latest.json")
         }
     }
 }
@@ -128,6 +129,67 @@ tasks.register('verifyBackendSmoke') {
                         || after.normalCalls <= before.normalCalls || after.fallbackGroups != before.fallbackGroups
                         || (improved ? after.oitCalls <= before.oitCalls : after.oitCalls != before.oitCalls)) {
                     throw new GradleException("Ordinary particle path did not execute the required instance groups: ${stage}")
+                }
+            }
+            def weatherFile = file("run/${targetName}/overhaul-weather-smoke-latest.json")
+            if (!weatherFile.isFile()) throw new GradleException('Missing ordinary weather receipt')
+            def weather = new groovy.json.JsonSlurper().parse(weatherFile)
+            if (weather.status != 'PASS' || weather.stages*.stage != ['weather-rain','weather-rain-oit','weather-snow','weather-snow-oit','weather-reloaded','weather-mixed','weather-clear']
+                    || !receipt.weatherStatistics.closed || !receipt.weatherStatistics.pipelineCacheClosed
+                    || receipt.weatherStatistics.lastRainCount != 0 || receipt.weatherStatistics.lastSnowCount != 0
+                    || receipt.weatherStatistics.pipelineGenerations < 2 || weather.pixelParity.status != 'PASS'
+                    || weather.pixelParity.firstInstance != 1 || weather.pixelParity.instanceStride != 48) {
+                throw new GradleException("Ordinary weather stages, parity or lifetime failed: ${weather}")
+            }
+            ['rain','snow'].each { type ->
+                def pixels = weather.pixelParity[type]
+                if (pixels.coveredPixels <= 1000 || pixels.partialAlphaPixels <= 1000 || pixels.distinctAlphaValues <= 8
+                        || pixels.distinctColors <= 32 || pixels.differentPixels > 4 || pixels.instanceSliceOffset <= 0
+                        || pixels.indirectSliceOffset <= 0 || !pixels.sourceOverwrittenAfterUpload || !pixels.signedLight) {
+                    throw new GradleException("Weather pixel parity did not exercise the required coverage and instance data: ${pixels}")
+                }
+            }
+            weather.stages.each { stage ->
+                def before = stage.before
+                def after = stage.after
+                def improved = !['weather-rain','weather-snow'].contains(stage.stage)
+                def snow = ['weather-snow','weather-snow-oit','weather-reloaded'].contains(stage.stage)
+                if (stage.improvedTransparency != improved || stage.snow != snow
+                        || stage.mixed != (stage.stage == 'weather-mixed') || stage.clear != (stage.stage == 'weather-clear')) {
+                    throw new GradleException("Weather stage configuration differs from its required scenario: ${stage}")
+                }
+                if (!after.eligible || after.fallbackPreparations != before.fallbackPreparations) throw new GradleException("Weather capture used fallback geometry: ${stage}")
+                if (stage.clear) {
+                    if (after.lastRainCount != 0 || after.lastSnowCount != 0 || after.recordedRainInstances != before.recordedRainInstances
+                            || after.recordedSnowInstances != before.recordedSnowInstances || stage.clientRainLevel > 0.001) throw new GradleException("Cleared weather retained instances: ${stage}")
+                } else if (stage.mixed) {
+                    def records = after.preparedRainInstances + after.preparedSnowInstances - before.preparedRainInstances - before.preparedSnowInstances
+                    if (!stage.clientMixedMatchesServer || stage.clientRainBiomes <= 0 || stage.clientSnowBiomes <= 0
+                            || stage.clientRainLevel < 0.9
+                            || stage.clientRainBiomes + stage.clientSnowBiomes != 121 || after.lastRainCount != stage.clientRainBiomes
+                            || after.lastSnowCount != stage.clientSnowBiomes || records < 121
+                            || after.preparedInstanceBytes - before.preparedInstanceBytes != 48 * records) {
+                        throw new GradleException("Mixed weather did not preserve server-sampled biome/column convergence: ${stage}")
+                    }
+                    ['Rain','Snow'].each { type ->
+                        ['DEPTH_BOUNDS','TRANSMITTANCE','ACCUMULATE'].each { phase ->
+                            if (after["oit${type}Calls"][phase] <= before["oit${type}Calls"][phase]) throw new GradleException("Mixed weather omitted ${type}/${phase}")
+                        }
+                    }
+                } else {
+                    def type = stage.snow ? 'Snow' : 'Rain'
+                    def other = stage.snow ? 'Rain' : 'Snow'
+                    def records = after["prepared${type}Instances"] - before["prepared${type}Instances"]
+                    if (records < 121 || after["last${type}Count"] != 121 || after["last${other}Count"] != 0
+                            || after.preparedInstanceBytes - before.preparedInstanceBytes != 48 * records
+                            || stage.clientRainLevel < 0.9 || stage.clientPrecipitation != (stage.snow ? 'SNOW' : 'RAIN')) {
+                        throw new GradleException("Weather extraction did not preserve the complete actual column set: ${stage}")
+                    }
+                    if (stage.improvedTransparency) {
+                        ['DEPTH_BOUNDS','TRANSMITTANCE','ACCUMULATE'].each { phase ->
+                            if (after["oit${type}Calls"][phase] <= before["oit${type}Calls"][phase]) throw new GradleException("Weather omitted OIT phase ${phase}")
+                        }
+                    } else if (after["normal${type}Calls"] <= before["normal${type}Calls"]) throw new GradleException('Weather omitted normal drawing')
                 }
             }
         }

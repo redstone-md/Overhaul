@@ -39,6 +39,7 @@ final class TerrainOcclusionProbe implements WorldSmokeProbe {
     private Phase phase=Phase.EDIT;
     private int stage;
     private long barrier,baselineFrame,lastProgress;
+    private long nextDiagnostic;
     private String failure="";
 
     @Override public CompletableFuture<String> capture(Minecraft minecraft,SectionKey ignored) {
@@ -56,8 +57,9 @@ final class TerrainOcclusionProbe implements WorldSmokeProbe {
     @Override public void tick() {
         requireOwner();if(result.isDone())return;
         try {
+            if(System.nanoTime()>=nextDiagnostic){writeReceipt("RUNNING");nextDiagnostic=System.nanoTime()+TimeUnit.SECONDS.toNanos(1);}
             if(System.nanoTime()-lastProgress>TimeUnit.SECONDS.toNanos(40))
-                throw new IllegalStateException("Occlusion smoke stalled at "+LABELS[stage]+"/"+phase+"; "+culling.snapshot()+"; target="+culling.observation(TARGET_SECTION));
+                throw new IllegalStateException("Occlusion smoke stalled at "+LABELS[stage]+"/"+phase+"; "+culling.snapshot()+"; target="+culling.observation(TARGET_SECTION)+"; readiness="+readiness());
             if(phase==Phase.EDIT&&work.isDone()) {
                 work.join();if(!ready())return;
                 work=device.awaitWorldCapture(LABELS[stage]);phase=Phase.CAPTURE;lastProgress=System.nanoTime();
@@ -128,8 +130,23 @@ final class TerrainOcclusionProbe implements WorldSmokeProbe {
         var report=new LinkedHashMap<String,Object>();report.put("status",status);report.put("phase",phase.toString());report.put("stages",checkpoints);
         report.put("failure",failure);report.put("targetSection",TARGET_SECTION);report.put("culling",culling.snapshot());
         report.put("observation",culling.observation(TARGET_SECTION));report.put("finalClientStateBarrier",barrier);
+        report.put("readiness",readiness());
         try{Files.writeString(receipt,new GsonBuilder().setPrettyPrinting().create().toJson(report));}
         catch(IOException problem){throw new IllegalStateException("Cannot write occlusion receipt",problem);}
+    }
+    private Map<String,Object> readiness() {
+        if(minecraft.level==null||minecraft.player==null)return Map.of("level","absent");
+        var result=new LinkedHashMap<String,Object>();result.put("clientMatches",fixtures.matches(minecraft.level,stage));
+        result.put("camera",List.of(minecraft.player.getX(),minecraft.player.getY(),minecraft.player.getZ()));
+        result.put("rotation",List.of(minecraft.player.getYRot(),minecraft.player.getXRot()));
+        var installed=new ArrayList<Map<String,Object>>();
+        for(var position:OcclusionFixtures.SECTIONS) {
+            var section=((TerrainSectionAccess)minecraft.levelRenderer).overhaul$section(position);var mesh=section==null?null:section.getSectionMesh();
+            var details=new LinkedHashMap<String,Object>();details.put("expectedNode",OcclusionFixtures.sectionNode(position));
+            details.put("node",section==null?"absent":section.getSectionNode());details.put("compileStart",mesh==null?0:mesh.getCompileTaskStartTime());
+            details.put("hasLayers",mesh!=null&&mesh.hasRenderableLayers());installed.add(details);
+        }
+        result.put("installed",installed);return result;
     }
     private static long number(Map<String,Object> values,String key){return((Number)values.get(key)).longValue();}
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Occlusion smoke requires the client owner");}
