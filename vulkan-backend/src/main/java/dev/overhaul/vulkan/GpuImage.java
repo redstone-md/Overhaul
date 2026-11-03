@@ -69,7 +69,7 @@ public final class GpuImage implements AutoCloseable {
         for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++)layouts[layer*mips+mip]=newLayout;
         return new LayoutChange(baseMip,mipCount,baseLayer,layerCount,old);
     }
-    private void validateLayout(int layout){
+    void validateLayout(int layout){
         switch(layout){
             case VK_IMAGE_LAYOUT_GENERAL -> { }
             case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL -> requireUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
