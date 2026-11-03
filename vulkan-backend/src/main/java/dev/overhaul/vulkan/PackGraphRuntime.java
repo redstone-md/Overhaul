@@ -203,10 +203,11 @@ public final class PackGraphRuntime implements AutoCloseable {
         try(VulkanRenderGraph graph=plan.create(context,frameLane)){graph.record(command,changes);}
     }
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
-    public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(!program.scene())throw new IllegalArgumentException("Not a scene program");return outputs(swaps.route(program));}
+    public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(program.stage()!=CompiledShaderPack.Stage.GBUFFER)throw new IllegalArgumentException("Not a world gbuffer program");return outputs(swaps.route(program));}
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */
     public void beginScene(ImmediateCommands lane,PackRenderTargets.Color fog){
         requireOpen();if(!scene)throw new IllegalStateException("Pack has no scene programs");PackFrameGraph plan=new PackFrameGraph();
+        if(shadows!=null)throw new IllegalStateException("Use beginFrame and capture the light-camera geometry before the world scene");
         if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
         if(passes.keySet().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.BEGIN||program.stage()==CompiledShaderPack.Stage.PREPARE))
             throw new IllegalStateException("Use beginFrame to bind uniforms for pre-scene pack programs");
