@@ -23,7 +23,7 @@ final class BackendSmokeProbe {
     private long frames,passes,draws,sceneFrames;
     private String scene,pendingScene,lastScreen,lastOverlay,capturedScreen,capturedOverlay;
     private int width,height,distinctPixels;
-    private boolean captured;
+    private boolean captured,worldRequested;
 
     BackendSmokeProbe(OverhaulDeviceBackend owner) {
         this.owner=owner;
@@ -40,6 +40,7 @@ final class BackendSmokeProbe {
         lastScreen=screen==null?"none":screen.getClass().getName();
         lastOverlay=overlay==null?"none":overlay.getClass().getName();
         boolean world=minecraft.level!=null;
+        if (world&&!worldRequested) return;
         boolean title=screen instanceof TitleScreen;
         if (!minecraft.isGameLoadFinished()||overlay!=null||(world?(minecraft.player==null||screen!=null):screen==null)) { sceneFrames=0; return; }
         String nextScene=world?"world":title?"title":"screen";
@@ -80,6 +81,7 @@ final class BackendSmokeProbe {
     }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() {
         if (directory==null) throw new IllegalStateException("Enable backend smoke capture before requesting world evidence");
+        worldRequested=true;
         return worldCapture.copy();
     }
     void close() {

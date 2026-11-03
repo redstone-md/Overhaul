@@ -12,7 +12,16 @@ public final class ModelSmokeFactory {
             if (!(RenderSystem.getDevice() instanceof OverhaulGpuDevice device)) {
                 throw new IllegalStateException("World backend smoke requires the actual Overhaul device");
             }
-            return device.awaitWorldCapture();
+            var captured=device.awaitWorldCapture();
+            var id=minecraft.player.getUUID();
+            var server=minecraft.getSingleplayerServer();
+            return server.submit(()-> {
+                if (!server.isSameThread()) throw new IllegalStateException("Camera placement requires the server owner");
+                var player=server.getPlayerList().getPlayer(id);
+                if (player==null||!player.teleportTo(player.level(),6.5,4,-5.5,java.util.Set.of(),0,7,true)) {
+                    throw new IllegalStateException("Cannot place the smoke camera at its fixture reference pose");
+                }
+            }).thenCompose(ignored->captured);
         };
     }
 }
