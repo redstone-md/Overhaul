@@ -17,6 +17,7 @@ public final class AsyncRenderer implements AutoCloseable {
     private final GpuAllocator allocator;
     private final FrameRing ring;
     private final Target[] targets;
+    private final IndirectUpdates indirectUpdates;
     private final Set<GpuBatch> batches = Collections.newSetFromMap(new IdentityHashMap<>());
     private IndexedPipeline pipeline;
     private final boolean allowMultiDraw;
@@ -32,6 +33,7 @@ public final class AsyncRenderer implements AutoCloseable {
         allocator = new GpuAllocator(context);
         FrameRing frames = null;
         targets = new Target[framesInFlight > 0 && framesInFlight <= 8 ? framesInFlight : 0];
+        indirectUpdates = new IndirectUpdates(allocator, targets.length);
         try {
             frames = new FrameRing(context, framesInFlight);
             ring = frames;
@@ -40,6 +42,7 @@ public final class AsyncRenderer implements AutoCloseable {
         } catch (RuntimeException | Error failure) {
             for (Target target : targets) if (target != null) target.close();
             if (frames != null) frames.close();
+            indirectUpdates.close();
             allocator.close();
             throw failure;
         }
@@ -93,6 +96,25 @@ public final class AsyncRenderer implements AutoCloseable {
         }
     }
 
+    /** Conservative CPU culling updates only changed indexCount words; geometry allocations remain intact. */
+    public VisibilityUpdate updateVisibility(GpuBatch batch, SceneVisibility scene,
+            dev.overhaul.core.culling.Frustum frustum, dev.overhaul.core.culling.SoftwareDepthBuffer depth) {
+        requireBatch(batch);
+        batch.commands.prepare(java.util.Objects.requireNonNull(scene, "scene"),
+            java.util.Objects.requireNonNull(frustum, "frustum"), depth);
+        int changed = batch.commands.changedCount();
+        if (changed != 0) {
+            batch.lastUse = ring.submit(frame -> indirectUpdates.record(frame, batch));
+            batch.commands.commit();
+        }
+        return new VisibilityUpdate(batch.commands.visibleCount(), changed, changed * 4, batch.lastUse);
+    }
+
+    private void requireBatch(GpuBatch batch) {
+        requireOpen();
+        if (!batches.contains(batch) || batch.retired) throw new IllegalArgumentException("batch is retired or belongs to another renderer");
+    }
+
     public RenderedFrame submit(GpuBatch batch, float[] cameraTransform) {
         return submit(batch, cameraTransform, false);
     }
@@ -102,8 +124,7 @@ public final class AsyncRenderer implements AutoCloseable {
     }
 
     private RenderedFrame submit(GpuBatch batch, float[] transform, boolean capture) {
-        requireOpen();
-        if (!batches.contains(batch) || batch.retired) throw new IllegalArgumentException("batch is retired or belongs to another renderer");
+        requireBatch(batch);
         FrameRing.Submission submission = ring.submit(frame -> {
             Target target = targets[frame.slot()];
             target.awaitPresentation();
@@ -168,6 +189,7 @@ public final class AsyncRenderer implements AutoCloseable {
         ring.drain();
         for (GpuBatch batch : batches.toArray(new GpuBatch[0])) batch.close();
         ring.close();
+        indirectUpdates.close();
         pipeline.close();
         for (Target target : targets) target.close();
         allocator.close();
