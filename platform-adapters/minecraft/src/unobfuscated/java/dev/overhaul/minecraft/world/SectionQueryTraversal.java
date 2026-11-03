@@ -18,7 +18,6 @@ import java.util.Objects;
 public final class SectionQueryTraversal<T extends EntityAccess> {
     private static final long MAX_QUERY_CELLS = 256;
     private static final long MAX_INTERVAL_SEEKS = 32;
-    private static final int PREFIX_KEYS = 8;
     private final Thread owner = Thread.currentThread();
     private final Long2ObjectMap<EntitySection<T>> sections;
     private final LongSortedSet sectionIds;
@@ -28,7 +27,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
     private volatile boolean foreignMutation;
     private int vanillaDepth;
     private long queries, fallbacks, seeks, visitedKeys, mutationFallbacks, acceptedSections, vanillaBypasses;
-    private long prefixKeys, prefixDrains, columnDrains;
+    private long columnDrains;
 
     public SectionQueryTraversal(Long2ObjectMap<EntitySection<T>> sections, LongSortedSet sectionIds) {
         this(sections, sectionIds, Boolean.getBoolean("overhaul.diagnostics.enable"));
@@ -98,37 +97,15 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
         // Full vanilla column bounds are essential: a narrower subset would drop its cached successor.
         LongSortedSet column = sectionIds.subSet(SectionPos.asLong(x, 0, 0),
                 SectionPos.asLong(x, -1, -1) + 1);
-        LongBidirectionalIterator original = column.iterator();
         if (foreignMutation || !occupancy.worthSeeking(x, intersectingCells)) {
             if (diagnostics) columnDrains++;
-            return drain(original, minY, minZ, maxY, maxZ, consumer);
+            return drain(column.iterator(), minY, minZ, maxY, maxZ, consumer);
         }
-        int sampled = 0;
-        long lastProcessed = Long.MIN_VALUE;
-        while (sampled < PREFIX_KEYS && original.hasNext()) {
-            long key = original.nextLong();
-            lastProcessed = key;
-            sampled++;
-            if (diagnostics) { visitedKeys++; prefixKeys++; }
-            int y = SectionPos.y(key), z = SectionPos.z(key);
-            if (y < minY || y > maxY || z < minZ || z > maxZ) continue;
-            long epoch = structureEpoch;
-            if (!accept(key, consumer)) return false;
-            if (epoch != structureEpoch || foreignMutation) {
-                if (diagnostics) mutationFallbacks++;
-                return drain(original, minY, minZ, maxY, maxZ, consumer);
-            }
-        }
-        // Admission proves the full query can overlap at most one quarter of this column's sections.
-        if (!original.hasNext()) {
-            if (diagnostics) prefixDrains++;
-            return drain(original, minY, minZ, maxY, maxZ, consumer);
-        }
-        return seekAfter(column, x, minY, minZ, maxY, maxZ, lastProcessed, consumer);
+        return seekRanges(column, x, minY, minZ, maxY, maxZ, consumer);
     }
 
-    private boolean seekAfter(LongSortedSet column, int x, int minY, int minZ, int maxY, int maxZ,
-                              long lastProcessed, AbortableIterationConsumer<EntitySection<T>> consumer) {
+    private boolean seekRanges(LongSortedSet column, int x, int minY, int minZ, int maxY, int maxZ,
+                               AbortableIterationConsumer<EntitySection<T>> consumer) {
         int z = minZ < 0 && maxZ >= 0 ? 0 : minZ;
         int zCount = maxZ - minZ + 1;
         int ySegments = minY < 0 && maxY >= 0 ? 2 : 1;
@@ -138,11 +115,9 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
                 int highY = ySegments == 1 ? maxY : segment == 0 ? maxY : -1;
                 long low = SectionPos.asLong(x, lowY, z);
                 long high = SectionPos.asLong(x, highY, z);
-                if (high <= lastProcessed) continue;
-                // iterator(k) starts strictly after k: keep a straddling interval's unvisited suffix only.
-                // low - 1 cannot overflow here because that branch requires low > lastProcessed.
-                long from = low <= lastProcessed ? lastProcessed : low - 1;
-                LongBidirectionalIterator iterator = column.iterator(from);
+                // iterator(k) starts strictly after k. The minimum packed key cannot be decremented.
+                LongBidirectionalIterator iterator = low == Long.MIN_VALUE
+                        ? column.iterator() : column.iterator(low - 1);
                 if (diagnostics) seeks++;
                 while (iterator.hasNext()) {
                     long key = iterator.nextLong();
@@ -208,8 +183,9 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
         values.put("mutationFallbacks", mutationFallbacks);
         values.put("acceptedSections", acceptedSections);
         values.put("vanillaBypasses", vanillaBypasses);
-        values.put("prefixKeys", prefixKeys);
-        values.put("prefixDrains", prefixDrains);
+        // Retain the historical diagnostic keys without retaining unused sampling state.
+        values.put("prefixKeys", 0L);
+        values.put("prefixDrains", 0L);
         values.put("columnDrains", columnDrains);
         values.put("columns", (long) occupancy.columns());
         values.put("longColumns", (long) occupancy.longColumns());

@@ -172,13 +172,14 @@ class SectionQueryTraversalTest {
         AABB query = box(0, 0, 0, 0, 0, 0);
         assertEquals(fixture.trace(false, query, null, 0), fixture.trace(true, query, null, 0));
         Map<String, Long> counters = fixture.traversal.snapshot();
-        assertEquals(0L, counters.get("seeks"), "The matching interval already ended inside the sampled prefix");
-        assertEquals(8L, counters.get("prefixKeys"));
-        assertTrue(counters.get("visitedKeys") <= 8 + 1 + 1, "Eight prefix keys plus matching keys and interval overshoot");
+        assertEquals(1L, counters.get("seeks"));
+        assertEquals(0L, counters.get("prefixKeys"));
+        assertEquals(0L, counters.get("prefixDrains"));
+        assertTrue(counters.get("visitedKeys") <= 1 + 1, "One matching key and at most one interval overshoot");
         assertEquals(1L, counters.get("acceptedSections"));
     }
 
-    @Test void seekSuffixDoesNotRepeatPrefixMatchesWhenIntervalStraddlesLastSampledKey() {
+    @Test void seekBeginsAtInclusiveLowKeyWithoutEarlierCallbacks() {
         SectionQueryFixture fixture = new SectionQueryFixture();
         for (int y = 0; y <= 20; y++) fixture.add(0, y, 0);
         AABB query = box(0, 6, 0, 0, 10, 0);
@@ -186,9 +187,9 @@ class SectionQueryTraversalTest {
         assertEquals(expected, fixture.trace(true, query, null, 0));
         assertEquals(5, expected.size());
         Map<String, Long> counters = fixture.traversal.snapshot();
-        assertEquals(8L, counters.get("prefixKeys"));
+        assertEquals(0L, counters.get("prefixKeys"));
         assertEquals(1L, counters.get("seeks"));
-        assertTrue(counters.get("visitedKeys") <= 8 + 5 + 1);
+        assertTrue(counters.get("visitedKeys") <= 5 + 1);
     }
 
     @Test void insertingGapAfterSeekRetainsActualOriginalPrefetchedEntry() {
@@ -202,16 +203,35 @@ class SectionQueryTraversalTest {
         });
     }
 
-    @Test void lateMutationInStraddlingSeekSuffixDoesNotRevisitPrefixEntities() {
+    @Test void laterSeekCallbackMutationKeepsOriginalEntrySequence() {
         SectionQueryFixture reference = new SectionQueryFixture(), optimized = new SectionQueryFixture();
         for (SectionQueryFixture fixture : new SectionQueryFixture[] {reference, optimized}) {
             for (int y = 0; y <= 20; y++) fixture.add(0, y, 0);
         }
         SectionQueryFixture.Mutation mutation = (fixture, accepted) -> {
-            // The first two matches are prefix y=6,7; the third is reached through the sought suffix.
+            // A later callback replaces the next Entry that the active interval iterator already prefetched.
             if (accepted == 3) { fixture.remove(0, 9, 0); fixture.add(0, 9, 0); }
         };
         AABB query = box(0, 6, 0, 0, 10, 0);
+        assertEquals(reference.trace(false, query, mutation, 0), optimized.trace(true, query, mutation, 0));
+        assertEquals(1L, optimized.traversal.snapshot().get("seeks"));
+        assertEquals(1L, optimized.traversal.snapshot().get("mutationFallbacks"));
+    }
+
+    @Test void intervalBoundaryMutationRetainsOutOfRangePrefetchAndFollowingSignedRange() {
+        SectionQueryFixture reference = new SectionQueryFixture(), optimized = new SectionQueryFixture();
+        for (SectionQueryFixture fixture : new SectionQueryFixture[] {reference, optimized}) {
+            fixture.add(0,0,0); fixture.add(0,200,0); fixture.add(0,-2,0);
+        }
+        SectionQueryFixture.Mutation mutation = (fixture, accepted) -> {
+            if (accepted == 1) {
+                // y=0 ends the first query interval, but the full-column iterator prefetched excluded y=200.
+                fixture.remove(0,200,0);
+                fixture.add(0,1,0);
+                fixture.add(0,-1,0);
+            }
+        };
+        AABB query = box(0,-2,0,0,0,0);
         assertEquals(reference.trace(false, query, mutation, 0), optimized.trace(true, query, mutation, 0));
         assertEquals(1L, optimized.traversal.snapshot().get("seeks"));
         assertEquals(1L, optimized.traversal.snapshot().get("mutationFallbacks"));
@@ -249,6 +269,8 @@ class SectionQueryTraversalTest {
             assertEquals(fixture.trace(false, query, null, 0), fixture.trace(true, query, null, 0));
         }
         assertEquals(2L, fixture.traversal.snapshot().get("queries"));
+        assertEquals(14L, fixture.traversal.snapshot().get("seeks"));
+        assertEquals(0L, fixture.traversal.snapshot().get("prefixKeys"));
     }
 
     @Test void occupancyAdmissionCountsOnlySuccessfulCreationAndExistingRemoval() {
@@ -296,8 +318,10 @@ class SectionQueryTraversalTest {
         fixture.add(0,0,64);
         assertEquals(fixture.trace(false, query, null, 0), fixture.trace(true, query, null, 0));
         assertEquals(1L, fixture.traversal.snapshot().get("queries"));
-        assertEquals(8L, fixture.traversal.snapshot().get("prefixKeys"));
-        assertEquals(8L, fixture.traversal.snapshot().get("visitedKeys"), "Dense prefix must not force a whole-column drain");
+        assertEquals(0L, fixture.traversal.snapshot().get("prefixKeys"));
+        assertEquals(4L, fixture.traversal.snapshot().get("seeks"));
+        assertTrue(fixture.traversal.snapshot().get("visitedKeys") <= 16 + 4,
+                "Admitted traversal visits only query cells plus at most one overshoot per interval");
     }
 
     @Test void mixedEligibleQueryUsesOriginalCursorForShortColumnsIncludingCallbackMutation() {
@@ -310,7 +334,8 @@ class SectionQueryTraversalTest {
         Map<String, Long> counters = optimized.traversal.snapshot();
         assertEquals(1L, counters.get("queries"));
         assertEquals(1L, counters.get("columnDrains"));
-        assertEquals(8L, counters.get("prefixKeys"));
+        assertEquals(0L, counters.get("prefixKeys"));
+        assertEquals(1L, counters.get("seeks"));
     }
 
     @Test void foreignLifecycleEventsDisableAdmissionWithoutEditingDerivedCounts() throws Exception {
@@ -340,6 +365,7 @@ class SectionQueryTraversalTest {
         SectionQueryFixture reference = localFixture(), optimized = localFixture();
         AABB query = box(0, 0, 0, 0, 3, 0);
         assertEquals(reference.trace(false, query, mutation, 0), optimized.trace(true, query, mutation, 0));
+        assertEquals(1L, optimized.traversal.snapshot().get("seeks"), "Mutation runs at the first seeking callback");
         assertEquals(1L, optimized.traversal.snapshot().get("mutationFallbacks"));
     }
 
@@ -357,7 +383,7 @@ class SectionQueryTraversalTest {
         AABB query = box(0, 0, 100, 0, 3, 100);
         assertEquals(reference.trace(false, query, mutation, 0), optimized.trace(true, query, mutation, 0));
         Map<String, Long> counters = optimized.traversal.snapshot();
-        assertEquals(8L, counters.get("prefixKeys"));
+        assertEquals(0L, counters.get("prefixKeys"));
         assertEquals(1L, counters.get("seeks"));
         assertEquals(1L, counters.get("mutationFallbacks"));
     }
