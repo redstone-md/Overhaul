@@ -1,0 +1,89 @@
+// Production-only nested library packaging. Minecraft supplies all LWJGL bindings and native binaries.
+def engineAssembly = tasks.register('assembleBackendRuntimeInputs', GradleBuild) {
+    description = 'Compiles and packages the current owned engine libraries for this adapter.'
+    // The engine root includes only portable modules, never this standalone Minecraft build.
+    dir = file('../..')
+    tasks = [':vulkan-backend:jar', ':vulkan-backend:sdlAdapterJar', ':shader-pipeline:jar']
+    startParameter.setProjectProperties([modVersion: project.version.toString()])
+    startParameter.setIncludedBuilds([])
+}
+ext.backendRuntimeJars = files("../../vulkan-backend/build/libs/vulkan-backend-${project.version}.jar",
+        "../../vulkan-backend/build/libs/vulkan-backend-${project.version}-sdl34.jar",
+        "../../shader-pipeline/build/libs/shader-pipeline-${project.version}.jar").builtBy(engineAssembly)
+
+tasks.named('compileJava') { dependsOn engineAssembly }
+
+def runtimeMetadata = layout.buildDirectory.dir('generated/backend-runtime-metadata')
+def runtimeMetadataTask = tasks.register('prepareBackendRuntimeMetadata') {
+    inputs.property('modVersion', project.version.toString())
+    outputs.dir runtimeMetadata
+    doLast {
+        def metadata = runtimeMetadata.get().file('fabric.mod.json').asFile
+        metadata.parentFile.mkdirs()
+        metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+                schemaVersion: 1, id: 'overhaul_render_runtime', version: project.version.toString(),
+                name: 'Overhaul render runtime', environment: 'client',
+                description: 'Owned Vulkan, SDL surface and shader library for the Overhaul 26.3 backend.',
+                depends: [minecraft: '26.3', java: '>=25']
+        ]))
+    }
+}
+
+def runtimeJar = tasks.register('backendRuntimeJar', Jar) {
+    dependsOn runtimeMetadataTask, engineAssembly
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    archiveBaseName = 'overhaul-render-runtime'
+    archiveVersion = project.version.toString()
+    archiveFileName = 'overhaul-render-runtime.jar'
+    destinationDirectory = layout.buildDirectory.dir('runtime')
+    inputs.files backendRuntimeJars
+    from({ backendRuntimeJars.collect { zipTree(it) } }) {
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', 'module-info.class'
+        // Keep owned resources/services as well as classes; unrelated third-party bindings remain external.
+        include 'dev/overhaul/vulkan/**', 'dev/overhaul/shader/**',
+                'assets/overhaul/**', 'data/overhaul/**', 'shaders/overhaul/**', 'overhaul/**', 'META-INF/services/**'
+        exclude 'org/lwjgl/**', '**/*.dll', '**/*.so', '**/*.dylib'
+    }
+    from(runtimeMetadata)
+    manifest.attributes('FMLModType': 'GAMELIBRARY', 'Automatic-Module-Name': 'dev.overhaul.render.runtime')
+}
+
+tasks.named('processResources') {
+    dependsOn runtimeJar
+    inputs.file runtimeJar.flatMap { it.archiveFile }
+    inputs.property('ownedBackendLoader', target.loader)
+    doLast {
+        def library = runtimeJar.get().archiveFile.get().asFile
+        def nestedDirectory = target.loader == 'fabric' ? 'META-INF/jars' : 'META-INF/jarjar'
+        def nestedPath = "${nestedDirectory}/${library.name}"
+        copy { from library; into new File(destinationDir, nestedDirectory) }
+        if (target.loader == 'fabric') {
+            def metadata = new File(destinationDir, 'fabric.mod.json')
+            def json = new groovy.json.JsonSlurper().parse(metadata)
+            json.mixins = ((json.mixins ?: []) + 'overhaul.backend.mixins.json').unique()
+            json.jars = ((json.jars ?: []) + [file: nestedPath]).unique()
+            metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+        } else {
+            def metadata = new File(destinationDir, 'META-INF/jarjar/metadata.json')
+            metadata.parentFile.mkdirs()
+            metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([jars: [[
+                    identifier: [group: 'dev.overhaul', artifact: 'render-runtime'],
+                    version: [range: "[${project.version}]", artifactVersion: project.version.toString()],
+                    path: nestedPath, isObfuscated: false
+            ]]]))
+            if (target.loader == 'neoforge') {
+                def descriptor = new File(destinationDir, 'META-INF/neoforge.mods.toml')
+                if (!descriptor.getText('UTF-8').contains('config="overhaul.backend.mixins.json"')) {
+                    descriptor.append('\n[[mixins]]\nconfig="overhaul.backend.mixins.json"\n', 'UTF-8')
+                }
+            }
+        }
+    }
+}
+
+tasks.named('jar') {
+    // The common adapter manifest is configured later; apply its selected backend counterpart at archive time.
+    if (target.loader == 'forge') doFirst {
+        manifest.attributes('MixinConfigs': 'overhaul.mixins.json,overhaul.backend.mixins.json')
+    }
+}

@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Included only in the explicitly selected development backend build. */
+/** Client-only registration shared by the explicitly selected 26.3 loader backend artifacts. */
 @Mixin(PreferredGraphicsApi.class)
 public abstract class PreferredGraphicsApiMixin {
     @Inject(method="getBackendsToTry",at=@At("HEAD"),cancellable=true)

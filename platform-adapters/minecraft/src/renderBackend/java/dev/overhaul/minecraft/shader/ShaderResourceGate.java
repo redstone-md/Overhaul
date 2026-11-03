@@ -1,17 +1,16 @@
 package dev.overhaul.minecraft.shader;
 
-import net.fabricmc.loader.api.FabricLoader;
+import dev.overhaul.minecraft.platform.ModSemanticPolicy;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Properties;
-import java.util.Set;
 
 /** Instance-owned eligibility for an optimization; unknown shader/mod semantics retain its ordinary rendering path. */
 public final class ShaderResourceGate {
-    private static final Set<String> KNOWN_MODS=Set.of("overhaul","minecraft","java","fabricloader","mixinextras");
+    private final ModSemanticPolicy mods=new ModSemanticPolicy();
     private final Properties expected=new Properties();
     private boolean dirty=true,reloading,certified;
     private long generation;
@@ -31,8 +30,7 @@ public final class ShaderResourceGate {
         dirty=false;certified=false;
         try {
             if(expected.size()<2)throw new IllegalStateException("Incomplete shader manifest");
-            for(var mod:FabricLoader.getInstance().getAllMods())if(!KNOWN_MODS.contains(mod.getMetadata().getId()))
-                throw new IllegalStateException("Unknown shader-mod semantics: "+mod.getMetadata().getId());
+            mods.requireKnownMods();
             var digest=MessageDigest.getInstance("SHA-256");
             for(String path:expected.stringPropertyNames()) {
                 try(InputStream input=resources.open(Identifier.parse(path))) {
