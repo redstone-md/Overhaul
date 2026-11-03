@@ -38,10 +38,18 @@ subprojects {
 
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+        // NVIDIA extension enumeration can exceed LWJGL's default 64 KiB stack.
+        systemProperty 'org.lwjgl.system.stackSize', '1024'
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
         testLogging {
             events 'failed', 'skipped'
             exceptionFormat = 'full'
         }
+    }
+
+    tasks.withType(JavaExec).configureEach {
+        systemProperty 'org.lwjgl.system.stackSize', '1024'
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
     }
 
     tasks.withType(AbstractArchiveTask).configureEach {
