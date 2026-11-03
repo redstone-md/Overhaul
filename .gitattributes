@@ -10,3 +10,5 @@
 gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# Preserve receipt bytes used by the backend evidence SHA-256 manifest.
+docs/evidence/backend-*.json -text
