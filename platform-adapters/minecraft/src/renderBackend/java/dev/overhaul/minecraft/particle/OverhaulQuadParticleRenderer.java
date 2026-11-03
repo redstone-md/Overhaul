@@ -6,11 +6,12 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import dev.overhaul.minecraft.shader.ShaderResourceGate;
+import dev.overhaul.minecraft.shader.InstancedQuadGeometry;
+import dev.overhaul.minecraft.shader.OwnedVertexShaderSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.renderer.feature.FeatureFrameContext;
@@ -18,7 +19,6 @@ import net.minecraft.client.renderer.feature.QuadParticleFeatureRenderer;
 import net.minecraft.client.renderer.oit.OitStage;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.resources.Identifier;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -37,7 +37,7 @@ public final class OverhaulQuadParticleRenderer extends QuadParticleFeatureRende
     private final ShaderResourceGate shaders=new ShaderResourceGate("/overhaul-particle-shaders.properties");
     private final InstancedParticlePipelines pipelines=new InstancedParticlePipelines();
     private final List<Group> groups=new ArrayList<>();
-    private GpuBuffer corners,indices;
+    private InstancedQuadGeometry geometry;
     private GpuBufferSlice dynamicTransforms;
     private PipelineCache compiled;
     private int fallbackCount;
@@ -105,13 +105,13 @@ public final class OverhaulQuadParticleRenderer extends QuadParticleFeatureRende
             for(var draw:group.draws()) {
                 RenderPipeline original=stage==null?draw.layer().pipeline():draw.layer().oitPipelineSet().getPipeline(stage);
                 if(!compatible(original))throw new IllegalStateException("Particle stage changed its vertex contract");
-                if(compiled==null){compiled=new PipelineCache(RenderSystem.getDevice(),new ParticleShaderSource(Minecraft.getInstance().getResourceManager()));pipelineGenerations++;}
+                if(compiled==null){compiled=new PipelineCache(RenderSystem.getDevice(),new OwnedVertexShaderSource(Minecraft.getInstance().getResourceManager()));pipelineGenerations++;}
                 var pipeline=compiled.get(pipelines.variant(original));
                 if(pipeline==null)throw new IllegalStateException("Owned particle pipeline failed to compile");
                 pass.setPipeline(pipeline);
                 RenderSystem.bindDefaultUniforms(pass);pass.setUniform("DynamicTransforms",dynamicTransforms);
                 pass.setUniform("Sampler2",context.lightmap(),RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-                pass.setVertexBuffer(0,corners.slice());pass.setVertexBuffer(1,draw.instances());pass.setIndexBuffer(indices,IndexType.INT);
+                geometry.bind(pass,draw.instances());
                 pass.setUniform("Sampler0",draw.texture().getTextureView(),draw.texture().getSampler());
                 pass.drawIndexedIndirect(draw.arguments(),1);recordedIndirectCalls++;recordedInstances+=draw.count();
                 if(stage==null)normalCalls++;else oitCalls++;
@@ -127,16 +127,7 @@ public final class OverhaulQuadParticleRenderer extends QuadParticleFeatureRende
                 &&pipeline.getVertexFormatBinding(0)==DefaultVertexFormat.PARTICLE;
     }
     private void ensureGeometry() {
-        if(corners!=null)return;
-        var device=RenderSystem.getDevice();
-        var vertices=ByteBuffer.allocateDirect(32).order(ByteOrder.nativeOrder());
-        vertices.putFloat(1).putFloat(-1).putFloat(1).putFloat(1).putFloat(-1).putFloat(1).putFloat(-1).putFloat(-1).flip();
-        corners=device.createBuffer(()->"Overhaul particle corners",GpuBuffer.USAGE_VERTEX,vertices);
-        try {
-            var elements=ByteBuffer.allocateDirect(24).order(ByteOrder.nativeOrder());
-            elements.putInt(0).putInt(1).putInt(2).putInt(2).putInt(3).putInt(0).flip();
-            indices=device.createBuffer(()->"Overhaul particle indices",GpuBuffer.USAGE_INDEX,elements);
-        }catch(RuntimeException|Error problem){corners.close();corners=null;throw problem;}
+        if(geometry==null)geometry=new InstancedQuadGeometry(RenderSystem.getDevice());
     }
     public long reloadStarted(){requireOpen();eligible=false;closePipelines();return shaders.reloadStarted();}
     public void reloadFinished(long token,boolean success){requireOpen();shaders.reloadFinished(token,success);}
@@ -150,7 +141,7 @@ public final class OverhaulQuadParticleRenderer extends QuadParticleFeatureRende
     }
     @Override public void close() {
         requireOwner();if(closed)return;
-        closePipelines();if(indices!=null)indices.close();if(corners!=null)corners.close();groups.clear();dynamicTransforms=null;closed=true;
+        closePipelines();if(geometry!=null)geometry.close();groups.clear();dynamicTransforms=null;closed=true;
     }
     private void closePipelines(){if(compiled!=null){compiled.close();compiled=null;}}
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Particle renderer belongs to its render owner");}
