@@ -11,6 +11,7 @@ public final class GpuImageView implements AutoCloseable {
     private final GpuImage image;
     private final int baseMip,mips,baseLayer,layers;
     private long handle;
+    private FrameRing.Submission lastUse;
     GpuImageView(GpuImage image,int baseMip,int mips,int baseLayer,int layers,int viewType,int aspectMask){
         this.image=image;this.baseMip=baseMip;this.mips=mips;this.baseLayer=baseLayer;this.layers=layers;
         try(MemoryStack stack=MemoryStack.stackPush()){
@@ -23,6 +24,19 @@ public final class GpuImageView implements AutoCloseable {
     public GpuImage image(){requireOpen();return image;}public long handle(){requireOpen();return handle;}
     public int baseMip(){return baseMip;}public int baseMipLevel(){return baseMip;}public int mipCount(){return mips;}
     public int baseLayer(){return baseLayer;}public int layerCount(){return layers;}
+    /**
+     * Opts this view into precise tracking. The caller must update this receipt for every native use
+     * of this view; image-only operations such as blits remain tracked on the parent image separately.
+     */
+    public void retainUntil(FrameRing.Submission completion){
+        requireOpen();java.util.Objects.requireNonNull(completion,"completion");
+        if(completion.owningContext()!=image.context())throw new IllegalArgumentException("submission belongs to another Vulkan context");
+        lastUse=completion;
+    }
     private void requireOpen(){image.requireOpen();if(handle==0)throw new IllegalStateException("GPU image view closed");}
-    @Override public void close(){if(handle==0)return;image.requireOpen();image.awaitUsage();vkDestroyImageView(image.context().device(),handle,null);handle=0;image.removeView(this);}
+    @Override public void close(){
+        if(handle==0)return;image.requireOpen();
+        if(lastUse!=null)lastUse.await();else image.awaitUsage();
+        vkDestroyImageView(image.context().device(),handle,null);handle=0;image.removeView(this);
+    }
 }

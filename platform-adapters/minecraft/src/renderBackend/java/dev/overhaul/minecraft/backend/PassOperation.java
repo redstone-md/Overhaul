@@ -15,7 +15,9 @@ final class PassOperation implements OverhaulGpuOperation {
         }
     }
     @Override public void record(VkCommandBuffer command) { pass.record(command); }
-    @Override public void submitted(FrameRing.Submission submission) { pass.complete(); }
+    @Override public void submitted(FrameRing.Submission submission) {
+        pass.complete(); pass.retainAttachmentsUntil(submission);
+    }
     @Override public boolean usesBuffer(OverhaulBuffer buffer,long offset,long length) { return pass.usesBuffer(buffer,offset,length); }
     @Override public boolean usesResource(BackendResource resource) { return pass.usesResource(resource); }
     @Override public void close() { pass.close(); }

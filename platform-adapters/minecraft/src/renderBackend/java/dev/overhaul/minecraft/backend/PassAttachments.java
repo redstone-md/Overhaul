@@ -106,5 +106,8 @@ final class PassAttachments implements AutoCloseable {
             check(vkCreateFramebuffer(resources.context().device(),VkFramebufferCreateInfo.calloc(stack).sType$Default().renderPass(renderPass).pAttachments(views).width(width).height(height).layers(1),null,pointer),"overhaul framebuffer");framebuffer=pointer.get(0);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
+    void retainUntil(dev.overhaul.vulkan.FrameRing.Submission completion) {
+        for (var view:framebufferViews) view.retainUntil(completion);
+    }
     @Override public void close(){if(framebuffer!=0)vkDestroyFramebuffer(resources.context().device(),framebuffer,null);if(renderPass!=0)vkDestroyRenderPass(resources.context().device(),renderPass,null);framebuffer=renderPass=0;for(var view:framebufferViews)view.close();framebufferViews.clear();}
 }

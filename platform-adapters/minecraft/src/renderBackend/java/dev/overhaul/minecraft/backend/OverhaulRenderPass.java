@@ -157,6 +157,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         commands.add(new Command(null,command->owner.timestamp(command,pool,index)));
     }
     public int drawCount(){return drawCount;}
+    void retainAttachmentsUntil(dev.overhaul.vulkan.FrameRing.Submission completion) { attachments.retainUntil(completion); }
     /** Freezes frontend capture without beginning native recording or waiting for the GPU. */
     public void seal(){
         owner.requireOpen();if(closed)throw new IllegalStateException("Render pass is closed");if(sealed)return;
