@@ -9,7 +9,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Fabric, Forge, NeoForge | All 11 pinned targets build; 22 loader tests and source/artifact receipts pass | Full client/server gameplay and remaining releases in the requested range |
 | Legacy/intermediate/modern separation | Java 8 common contracts; loader-specific source sets; isolated legacy CoreMod toolchain | Real legacy game execution and rendering integration |
 | Owned native resources | Vulkan context, queue, VMA buffers, image ownership, descriptors and teardown | Validation-layer runs and broader GPU/OS coverage |
-| Indexed indirect rendering | Ordinary 26.3 terrain uses accepted native indirect instanced batches; unsigned device-limit handling and two-record pixel results verified | Every remaining render domain, loader/version and controlled throughput |
+| Indexed indirect rendering | Ordinary 26.3 terrain and quad particles use native indirect instanced draws; terrain batches, particle expansion parity and normal/OIT/reload execution verified | Entity/block-entity/weather and custom particle domains, every remaining loader/version and controlled throughput |
 | Async upload/render | Actual Fabric 26.3 game passes/transfers batch on three fenced slots; staged writes, range-aware maps, triple transient arenas and deferred pins/callbacks verified; bounded descriptor/framebuffer caches and device-preferred unmappable buffers pass native checks | Broader sessions, allocation profiling, pipeline reuse and measured throughput |
 | Presentation | Borrowed GLFW/SDL surfaces, asynchronous split acquire/blit/present with three acquire semaphores; own Fabric 26.3 backend installed before its game window | Broader window/OS/GPU coverage and session/resize parity |
 | CPU occlusion | Ordinary 26.3 draw groups use mesh-owned emitted bounds/certified SOLID faces, bounded final-projection software depth and float uncertainty guards; live wall/hole/camera rejection and restoration verified | Broader scenes, camera effects, shaders/mods, GPUs, allocation reduction and measured improvement |
@@ -19,7 +19,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Chunk meshing | Opt-in 26.3 replaces ordinary model/fluid compilation on owned workers with bounded streaming pages; native upload, all three layers, block-entity metadata, live boundary edits and reload verified | Fully frozen worker inputs, broader models/fluids/worlds, every loader/version and full scene parity |
 | Lighting | Async emissive propagation over immutable snapshots | Vanilla skylight, light updates and cross-chunk engine parity |
 | Generation/loading | Async immutable generator callbacks and a checked pooled snapshot codec | Integration with Minecraft generation stages, region/NBT codecs and loading dependencies |
-| Memory churn | Reused slabs/worker scratch, fixed-budget streaming terrain pages, mapped GPU buffers and camera storage | Allocations remain in game tessellators, snapshots, futures and upload bookkeeping; no zero-allocation claim |
+| Memory churn | Reused slabs/worker scratch, fixed-budget streaming terrain pages, mapped GPU buffers and camera storage; quad particles copy extracted records without CPU quaternion/vector expansion | Allocations remain in group preparation, game tessellators, snapshots, futures and upload bookkeeping; no zero-allocation claim |
 | Tick/entity/path queries | Owner-thread spatial hash and cooperative tick budgets with correctness tests | Wire actual server/entity tracking and pathfinder behavior and measure improvement |
 | Renderer replacement | Opt-in Fabric 26.3 selects only Overhaul's native backend; actual GUI, continuous terrain edits, fluid/chest frames, resource reload and orderly teardown verified | Complete render-domain/session/mod parity, every remaining loader/version, packaging and throughput |
 | Ecosystem compatibility | Strict lifecycle hooks and explicit dependency boundaries | In-game tests with major mods, reloads, dimensions, unloads, disconnects and dedicated servers |
@@ -83,6 +83,22 @@ native receipt records 2,410 multi-record indexed-indirect calls, 3,903 calls wi
 an instanced binding and a maximum batch of 21 records. These are cumulative
 execution counts across the scenario, not FPS or unique section counts. See
 [occlusion integration](OCCLUSION_INTEGRATION.md) and its retained evidence.
+
+Ordinary quad particles now use 56-byte instances, one static corner quad and
+indexed indirect draws. A native pixel comparison uses the actual game quad
+builder as its reference. Actual FLAME/END_ROD scenes pass in normal mode,
+improved transparency and after reload; all three captures are retained. The
+owned shader cache and static buffers close through the ordinary feature renderer
+lifecycle. Unknown shader/mod semantics retain the existing CPU feature path.
+See [particle integration](PARTICLE_INTEGRATION.md). The payload reduction is
+verified; an overall performance gain has not been measured.
+
+The entity-query integration remains open. The pinned game already owns a
+section index; adding a shadow point index would duplicate it and miss changing
+entity bounds. A small-query direct-map traversal could avoid AVL scans, but its
+callback mutation semantics differ: the existing AVL iterator prefetches its next
+node before invoking the callback. Preserve that behavior before replacing it;
+do not infer compatibility from static query results alone.
 
 Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those

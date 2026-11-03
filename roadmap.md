@@ -283,3 +283,37 @@ gains. Preserve the full version/shader/world/server/performance acceptance scop
 - The requested complete renderer, cross-version runtime coverage, shader packs,
   lighting/generation/loading, server systems and controlled benchmarks remain
   acceptance work. This checkpoint does not close the full overhaul objective.
+
+## Active ordinary particle instancing increment
+
+Replace the ordinary 26.3 quad-particle feature renderer's CPU-expanded vertices
+with the already extracted center/quaternion/size/UV/color/light instance records.
+Own one immutable corner quad, stream bounded 56-byte instances through existing
+fence-owned transient storage, and execute indexed indirect instanced draws in
+the normal feature groups. Preserve layer identity, texture, append order, phase
+and all normal/OIT fragment/depth/blend semantics. Match non-unit quaternion
+rotation, UV corner order, ARGB channels and packed light; verify against the
+pinned game expansion and actual GPU pixels. Keep shader-resource uncertainty,
+reload, frame reuse, world unload and renderer closure explicit. Exercise actual
+ordinary particles in the live world and retain accepted execution diagnostics.
+Keep files under 500 lines, encapsulate ownership and reuse existing backend
+upload/descriptor/lifetime paths. Other render domains and the full acceptance
+scope remain required.
+
+## Ordinary particle checkpoint: 2026-11-03
+
+- Actual quad-particle feature groups upload existing extraction records directly
+  as 56-byte instances and use indexed indirect instanced draws. One owned static
+  corner quad replaces per-particle CPU vertex/quaternion/vector expansion.
+- Pipeline variants preserve the original normal/OIT fragment and full render
+  state. Native pixels match the actual game expansion with non-unit rotations,
+  UV/color/light checks, nonzero offsets and source-byte reuse.
+- Live FLAME/END_ROD scenes pass normal, improved-transparency and post-reload
+  stages. Shader uncertainty uses the original CPU feature path; two owned cache
+  generations and orderly closure are verified. Resource hashing is shared with
+  terrain eligibility.
+- Payload reduction is proven, not an FPS improvement or zero-allocation result.
+  Stress scenes, more devices, mods/resources and custom particle types remain.
+- Entity, block-entity and weather instancing, full shader packs and every other
+  original acceptance requirement remain open. Server spatial-query research
+  also found a callback-prefetch behavior that must survive any index replacement.

@@ -121,3 +121,8 @@ after opening geometry or moving the camera. Unknown shader/mod semantics disabl
 the filter. Accepted native counters also verify indirect instanced terrain
 batches. See [occlusion integration](docs/OCCLUSION_INTEGRATION.md); controlled
 performance comparisons and broader compatibility remain open.
+
+The ordinary quad-particle feature path now uploads 56-byte instance records and
+executes indexed indirect instanced draws. Native pixels match the game's expanded
+quads; live flame/end-rod scenes pass in normal mode, improved transparency and
+after resource reload. See [particle integration](docs/PARTICLE_INTEGRATION.md).

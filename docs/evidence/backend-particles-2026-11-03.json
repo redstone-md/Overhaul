@@ -1,0 +1,194 @@
+{
+  "verifiedAtUtc": "2026-11-03T19:10:06.307102+00:00",
+  "sourceCommit": "5a355c378dd1187283121958642eea6071fb54f3",
+  "loaderInputsSha256": "720eba24956c70a3c44543a5034bd270d79cb767b3fe15000bb4ebf1f3d81ae7",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "capture": "Three actual GPU surface-source readbacks with native presentation Y flip; visually inspected",
+  "tests": {
+    "engineUnit": 74,
+    "portableNative": 17,
+    "adapterGpu": 30,
+    "terrainNativeParity": 3,
+    "terrainGeometryCapture": 1,
+    "particlePipelineContract": 1,
+    "backendRange": 2,
+    "terrainWorkers": 4,
+    "normalLoader": 22,
+    "total": 154
+  },
+  "failures": 0,
+  "skipped": 0,
+  "commands": [
+    ".\\gradlew.bat build :integration-tests:nativeTest --console=plain",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1 -CheckReceipts"
+  ],
+  "particleInput": {
+    "recordBytes": 56,
+    "previousExpandedVertexBytesPerParticle": 112,
+    "staticCornerBytes": 32,
+    "staticIndexBytes": 24,
+    "indirectBytesPerLayerDraw": 20,
+    "maxGroupInstanceBytes": 8388608
+  },
+  "nativePixelOracle": {
+    "reference": "Actual QuadParticleRenderState.buildLayer and BufferBuilder; unchanged vanilla fragment shader",
+    "production": "ParticleInstanceWriter and packaged instanced vertex kernel",
+    "particles": 2,
+    "firstInstance": 1,
+    "nonzeroVertexAndIndirectOffsets": true,
+    "callerBytesOverwrittenAfterUpload": true,
+    "nonunitQuaternions": true,
+    "signedPackedLight": true,
+    "minimumCoveredPixelsExclusive": 800,
+    "minimumPartialAlphaPixelsExclusive": 500,
+    "minimumDistinctColorsExclusive": 32,
+    "allowedPixelsOverTwoByteChannelDifference": 4
+  },
+  "stages": [
+    {
+      "stage": "particles-normal",
+      "normalCalls": 200,
+      "oitCalls": 0,
+      "preparedParticles": 12800,
+      "preparedInstanceBytes": 716800,
+      "maxLayerInstances": 64,
+      "fallbackGroupsDuringCapture": 0
+    },
+    {
+      "stage": "particles-oit",
+      "normalCalls": 100,
+      "oitCalls": 300,
+      "preparedParticles": 12800,
+      "preparedInstanceBytes": 716800,
+      "maxLayerInstances": 64,
+      "fallbackGroupsDuringCapture": 0
+    },
+    {
+      "stage": "particles-reloaded",
+      "normalCalls": 100,
+      "oitCalls": 300,
+      "preparedParticles": 12800,
+      "preparedInstanceBytes": 716800,
+      "maxLayerInstances": 64,
+      "fallbackGroupsDuringCapture": 0
+    }
+  ],
+  "particleStatistics": {
+    "fallbackGroups": 86,
+    "recordedIndirectCalls": 1109,
+    "eligible": true,
+    "preparedInstanceBytes": 2190216,
+    "pipelineGenerations": 2,
+    "oitCalls": 600,
+    "frames": 5757,
+    "resourceGeneration": 2,
+    "shaderEligibility": "pinned shader resources and known mods",
+    "pendingGroups": 0,
+    "pipelineCacheClosed": true,
+    "closed": true,
+    "recordedInstances": 64711,
+    "normalCalls": 509,
+    "preparedParticles": 39111,
+    "maxLayerInstances": 64
+  },
+  "nativeDrawStatistics": {
+    "directNonIndexedCalls": 108777,
+    "indexedIndirectMultiRecordCalls": 4630,
+    "maxNonIndexedIndirectBatch": 0,
+    "nonIndexedIndirectMultiRecordCalls": 0,
+    "indexedIndirectCalls": 7823,
+    "indexedIndirectCommands": 44135,
+    "acceptedPasses": 17833,
+    "directIndexedCalls": 25316,
+    "nonIndexedIndirectCalls": 0,
+    "maxIndexedIndirectBatch": 25,
+    "instancedNonIndexedIndirectCalls": 0,
+    "nonIndexedIndirectCommands": 0,
+    "instancedIndexedIndirectCalls": 7823
+  },
+  "counterMeaning": "Particle counters record frontend execution requests; device counters count accepted native commands. OIT reuses prepared instances across passes. Counts include background/startup/reload work; feature preparations are not presentation frames.",
+  "shaderEligibility": "Twelve pinned active particle resources and known mods; owned vertex kernel comes from classpath. Uncertain reload/mod/shader semantics use original CPU feature geometry on the owned native backend.",
+  "nativeTestIsolation": "One test class per fresh JVM, serial; RenderSystem cannot be initialized again after shutdown",
+  "existingTerrainAndOcclusionScenarios": "PASS",
+  "validationLayers": false,
+  "performanceCompared": false,
+  "openAcceptance": [
+    "Controlled performance/allocation profiling and stress scenes",
+    "Additional GPUs/mods/resource changes and custom non-quad particle renderers",
+    "Entity/block-entity/weather instancing",
+    "Remaining version/loader runtimes",
+    "Full shader packs/render graph and actual world/server replacements"
+  ],
+  "artifacts": [
+    {
+      "file": "core-common/build/libs/core-common-0.1.0-SNAPSHOT.jar",
+      "sha256": "b282c505a465af7b4daeaf50309075fc74916fcfa71901a77f7e769339a6cf6f"
+    },
+    {
+      "file": "platform-adapters/build/libs/platform-adapters-0.1.0-SNAPSHOT.jar",
+      "sha256": "11f1aa6e2fc45278673985e3b5682ffa0ed4698ea4eacc15e25d995eeef02c9b"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "728654fd27744cc0398150b36ec0961be9d4c494e314149f7229e14eab3dd09b"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-26.3-backend/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "b95af64cbe947964c1f53f41fc489a71a578b60923f18f2577d64401202e7e5f"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-particles-fixture-2026-11-03.json",
+      "sha256": "c36c72af5c49c4b8a55af08e0484ac459822ee81bb3945a9eca39359ff401462"
+    },
+    {
+      "file": "backend-particles-normal-2026-11-03.png",
+      "sha256": "bfa9d7f97dd0f7a0fdb37b340234ba4c37c9e4095383702f6da6af939d6b6098"
+    },
+    {
+      "file": "backend-particles-occlusion-2026-11-03.json",
+      "sha256": "b31e0315cde6372b0713a92df59f2314fe47cd3385e021bbb44f02e4e1ee0442"
+    },
+    {
+      "file": "backend-particles-oit-2026-11-03.png",
+      "sha256": "875134cb75ee03d43310c0aad4eeafd90a8fbd7197bf36eb7b0192f0297123e9"
+    },
+    {
+      "file": "backend-particles-reloaded-2026-11-03.png",
+      "sha256": "fc3eb1aaad5cf452e4c7a6296667650670248331490f35cd325640146b34b2ce"
+    },
+    {
+      "file": "backend-particles-scenarios-2026-11-03.json",
+      "sha256": "9afbb086c49d6228dca005ed75891e31d188359250d14e65711165ad55dca73d"
+    },
+    {
+      "file": "backend-particles-shutdown-2026-11-03.json",
+      "sha256": "1f81e17a07790e97e6107a629f4b6605a8a8785c5ce8ef5732d573960a6bc21a"
+    },
+    {
+      "file": "backend-particles-terrain-2026-11-03.json",
+      "sha256": "4c2bbdfa3b4e1572be666c162e63030f4cf28f2a56653429c9adf451660b433b"
+    },
+    {
+      "file": "backend-particles-tests-2026-11-03.json",
+      "sha256": "fd865c4673c4ed93433c7e0510521233304e379270e9c85026d41fa11a38fcf9"
+    },
+    {
+      "file": "loader-targets-particles-2026-11-03.json",
+      "sha256": "7d8d3c6bc6456902d015e6cf08e38f7dcb910b6ffc4828a0dfa993402b94f567"
+    }
+  ]
+}

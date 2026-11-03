@@ -18,10 +18,11 @@ The engine command below passed; the table also includes separately run backend 
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
 | native integration | 17 | 0 | 0 |
-| experimental Fabric 26.3 backend GPU | 29 | 0 | 0 |
+| experimental Fabric 26.3 backend GPU | 30 | 0 | 0 |
 | backend read-range unit | 2 | 0 | 0 |
 | terrain encoding parity (native memory) | 3 | 0 | 0 |
 | emitted terrain geometry capture (native memory) | 1 | 0 | 0 |
+| particle pipeline state/ABI contract | 1 | 0 | 0 |
 | terrain worker concurrency | 4 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
@@ -63,7 +64,7 @@ The serial runner passed all 11 pinned targets with 22 tests, without source dri
 | Forge | 1.12.2, 1.16.5, 1.20.1, 1.21.1, 26.3 |
 | NeoForge | 1.21.1, 26.3 |
 
-The [current retained receipts](evidence/loader-targets-occlusion-2026-11-03.json) contain per-jar
+The [current retained receipts](evidence/loader-targets-particles-2026-11-03.json) contain per-jar
 SHA-256 values and a shared raw-source digest. `verify-targets.ps1 -CheckReceipts`
 subsequently confirmed those sources and every existing jar still match. These
 pins represent the requested eras; they do not cover every intervening release.
@@ -369,6 +370,56 @@ parity, 1 native geometry capture, 2 backend range, 4 worker and 22 normal loade
 checks, with no failures or skips. This remains local execution on one RTX 5070
 without validation layers. Counters include startup, edits, reload and teardown;
 they are not unique section counts, blocked durations or an FPS comparison.
+
+## Ordinary particle instancing
+
+The latest opt-in Fabric 26.3 run passes ordinary terrain, occlusion and particle
+scenarios, including normal save/disconnect and shutdown. Actual particle
+providers create 64 FLAME and 64 END_ROD particles per stage. The normal feature
+path copies extracted records into mapped frame-owned storage and issues indexed
+indirect draws with up to 64 instances per layer.
+
+| Stage | Normal draw requests | OIT draw requests | Prepared records | Instance bytes | GPU surface source |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Normal transparency | 200 | 0 | 12,800 | 716,800 | [frame](evidence/backend-particles-normal-2026-11-03.png) |
+| Improved transparency | 100 | 300 | 12,800 | 716,800 | [frame](evidence/backend-particles-oit-2026-11-03.png) |
+| Reload, improved transparency | 100 | 300 | 12,800 | 716,800 | [frame](evidence/backend-particles-reloaded-2026-11-03.png) |
+
+All three readbacks were visually inspected. The OIT phase reuses the same
+prepared records across depth bounds, transmittance and accumulation. Its extra
+draw requests are not extra CPU vertex expansion. The native parity test also
+compares the production writer/kernel against actual game `buildLayer` output,
+with a substantial nonblank/varied/partial-alpha oracle. It covers non-unit
+quaternions, UVs, packed color/light, sentinels, nonzero instance/command offsets
+and caller-byte reuse. A separate contract checks full pipeline state cloning.
+
+The [scenario receipt](evidence/backend-particles-scenarios-2026-11-03.json) and
+[shutdown receipt](evidence/backend-particles-shutdown-2026-11-03.json) retain
+the counters. The renderer closes both owned static buffers and its pipeline
+cache. Two cache generations are observed across reload. During the reload's
+uncertainty window, 86 groups use the existing CPU feature path; every captured
+stage returns to the instance path with no fallback groups during its capture.
+
+Particle counters are frontend requests. Device counters separately report 7,823
+accepted native indexed-indirect calls containing 44,135 records across the
+entire world scenario, including terrain and background work. The particle
+`frames` field counts feature preparation calls, which can occur several times
+per presented frame. None of these counts establishes FPS or blocked time.
+
+The [manifest](evidence/backend-particles-2026-11-03.json) binds source commit,
+raw loader-input digest, artifacts, three frames and the receipts. Its
+[test summary](evidence/backend-particles-tests-2026-11-03.json) records 154
+passing checks: 74 engine unit, 17 portable native, 30 backend GPU, 3 native
+terrain parity, 1 geometry capture, 1 particle pipeline contract, 2 range,
+4 worker and 22 normal loader checks. There are no failures or skips.
+
+The engine build/native integration, full isolated backend native suite, live
+world verifiers and serial 11-target packaging/receipt checks all pass. Native
+test classes use fresh JVMs because Minecraft does not support reinitializing
+its process-owned render system after shutdown. Source-size and module-boundary
+gates pass. See [particle integration](PARTICLE_INTEGRATION.md) for ownership,
+fallback and shader-resource boundaries. Validation remains local to the tested
+RTX 5070 without validation layers; controlled performance comparisons remain.
 
 ## Remaining evidence
 
