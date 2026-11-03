@@ -177,7 +177,9 @@ public final class VulkanContext implements AutoCloseable {
                     queueFamily = j;
                     queueFlags = families.get(j).queueFlags();
                     deviceName = properties.deviceNameString();
-                    maxIndirectDrawCount = properties.limits().maxDrawIndirectCount();
+                    // Vulkan exposes uint32_t; Java draw counts and RenderPearl limits are signed ints.
+                    maxIndirectDrawCount = (int)Math.min(Integer.MAX_VALUE,
+                            Integer.toUnsignedLong(properties.limits().maxDrawIndirectCount()));
                 }
                 break;
             }

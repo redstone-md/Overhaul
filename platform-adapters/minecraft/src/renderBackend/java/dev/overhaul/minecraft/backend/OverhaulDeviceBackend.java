@@ -27,6 +27,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     private final DeviceInfo info;
     private final BackendSmokeProbe smoke;
     private final BufferStorageStatistics bufferStorage=new BufferStorageStatistics();
+    private final BackendDrawStatistics drawStatistics=new BackendDrawStatistics();
     private final Set<BackendResource> resources=new LinkedHashSet<>();
     private final List<OverhaulCommandEncoder> encoders=new ArrayList<>();
     private final List<OverhaulSurface> surfaces=new ArrayList<>();
@@ -69,6 +70,8 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     public ImmediateCommands commands() { requireOwner(); if (queue!=null) queue.flush(); return commands; }
     OverhaulCommandQueue queue() { requireOwner(); return queue; }
     BufferStorageStatistics bufferStorage() { requireOwner(); return bufferStorage; }
+    Map<String,Long> drawStatistics() { requireOwner(); return drawStatistics.snapshot(); }
+    void acceptDraws(BackendDrawStatistics.Recording recording) { requireOwner(); drawStatistics.accept(recording); }
     DescriptorPoolCache descriptorPools() { requireOwner(); return descriptorPools; }
     AttachmentPool attachments() { requireOwner(); return attachments; }
     void resourceClosing(BackendResource resource) { requireOwner(); attachments.invalidate(resource); }

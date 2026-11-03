@@ -35,6 +35,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private final OverhaulDeviceBackend owner;
     private final PassAttachments attachments;
     private final PassDescriptors descriptors;
+    private final BackendDrawStatistics.Recording drawMetrics=new BackendDrawStatistics.Recording();
     private final List<Command> commands=new ArrayList<>();
     private final List<TimestampReset> timestampResets=new ArrayList<>();
     private final Set<TimestampKey> timestampKeys=new HashSet<>();
@@ -111,12 +112,12 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     @Override public void drawIndexed(int indexCount,int instanceCount,int firstIndex,int vertexOffset,int firstInstance){
         checkUnsigned(indexCount,instanceCount,firstIndex,firstInstance);var state=snapshot(true);
         if(((long)firstIndex+indexCount)*indexType.bytes>owner.buffer(indices).size())throw new IllegalArgumentException("Indexed draw exceeds the index allocation");
-        commands.add(new Command(state,command->vkCmdDrawIndexed(command,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance)));drawCount++;
+        commands.add(new Command(state,command->{vkCmdDrawIndexed(command,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);drawMetrics.direct(true);}));drawCount++;
         if(indexCount>0&&instanceCount>0)captureReads(state,true);
     }
     @Override public void draw(int vertexCount,int instanceCount,int firstVertex,int firstInstance){
         checkUnsigned(vertexCount,instanceCount,firstVertex,firstInstance);var state=snapshot(false);
-        commands.add(new Command(state,command->vkCmdDraw(command,vertexCount,instanceCount,firstVertex,firstInstance)));drawCount++;
+        commands.add(new Command(state,command->{vkCmdDraw(command,vertexCount,instanceCount,firstVertex,firstInstance);drawMetrics.direct(false);}));drawCount++;
         if(vertexCount>0&&instanceCount>0)captureReads(state,false);
     }
     @Override public void multiDrawIndexed(IntBuffer info,int instances,int firstInstance,int count){
@@ -141,11 +142,14 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         checkUnsigned(count);var state=snapshot(indexed);int stride=indexed?20:16;retain(slice.buffer());var buffer=owner.buffer(slice.buffer());PassDescriptors.checkRange(slice,buffer.size());
         if(slice.offset()%4!=0||(long)count*stride>slice.length())throw new IllegalArgumentException("Indirect draw range/alignment invalid");
         if(count>1&&pipeline.usesDrawIndex()&&(!owner.context().multiDrawIndirect()||count>owner.context().maxIndirectDrawCount()))throw new UnsupportedOperationException("Splitting this indirect batch would change shader DrawIndex semantics");
+        boolean instanced=usesInstanceBindings(state);
         commands.add(new Command(state,command->{
             if(owner.context().multiDrawIndirect()&&count<=owner.context().maxIndirectDrawCount()){
                 if(indexed)vkCmdDrawIndexedIndirect(command,buffer.handle(),slice.offset(),count,stride);else vkCmdDrawIndirect(command,buffer.handle(),slice.offset(),count,stride);
+                drawMetrics.indirect(indexed,count,instanced);
             }else for(int index=0;index<count;index++){
                 if(indexed)vkCmdDrawIndexedIndirect(command,buffer.handle(),slice.offset()+(long)index*stride,1,stride);else vkCmdDrawIndirect(command,buffer.handle(),slice.offset()+(long)index*stride,1,stride);
+                drawMetrics.indirect(indexed,1,instanced);
             }
         }));drawCount+=count;
         if(count>0){captureReads(state,indexed);readBuffer(slice.buffer(),slice.offset(),(long)count*stride);}
@@ -185,6 +189,10 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         }
         if(indexed)readBuffer(state.indices(),0,state.indices().size());
     }
+    private static boolean usesInstanceBindings(PassBindings state){
+        for(var binding:state.pipeline().info().vertexBuffers())if(binding.stepRate()>0)return true;
+        return false;
+    }
     private void readBuffer(GpuBuffer buffer,long offset,long length){
         if(!(buffer instanceof OverhaulBuffer own)||own.owner()!=owner)throw new IllegalArgumentException("Foreign read buffer");
         if(offset<0||length<0||offset>own.size()||length>own.size()-offset)throw new IllegalArgumentException("Draw read outside buffer allocation");
@@ -204,7 +212,8 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     public void complete(){
         owner.requireOwner();if(closed||!recordingSucceeded||complete)throw new IllegalStateException("Invalid render-pass completion");
         for(var change:transitions)change.commit();
-        for(var reset:timestampResets)owner.timestampSubmitted(reset.pool(),reset.index(),reset.generation());complete=true;
+        for(var reset:timestampResets)owner.timestampSubmitted(reset.pool(),reset.index(),reset.generation());
+        owner.acceptDraws(drawMetrics);complete=true;
     }
     private static void checkUnsigned(int... values){for(int value:values)if(value<0)throw new IllegalArgumentException("Negative draw parameter");}
     private void validateDirectMultiDraw(int count){requireCapture();checkUnsigned(count);if(pipeline==null)throw new IllegalStateException("Multi-draw requires a pipeline");if(count>1&&pipeline.usesDrawIndex())throw new UnsupportedOperationException("Native direct multi-draw extension is unavailable for DrawIndex shaders");}

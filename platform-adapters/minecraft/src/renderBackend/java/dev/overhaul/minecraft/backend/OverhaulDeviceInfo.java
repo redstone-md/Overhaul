@@ -18,7 +18,7 @@ final class OverhaulDeviceInfo {
             var caps=context.capabilities();
             var apiLimits=new DeviceLimits(caps.samplerAnisotropy()?(int)caps.maxSamplerAnisotropy():1,
                     Math.toIntExact(limits.minUniformBufferOffsetAlignment()),limits.maxImageDimension2D(),
-                    Integer.MAX_VALUE,1,limits.maxColorAttachments(),context.maxIndirectDrawCount());
+                    Integer.MAX_VALUE,1,limits.maxColorAttachments(),context.multiDrawIndirect()?context.maxIndirectDrawCount():1);
             var features=new DeviceFeatures(caps.fillModeNonSolid(),caps.shaderDrawParameters(),
                     false,false,context.multiDrawIndirect(),true,context.indirectFirstInstance(),true);
             DeviceType type=switch(properties.deviceType()) {
