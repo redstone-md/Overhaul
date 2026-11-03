@@ -186,6 +186,7 @@ public final class FrameRing implements AutoCloseable {
         private Submission(int slot, long sequence) { this.slot = slot; this.sequence = sequence; }
         public long sequence() { return sequence; }
         public int slot() { return slot; }
+        VulkanContext owningContext(){return context;}
         public void await() {
             context.requireOwner();
             if (closed) {

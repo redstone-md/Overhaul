@@ -21,7 +21,7 @@ final class SampledTexture implements AutoCloseable {
             int required=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
             if (data.filter()==PackTextureData.Filter.LINEAR) required|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
             if ((properties.optimalTilingFeatures()&required)!=required) throw new IllegalStateException("RGBA8 texture filtering unsupported");
-            image=new AttachmentImage(context,data.width(),data.height(),VK_FORMAT_R8G8B8A8_UNORM,
+            image=new AttachmentImage(allocator,data.width(),data.height(),VK_FORMAT_R8G8B8A8_UNORM,
                     VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
             byte[] pixels=data.rgba();
             try (GpuBuffer staging=allocator.hostBuffer(pixels.length,VK_BUFFER_USAGE_TRANSFER_SRC_BIT)) {

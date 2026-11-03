@@ -1,58 +1,30 @@
 package dev.overhaul.vulkan;
 
-import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.*;
-import java.nio.LongBuffer;
-import static org.lwjgl.vulkan.VK10.*;
-import static dev.overhaul.vulkan.VulkanException.check;
-
-/** Owns an optimal-tiled attachment and its view and device-local memory. */
+/** Compatibility wrapper; native image allocation is authoritative in GpuAllocator. */
 final class AttachmentImage implements AutoCloseable {
-    private final VulkanContext context;
+    private final GpuAllocator allocator;
+    private final boolean ownsAllocator;
+    private GpuImage resource;
     long image;
     long view;
-    private long memory;
 
-    AttachmentImage(VulkanContext context, int width, int height, int format, int usage, int aspect) {
-        this.context = context;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            LongBuffer pointer = stack.mallocLong(1);
-            VkImageCreateInfo info = VkImageCreateInfo.calloc(stack).sType$Default().imageType(VK_IMAGE_TYPE_2D)
-                .format(format).mipLevels(1).arrayLayers(1).samples(VK_SAMPLE_COUNT_1_BIT)
-                .tiling(VK_IMAGE_TILING_OPTIMAL).usage(usage).sharingMode(VK_SHARING_MODE_EXCLUSIVE)
-                .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-            info.extent().set(width, height, 1);
-            check(vkCreateImage(context.device(), info, null, pointer), "vkCreateImage");
-            image = pointer.get(0);
-            VkMemoryRequirements requirements = VkMemoryRequirements.malloc(stack);
-            vkGetImageMemoryRequirements(context.device(), image, requirements);
-            VkMemoryAllocateInfo allocate = VkMemoryAllocateInfo.calloc(stack).sType$Default()
-                .allocationSize(requirements.size()).memoryTypeIndex(memoryType(requirements.memoryTypeBits(), stack));
-            check(vkAllocateMemory(context.device(), allocate, null, pointer), "vkAllocateMemory");
-            memory = pointer.get(0);
-            check(vkBindImageMemory(context.device(), image, memory, 0), "vkBindImageMemory");
-            VkImageViewCreateInfo imageView = VkImageViewCreateInfo.calloc(stack).sType$Default()
-                .image(image).viewType(VK_IMAGE_VIEW_TYPE_2D).format(format);
-            imageView.subresourceRange().aspectMask(aspect).levelCount(1).layerCount(1);
-            check(vkCreateImageView(context.device(), imageView, null, pointer), "vkCreateImageView");
-            view = pointer.get(0);
-        } catch (RuntimeException | Error failure) { close(); throw failure; }
+    AttachmentImage(VulkanContext context,int width,int height,int format,int usage,int aspect){
+        this(new GpuAllocator(context),true,width,height,format,usage,aspect);
     }
-
-    private int memoryType(int bits, MemoryStack stack) {
-        VkPhysicalDeviceMemoryProperties properties = VkPhysicalDeviceMemoryProperties.malloc(stack);
-        vkGetPhysicalDeviceMemoryProperties(context.physicalDevice(), properties);
-        for (int i = 0; i < properties.memoryTypeCount(); i++) {
-            if ((bits & (1 << i)) != 0 && (properties.memoryTypes(i).propertyFlags() & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0) return i;
-        }
-        throw new IllegalStateException("no device-local image memory type");
+    AttachmentImage(GpuAllocator allocator,int width,int height,int format,int usage,int aspect){
+        this(allocator,false,width,height,format,usage,aspect);
     }
-
-    @Override public void close() {
-        context.requireOwner();
-        if (view != 0) vkDestroyImageView(context.device(), view, null);
-        if (image != 0) vkDestroyImage(context.device(), image, null);
-        if (memory != 0) vkFreeMemory(context.device(), memory, null);
-        view = image = memory = 0;
+    private AttachmentImage(GpuAllocator allocator,boolean ownsAllocator,int width,int height,int format,int usage,int aspect){
+        this.allocator=allocator;this.ownsAllocator=ownsAllocator;
+        try{
+            ImageFormat typed=ImageFormat.fromVk(format);
+            if(typed.aspectMask()!=aspect)throw new IllegalArgumentException("attachment aspect differs from format");
+            resource=allocator.createImage(typed,width,height,1,1,usage);
+            image=resource.handle();view=resource.view(0,1,0,1).handle();
+        }catch(RuntimeException|Error failure){close();throw failure;}
+    }
+    @Override public void close(){
+        if(resource!=null){resource.close();resource=null;}
+        image=view=0;if(ownsAllocator)allocator.close();
     }
 }

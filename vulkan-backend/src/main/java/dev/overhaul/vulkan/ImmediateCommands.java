@@ -16,9 +16,12 @@ public final class ImmediateCommands implements AutoCloseable {
     private final VkCommandBuffer command;
     private long pool;
     private long fence;
+    private final ImageTransfers images;
+    private boolean recording;
 
     public ImmediateCommands(VulkanContext context) {
         this.context = context;
+        images = new ImageTransfers(this,context);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer pointer = stack.mallocLong(1);
             VkCommandPoolCreateInfo info = VkCommandPoolCreateInfo.calloc(stack).sType$Default()
@@ -38,9 +41,21 @@ public final class ImmediateCommands implements AutoCloseable {
         }
     }
 
+    public void upload(GpuImage image,ImageRegion region,java.nio.ByteBuffer pixels,int rowPitchBytes){images.upload(image,region,pixels,rowPitchBytes);}
+    public java.nio.ByteBuffer readback(GpuImage image,ImageRegion region,int rowPitchBytes){return images.readback(image,region,rowPitchBytes);}
+    public void copyBufferToImage(GpuBuffer source,long offset,int rowPitchBytes,GpuImage target,ImageRegion region){images.copyBufferToImage(source,offset,rowPitchBytes,target,region);}
+    public void copyImageToBuffer(GpuImage source,ImageRegion region,GpuBuffer target,long offset,int rowPitchBytes){images.copyImageToBuffer(source,region,target,offset,rowPitchBytes);}
+    public void copyImage(GpuImage source,ImageRegion from,GpuImage target,ImageRegion to){images.copy(source,from,target,to);}
+    public void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){images.clear(image,mip,layer,r,g,b,a,false,0);}
+    public void clearDepth(GpuImage image,int mip,int layer,float depth){clearDepthStencil(image,mip,layer,depth,0);}
+    public void clearDepthStencil(GpuImage image,int mip,int layer,float depth,int stencil){images.clear(image,mip,layer,depth,0,0,0,true,stencil);}
+    public void transition(GpuImage image,int mip,int layer,int layout){images.transition(image,mip,layer,layout);}
+
     public void submit(Consumer<VkCommandBuffer> recording) {
         context.requireOwner();
         if (pool == 0) throw new IllegalStateException("command lane closed");
+        if(this.recording)throw new IllegalStateException("nested immediate command submission");
+        this.recording=true;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             check(vkResetCommandPool(context.device(), pool, 0), "vkResetCommandPool");
             check(vkBeginCommandBuffer(command, VkCommandBufferBeginInfo.calloc(stack).sType$Default()
@@ -51,7 +66,7 @@ public final class ImmediateCommands implements AutoCloseable {
             VkSubmitInfo info = VkSubmitInfo.calloc(stack).sType$Default().pCommandBuffers(stack.pointers(command));
             check(vkQueueSubmit(context.queue(), info, fence), "vkQueueSubmit");
             check(vkWaitForFences(context.device(), fence, true, -1L), "vkWaitForFences");
-        }
+        } finally { this.recording=false; }
     }
 
     public void copy(GpuBuffer source, GpuBuffer target, long size) {

@@ -21,6 +21,11 @@ public final class SdlSurfaceProvider implements SurfaceProvider {
         long flags = SDL_GetWindowFlags(window);
         if ((flags & SDL_WINDOW_VULKAN) == 0 || (flags & SDL_WINDOW_OPENGL) != 0)
             throw new IllegalArgumentException("SDL surface requires SDL_WINDOW_VULKAN without SDL_WINDOW_OPENGL");
+        return presentationExtensions();
+    }
+
+    /** Available after the caller loads SDL's Vulkan library, even before any window exists. */
+    public static List<String> presentationExtensions() {
         org.lwjgl.PointerBuffer extensions = SDL_Vulkan_GetInstanceExtensions();
         if (extensions == null) throw new IllegalStateException("SDL Vulkan extensions unavailable: " + SDL_GetError());
         return SurfaceExtensions.copy(extensions);

@@ -10,6 +10,7 @@ import static org.lwjgl.sdl.SDLError.SDL_GetError;
 import static org.lwjgl.sdl.SDLEvents.SDL_PumpEvents;
 import static org.lwjgl.sdl.SDLInit.*;
 import static org.lwjgl.sdl.SDLVideo.*;
+import static org.lwjgl.sdl.SDLVulkan.*;
 
 /** Runs with matching LWJGL3.4.3 libraries only; SDL owns a real Vulkan-capable window. */
 public final class SdlVulkanSmoke {
@@ -21,15 +22,26 @@ public final class SdlVulkanSmoke {
             throw new IllegalStateException("SDL smoke classpath unexpectedly contains GLFW");
         if (!SDL_Init(SDL_INIT_VIDEO)) throw new IllegalStateException("SDL video init failed: " + SDL_GetError());
         long window = 0;
+        boolean vulkanLoaded = false;
         try {
+            if (!SDL_Vulkan_LoadLibrary((CharSequence)null)) throw new IllegalStateException("SDL Vulkan load failed: " + SDL_GetError());
+            vulkanLoaded = true;
+            VulkanContext context = VulkanContext.openForPresentation(SdlSurfaceProvider.presentationExtensions());
+            try (context) {
+            if (context.surface() != 0) throw new IllegalStateException("deferred context unexpectedly created a surface");
+            System.out.println("SDL deferred surface: Vulkan device created before SDL window");
             window = SDL_CreateWindow("overhaul SDL Vulkan verification", 128, 128,
                 SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
             if (window == 0) throw new IllegalStateException("SDL Vulkan window failed: " + SDL_GetError());
             SdlSurfaceProvider provider = new SdlSurfaceProvider(window);
-            VulkanContext context = VulkanContext.openWindowed(provider);
-            try (context; SwapchainPresenter presenter = new SwapchainPresenter(context, 128, 128)) {
+            context.attachSurface(provider);
+            try { context.attachSurface(provider); throw new IllegalStateException("second surface attachment accepted"); }
+            catch (IllegalStateException expected) { if (!expected.getMessage().contains("already attached")) throw expected; }
+            try (SwapchainPresenter presenter = new SwapchainPresenter(context, 128, 128)) {
+                SdlSurfaceImageSmoke.verify(context,presenter);
                 verifyDraws(context, presenter, window);
                 System.out.println("SDL3 Vulkan device: " + context.deviceName() + "; LWJGL=" + Version.getVersion());
+            }
             }
             context.assertValidationClean();
             // Context/provider own the surface only; the caller's window is still valid afterwards.
@@ -39,6 +51,7 @@ public final class SdlVulkanSmoke {
             System.out.println("SDL3 native surface: borrowed ownership and no-OpenGL/no-GLFW isolation verified");
         } finally {
             if (window != 0) SDL_DestroyWindow(window);
+            if (vulkanLoaded) SDL_Vulkan_UnloadLibrary();
             SDL_Quit();
         }
     }
