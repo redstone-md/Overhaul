@@ -10,8 +10,8 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Legacy/intermediate/modern separation | Java 8 common contracts; loader-specific source sets; isolated legacy CoreMod toolchain | Real legacy game execution and rendering integration |
 | Owned native resources | Vulkan context, queue, VMA buffers, image ownership, descriptors and teardown | Validation-layer runs and broader GPU/OS coverage |
 | Indexed indirect rendering | Worker geometry/instancing and captured actual Minecraft baked-model assets render through Vulkan | Continuous game scene integration and every render domain |
-| Async upload/render | Bounded fenced frame ring, deferred staging retirement, independent per-flight render targets | Connect the complete live game streaming/render loop |
-| Presentation | Borrowed GLFW/SDL surfaces, split acquire/blit/present and resize; own Fabric 26.3 backend installed before the actual game window | Broader window/OS/GPU coverage and asynchronous game submission |
+| Async upload/render | Actual Fabric 26.3 game passes/transfers batch on three fenced slots; staged writes, range-aware maps, triple transient arenas and deferred pins/callbacks verified | Broader sessions, resource/pipeline pooling, device-local static allocation and measured throughput |
+| Presentation | Borrowed GLFW/SDL surfaces, asynchronous split acquire/blit/present with three acquire semaphores; own Fabric 26.3 backend installed before its game window | Broader window/OS/GPU coverage and session/resize parity |
 | CPU occlusion | Frustum/software depth tests drive sparse GPU indirect-count updates; pixels and command restoration verified | Actual world occluder extraction/projection and game draw integration |
 | Shader compilation | Native shaderc preprocessing and GLSL-to-SPIR-V compilation | Broader pack syntax, stages, custom uniforms and resources |
 | Iris/OptiFine compatibility | Unchanged pinned Iris basic/textured programs compile and draw with native uniforms/textures/blending; pixel checks pass | Full-pack semantics, unsupported states/stages and real scene visual parity |
@@ -52,7 +52,12 @@ push constants, draw variants, nullable vertex-slot unbinding, resource lifetime
 mapped transfers, timestamps and actual SDL presentation. A disposable live world
 rendered terrain, clouds, the player hand, HUD and the five block fixtures before
 normal save/disconnect. GPU frame captures are retained in `docs/evidence`.
-This bridge is synchronous and host-visible; no throughput gain is claimed.
+The bridge now batches GPU work asynchronously, preserves resource lifetimes and
+upload order, and retains host-visible static allocations. The latest world run
+recorded 2,900 passes in 403 rendering submissions plus 359 presentation blits,
+with 29 positive-timeout fence-wait calls including the debug readback. These are
+API-call counts, not blocked durations or a measured FPS gain. Full performance
+and allocation profiling remains required.
 
 Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those

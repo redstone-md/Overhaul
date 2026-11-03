@@ -116,7 +116,23 @@ exclude these classes. Run all adapter Gradle commands serially, including nativ
 tests: changing variants can delete a running client's classes through Gradle's
 stale-output cleanup.
 
-The first bridge waits for submissions and uses host-visible VMA buffers.
+The bridge batches passes/uploads on three fenced slots. Pass captures seal at
+frontend close; attachment views, descriptors and pins retire after their actual
+submission. Buffer writes use staged GPU copies, and CPU mapping synchronizes
+overlapping ranges including non-coherent atom boundaries. Three transient arenas
+share a 128 MiB budget. Batches flush at 256 operations or a 64 MiB staging
+threshold; a larger single image upload submits alone.
+
+Fence creation captures a marker without splitting the batch. A zero-time poll
+of unsubmitted work returns pending; a nonzero wait flushes it first and applies
+the timeout to its native fence wait. Readback callbacks run after completion,
+outside native retirement, and may map or enqueue further work. Timestamp results
+are published by submitted generation. Private attachment views track their own
+fence independently of later image-only blits.
+
+GPU presentation is asynchronous and uses three acquire semaphores. Synchronous
+commands remain available for explicit verification/readback; ordinary game
+passes use the batch queue. Static allocations remain host-visible VMA buffers.
 Long sessions, every render domain, complete shader packs, reload/dimension/mod
 parity, other loader/version renderers and controlled performance remain open.
 Instance divisors above one are unavailable; DrawIndex-sensitive direct multi-draw

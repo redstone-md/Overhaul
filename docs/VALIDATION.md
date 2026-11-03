@@ -17,8 +17,9 @@ The combined command passed:
 | shader-pipeline | 16 | 0 | 0 |
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
-| native integration | 11 | 0 | 0 |
-| experimental Fabric 26.3 backend | 9 | 0 | 0 |
+| native integration | 17 | 0 | 0 |
+| experimental Fabric 26.3 backend native | 17 | 0 | 0 |
+| backend read-range unit | 2 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
 
@@ -164,13 +165,60 @@ reference camera pose.
 These images are readbacks of the actual source passed to the swapchain blit,
 with its presentation Y inversion applied; they are not desktop screenshots.
 The test does not cover every entity/particle/weather path, long sessions,
-reloads, dimensions or mod coexistence. The first game bridge waits for each
-submission and uses host-visible buffers. Performance remains unmeasured.
+reloads, dimensions or mod coexistence. That initial checkpoint used synchronous
+submission; the asynchronous increment below supersedes it. Performance remains
+unmeasured against a controlled reference.
 No Khronos validation layers were available.
 
 Adapter builds/clients must run serially: switching the same Gradle project to
 another variant can clean the previous output directory while a client still
 loads its classes. The final world checks ran without concurrent adapter builds.
+
+## Bounded asynchronous game commands
+
+The same GUI and disposable-world commands pass after removing per-pass waits.
+An ordered queue batches passes, buffer copies, image operations and timestamp
+commands on three fenced slots. Pins, descriptors and attachment views survive
+until the owning fence completes; failed batches restore image layouts in reverse
+order and do not publish callbacks or timestamp generations. CPU buffer access
+waits only for overlapping work, respecting non-coherent atom granularity.
+Transient arenas rotate over three frames under their shared memory budget.
+
+Fence markers stay in their batch until submission; polling unsubmitted work
+returns pending. A nonzero wait can submit it. This avoids premature submissions
+from game resource-pool fences. Readback completion callbacks may safely map or
+enqueue work. Private attachment views retire at their own fence and do not wait
+for later image-only presentation blits.
+
+New native cases verify real timed-out GPU work held by a native event, retirement
+exactly once, many markers sharing a submission, older receipt retirement,
+disjoint maps, copied-data ordering, source snapshot ownership, callback reentry,
+rollback/recovery, stale query generations and private-view versus image lifetime.
+The interval unit checks compare merged ranges with an independent byte oracle.
+SDL verification additionally presents 24 asynchronous split frames over three
+acquire slots and exercises resize, abandoned acquisition and close.
+
+The [async world receipt](evidence/backend-async-world-2026-11-03.json) records:
+
+| Counter | Observed |
+| --- | ---: |
+| Presented frames / native blits | 359 |
+| Render passes / draws | 2,900 / 26,899 |
+| Rendering queue submissions / operations | 403 / 21,324 |
+| Rendering queue positive-timeout fence waits | 27 |
+| Presentation positive-timeout fence waits | 1 |
+| Synchronous verification submissions / waits | 1 / 1 |
+
+Counters include startup and shutdown. A positive-timeout wait invocation may
+return immediately; these numbers do not measure blocked time, FPS or frame-time
+gains. Rendering submissions exclude the separate swapchain blit per frame.
+The one synchronous submission reads the debug image. All five block fixtures
+and zero snapshot leases were verified before normal save/disconnect and close.
+The latest [world image](evidence/backend-async-world-2026-11-03.png),
+[GUI image](evidence/backend-async-screen-2026-11-03.png) and
+[manifest](evidence/backend-async-2026-11-03.json) retain this checkpoint.
+Static buffers remain host-visible; descriptor/framebuffer pooling, allocation
+profiling and controlled reference benchmarks remain open.
 
 ## Remaining evidence
 

@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "scene": "screen",
+  "frames": 528,
+  "passes": 4784,
+  "draws": 53119,
+  "screen": "net.minecraft.client.gui.screens.AccessibilityOnboardingScreen",
+  "overlay": "none",
+  "lastScreen": "net.minecraft.client.gui.screens.ProgressScreen",
+  "lastOverlay": "none",
+  "width": 854,
+  "height": 480,
+  "distinctPixelsAtLeast": 4096,
+  "captured": true,
+  "closed": true,
+  "capture": "GPU surface source with presentation Y flip applied",
+  "submissionStatistics": {
+    "immediateSubmissions": 1,
+    "surfaceFenceWaitCalls": 1,
+    "queueSubmissions": 573,
+    "explicitHostWaits": 0,
+    "immediateFenceWaitCalls": 1,
+    "queuedOperations": 24991,
+    "queueFenceWaitCalls": 27
+  }
+}

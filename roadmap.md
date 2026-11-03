@@ -85,9 +85,9 @@ Performance claims require measurements, not implementation intent.
 ## Next end-to-end gates
 
 1. Harden the now-working opt-in Fabric 26.3 native backend with longer sessions,
-   resize/reload/dimension and full render-domain coverage. Replace synchronous
-   pass submission and host-visible static buffers with bounded asynchronous
-   frame ownership, then measure against a reference instance.
+   resize/reload/dimension and full render-domain coverage. Profile the now-batched
+   command path, pool descriptors/framebuffers, add device-local static allocation
+   and measure against a controlled reference instance.
 2. Connect the existing owned worker meshes/visibility path to continuous game
    section updates. Verify entities, block entities, particles, weather, lighting
    and scene ordering beyond the initial terrain/cloud/hand/HUD/fixture check.
@@ -161,3 +161,23 @@ explicit game fences and readback callbacks must cover all earlier queue work.
 Test timeout/rollback/reuse/hazard cases, then repeat the isolated GUI/world runs
 with submission/wait counters. Full scene/version/shader/world/tick and controlled
 performance gates remain intact; batching counters alone are not an FPS claim.
+
+## Asynchronous backend checkpoint: 2026-11-03
+
+- Actual game passes, buffer uploads, image transfers and timestamps now use
+  ordered batches on three fenced slots. Three transient arenas preserve data
+  until completion; CPU mappings check overlapping reads/writes at atom granularity.
+- Pass capture seals immediately. GPU resources, descriptors and private attachment
+  views retire at their real completion point, with transactional failure cleanup.
+- Logical fence markers avoid early submits. GPU readback callbacks run after
+  retirement and may safely reenter the queue; query generations reject stale data.
+- SDL split presentation is asynchronous with three acquire semaphores. Private
+  attachment views no longer wait for later image-only blits of the same image.
+- The actual world run passed 2,900 passes, 26,899 draws and 359 presented frames
+  using 403 render submissions, 27 render-fence wait calls, one presentation-fence
+  wait call and one synchronous debug readback. Call counts are not blocked time
+  or FPS comparisons. The 200-tick GUI run and orderly world teardown also pass.
+- Seventeen portable native cases, seventeen adapter native cases, two interval
+  unit cases and the prior 48 engine unit cases pass. Remaining global acceptance
+  gates are unchanged; host-visible static allocations and per-pass native-object
+  creation still need profiling/optimization.

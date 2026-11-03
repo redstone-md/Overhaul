@@ -1,0 +1,88 @@
+{
+  "verifiedAtUtc": "2026-11-03T17:26:05.1443243Z",
+  "sourceCommit": "fb5b356c26c9012761e00672d44bd5cef7a298b2",
+  "backend": "Overhaul Vulkan",
+  "capture": "Readback of actual swapchain-blit source; native presentation Y flip applied",
+  "guiCommand": ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend '-PsmokeClient=200' verifyBackendSmoke --console=plain --no-configuration-cache",
+  "worldCommand": ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+  "tests": {
+    "engineUnit": 48,
+    "portableNative": 17,
+    "adapterNative": 17,
+    "backendRangeUnit": 2,
+    "normalLoader": 22,
+    "failures": 0,
+    "skipped": 0
+  },
+  "limits": {
+    "frameSlots": 3,
+    "transientArenas": 3,
+    "transientBudgetBytes": 134217728,
+    "batchOperationLimit": 256,
+    "batchStagingFlushThresholdBytes": 67108864,
+    "oversizedSingleImageUpload": "submitted alone"
+  },
+  "worldCounters": {
+    "queueSubmissions": 403,
+    "surfaceFenceWaitCalls": 1,
+    "immediateSubmissions": 1,
+    "queueFenceWaitCalls": 27,
+    "queuedOperations": 21324,
+    "immediateFenceWaitCalls": 1,
+    "explicitHostWaits": 0
+  },
+  "worldFrames": 359,
+  "worldPasses": 2900,
+  "worldDraws": 26899,
+  "guiCounters": {
+    "immediateSubmissions": 1,
+    "surfaceFenceWaitCalls": 1,
+    "queueSubmissions": 573,
+    "explicitHostWaits": 0,
+    "immediateFenceWaitCalls": 1,
+    "queuedOperations": 24991,
+    "queueFenceWaitCalls": 27
+  },
+  "guiFrames": 528,
+  "guiPasses": 4784,
+  "counterMeaning": "API invocations, not CPU blocking duration; rendering submissions exclude per-frame presentation blits",
+  "validationLayers": false,
+  "performanceCompared": false,
+  "staticBufferPlacement": "host visible",
+  "engineArtifacts": [
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "f3674da878c177ad5fdcd48bd10a4d5fbed048855ef7e004e51b0d8af67f877d"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-async-screen-2026-11-03.png",
+      "sha256": "6568737dafc58278f18baef7375b022df551e5c24625a784bed23b6185efbdfb"
+    },
+    {
+      "file": "backend-async-screen-2026-11-03.json",
+      "sha256": "d88137bf17dbcef10ff7287418862f6e16b50e5f3c01dc5e1b54d6905911ca3b"
+    },
+    {
+      "file": "backend-async-world-2026-11-03.png",
+      "sha256": "38f7c116dd71293ecbb2dc13259ca8c69d8955e50826fb8b94ad4af45187ba85"
+    },
+    {
+      "file": "backend-async-world-2026-11-03.json",
+      "sha256": "2d9c603da220e7c9dd668507db8bca915209c650031fcfece7d7ef7bed0adfd6"
+    },
+    {
+      "file": "backend-async-world-fixture-2026-11-03.json",
+      "sha256": "dae2d1fb4967714d28980f54e658cbe5a22d0f18fbbeabc0911021dfcb4f064c"
+    }
+  ]
+}

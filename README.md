@@ -95,11 +95,14 @@ To verify the actual game backend:
 .\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --no-configuration-cache
 ```
 
-The [world frame](docs/evidence/backend-world-2026-11-03.png) includes terrain,
+The [world frame](docs/evidence/backend-async-world-2026-11-03.png) includes terrain,
 clouds, the player hand, HUD and five server-placed block models. Its GPU source
 image is saved with the presentation Y flip applied. Overhaul owns the native
 device, resources, pipelines, commands and SDL swapchain; Minecraft's shared
 frontend supplies shader compilation and validation. No vanilla graphics backend
-acts as fallback. This first adapter uses synchronous submissions and host-visible
-buffers; throughput improvements have not been measured. Run adapter builds and
+acts as fallback. The adapter now batches ordered commands over three fenced
+slots, stages GPU buffer writes, and synchronizes overlapping mappings and slot
+reuse. Transient arenas also rotate over three frames. Static buffers
+remain host-visible, and FPS/frame-time improvements have not been measured.
+Run adapter builds and
 clients serially because Gradle can clean a previous variant's class output.
