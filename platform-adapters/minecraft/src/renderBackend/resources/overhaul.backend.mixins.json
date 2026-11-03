@@ -10,7 +10,8 @@
     "WeatherGeometryMixin", "InstancedWeatherRendererMixin", "ModelCubeCaptureMixin", "InstancedModelRendererMixin",
     "RenderTypeSetupAccess", "RenderSetupOitAccess", "ModelPartStructureAccess",
     "SubmitStorageDomainMixin", "SubmitCollectionDomainMixin", "ModelSubmitDomainMixin", "EntitySubmitDomainMixin",
-    "BlockEntitySubmitDomainMixin", "RenderTypeFactoryAccess", "RenderTypeDomainMixin", "FallbackModelDomainMixin"
+    "BlockEntitySubmitDomainMixin", "RenderTypeFactoryAccess", "RenderTypeDomainMixin", "FallbackModelDomainMixin",
+    "FallbackBlockModelDomainMixin", "FallbackCustomDomainMixin", "FallbackItemDomainMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }
