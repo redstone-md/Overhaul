@@ -3,13 +3,14 @@ package dev.overhaul.vulkan;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** A bounded VMA allocation. Mapping is lexical and cannot outlive the operation. */
+/** A bounded VMA allocation. A cached mapping stays private and is unmapped before destruction. */
 public final class GpuBuffer implements AutoCloseable {
     private final GpuAllocator allocator;
     private final long allocation;
     private final int size;
     private final boolean hostVisible;
     private long handle;
+    private ByteBuffer mapping;
 
     GpuBuffer(GpuAllocator allocator, long handle, long allocation, int size, boolean hostVisible) {
         this.allocator = allocator;
@@ -25,22 +26,22 @@ public final class GpuBuffer implements AutoCloseable {
     public void write(ByteBuffer source) {
         requireHost();
         if (source.remaining() > size) throw new IllegalArgumentException("source exceeds allocation");
-        ByteBuffer mapped = allocator.map(allocation, size);
-        try {
-            mapped.put(source.duplicate());
-            allocator.flush(allocation, size);
-        } finally { allocator.unmap(allocation); }
+        mapped().put(0, source, source.position(), source.remaining());
+        allocator.flush(allocation, size);
     }
 
     public ByteBuffer read() {
         requireHost();
         ByteBuffer copy = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder());
-        ByteBuffer mapped = allocator.map(allocation, size);
-        try {
-            allocator.invalidate(allocation, size);
-            copy.put(mapped).flip();
-            return copy;
-        } finally { allocator.unmap(allocation); }
+        ByteBuffer source = mapped();
+        allocator.invalidate(allocation, size);
+        copy.put(0, source, 0, size);
+        return copy;
+    }
+
+    private ByteBuffer mapped() {
+        if (mapping == null) mapping = allocator.map(allocation, size);
+        return mapping;
     }
 
     private void requireHost() {
@@ -55,6 +56,8 @@ public final class GpuBuffer implements AutoCloseable {
 
     @Override public void close() {
         if (handle == 0) return;
+        requireOpen();
+        if (mapping != null) { allocator.unmap(allocation); mapping = null; }
         allocator.destroy(this, handle, allocation);
         handle = 0;
     }

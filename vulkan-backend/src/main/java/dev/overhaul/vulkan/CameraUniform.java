@@ -14,6 +14,7 @@ import static dev.overhaul.vulkan.VulkanException.check;
 final class CameraUniform implements AutoCloseable {
     private final VulkanContext context;
     private final GpuBuffer buffer;
+    private final ByteBuffer scratch = ByteBuffer.allocate(64).order(ByteOrder.nativeOrder());
     long layout;
     private long pool;
     long set;
@@ -49,12 +50,12 @@ final class CameraUniform implements AutoCloseable {
 
     void write(float[] transform) {
         if (transform.length != 16) throw new IllegalArgumentException("camera matrix must contain 16 floats");
-        ByteBuffer bytes = ByteBuffer.allocate(64).order(ByteOrder.nativeOrder());
+        scratch.clear();
         for (float value : transform) {
             if (!Float.isFinite(value)) throw new IllegalArgumentException("camera matrix must be finite");
-            bytes.putFloat(value);
+            scratch.putFloat(value);
         }
-        buffer.write(bytes.flip());
+        buffer.write(scratch.flip());
     }
 
     @Override public void close() {
