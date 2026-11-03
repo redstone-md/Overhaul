@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "scene": "screen",
+  "frames": 526,
+  "passes": 4617,
+  "draws": 51541,
+  "screen": "net.minecraft.client.gui.screens.AccessibilityOnboardingScreen",
+  "overlay": "none",
+  "width": 854,
+  "height": 480,
+  "distinctPixelsAtLeast": 4096,
+  "captured": true,
+  "closed": true,
+  "capture": "GPU surface source with presentation Y flip applied"
+}

@@ -11,7 +11,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Owned native resources | Vulkan context, queue, VMA buffers, image ownership, descriptors and teardown | Validation-layer runs and broader GPU/OS coverage |
 | Indexed indirect rendering | Worker geometry/instancing and captured actual Minecraft baked-model assets render through Vulkan | Continuous game scene integration and every render domain |
 | Async upload/render | Bounded fenced frame ring, deferred staging retirement, independent per-flight render targets | Connect the complete live game streaming/render loop |
-| Presentation | Borrowed GLFW/SDL surface providers; semaphore presentation and resize verified on isolated LWJGL 3.3.6 and 3.4.3 runtimes | Install the backend before creation of the actual game window |
+| Presentation | Borrowed GLFW/SDL surfaces, split acquire/blit/present and resize; own Fabric 26.3 backend installed before the actual game window | Broader window/OS/GPU coverage and asynchronous game submission |
 | CPU occlusion | Frustum/software depth tests drive sparse GPU indirect-count updates; pixels and command restoration verified | Actual world occluder extraction/projection and game draw integration |
 | Shader compilation | Native shaderc preprocessing and GLSL-to-SPIR-V compilation | Broader pack syntax, stages, custom uniforms and resources |
 | Iris/OptiFine compatibility | Unchanged pinned Iris basic/textured programs compile and draw with native uniforms/textures/blending; pixel checks pass | Full-pack semantics, unsupported states/stages and real scene visual parity |
@@ -21,7 +21,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Generation/loading | Async immutable generator callbacks and a checked pooled snapshot codec | Integration with Minecraft generation stages, region/NBT codecs and loading dependencies |
 | Memory churn | Reused slab storage, worker scratch, mapped GPU buffers and camera storage | Allocations remain in snapshots, futures and upload bookkeeping; no zero-allocation claim |
 | Tick/entity/path queries | Owner-thread spatial hash and cooperative tick budgets with correctness tests | Wire actual server/entity tracking and pathfinder behavior and measure improvement |
-| Renderer replacement | Adapter hooks deliberately leave the game render path active | Chunks, entities, block entities, particles, weather, GUI/text and lifecycle parity before replacement |
+| Renderer replacement | Opt-in Fabric 26.3 selects only Overhaul's native backend; actual GUI and disposable-world frames plus save/disconnect verified | Complete render-domain/session/mod parity, every remaining loader/version, packaging and throughput |
 | Ecosystem compatibility | Strict lifecycle hooks and explicit dependency boundaries | In-game tests with major mods, reloads, dimensions, unloads, disconnects and dedicated servers |
 | Performance | Geometry reduction and specific native execution paths verified | Controlled vanilla comparisons of FPS/frame times, memory, loading and tick costs |
 
@@ -40,10 +40,20 @@ captured a live section twice and accepted the latest revision. The native probe
 captured 283 actual baked quads, the 2048x2048 atlas and 16x16 lightmap, then drew
 them through Vulkan on a bounded worker after recycling the source slab. The
 saved image was inspected. All leases were returned before normal world save,
-disconnect and shutdown. The game window itself remained on vanilla OpenGL.
+disconnect and shutdown. That earlier model-only smoke kept the game window on
+its normal backend.
 Other loader runtime and legacy JVM/game execution remain separate from their
 successful compile/package gates.
 
-Fixtures and compile checks do not prove Minecraft scene replacement, full shader
+The newer `-PoverhaulBackend` build supplies its own RenderPearl native backend.
+It reuses the shared Minecraft shader/validation frontend without delegating to
+Mojang's Vulkan or OpenGL backend. Native checks cover descriptors, depth/MRT,
+push constants, draw variants, nullable vertex-slot unbinding, resource lifetimes,
+mapped transfers, timestamps and actual SDL presentation. A disposable live world
+rendered terrain, clouds, the player hand, HUD and the five block fixtures before
+normal save/disconnect. GPU frame captures are retained in `docs/evidence`.
+This bridge is synchronous and host-visible; no throughput gain is claimed.
+
+Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those
 remain required work rather than inferred successes.

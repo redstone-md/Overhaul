@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "scene": "world",
+  "frames": 325,
+  "passes": 2662,
+  "draws": 26366,
+  "screen": "none",
+  "overlay": "none",
+  "lastScreen": "net.minecraft.client.gui.screens.ProgressScreen",
+  "lastOverlay": "none",
+  "width": 854,
+  "height": 480,
+  "distinctPixelsAtLeast": 4096,
+  "captured": true,
+  "closed": true,
+  "capture": "GPU surface source with presentation Y flip applied"
+}

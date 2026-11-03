@@ -84,13 +84,13 @@ Performance claims require measurements, not implementation intent.
 
 ## Next end-to-end gates
 
-1. Promote the now-verified live-world model/texture upload tracer into the actual
-   game window/backend. The SDL surface provider and isolated LWJGL 3.4.3 runtime
-   pass native tests; the 26.3 game still needs an Overhaul implementation of its
-   RenderPearl device/command/resource boundary before window creation.
-2. Implement model geometry, biome/light data and translucent rendering, then all
-   entity, block-entity, particle, weather and GUI/text paths before cancelling the
-   vanilla renderer. Preserve a runnable reference instance for visual comparisons.
+1. Harden the now-working opt-in Fabric 26.3 native backend with longer sessions,
+   resize/reload/dimension and full render-domain coverage. Replace synchronous
+   pass submission and host-visible static buffers with bounded asynchronous
+   frame ownership, then measure against a reference instance.
+2. Connect the existing owned worker meshes/visibility path to continuous game
+   section updates. Verify entities, block entities, particles, weather, lighting
+   and scene ordering beyond the initial terrain/cloud/hand/HUD/fixture check.
 3. Execute real depth/shadow/lighting/post passes and shader-pack render-state,
    ping-pong, custom-uniform, texture and unsupported-stage semantics.
 4. Integrate vanilla generation, NBT/region/packet loading, cross-chunk lighting,
@@ -127,3 +127,23 @@ an isolated opt-in game backend. No vanilla Vulkan/OpenGL implementation may act
 as a hidden fallback or count as Overhaul's replacement. Normal targets retain
 their current behavior while the new backend is verified. All earlier full-scene,
 shader-pack, world/tick, version and performance gates remain required.
+
+## Actual game backend checkpoint: 2026-11-03
+
+- The opt-in Fabric 26.3 build now installs Overhaul before SDL window creation.
+  It uses the shared shader/validation frontend and owns native execution itself;
+  Mojang's Vulkan/OpenGL backends are absent from the selected backend list.
+- Owned images/views/samplers, direct mapping leases, generic graphics state,
+  descriptors, push constants, depth/MRT and draw variants pass GPU checks.
+  Nine adapter-native and eleven portable native tests pass, with 48 unit tests.
+- A 200-tick onboarding GUI run and a real disposable-world run passed. Inspected
+  GPU presentation-source images show textured terrain, clouds, player hand/HUD,
+  slab, glass, flower, stairs and cutout leaves. The world saves/disconnects and
+  the backend closes normally; source snapshot leases return to zero.
+- The camera is placed by the integrated-server owner for repeatable fixture
+  framing. Source-image exports apply the same Y inversion as native presentation.
+- Ordinary loader outputs exclude the experimental backend. Adapter builds must
+  run serially with clients; Gradle variant cleanup can remove live class outputs.
+- Game submissions are currently synchronous and buffers host-visible. Full
+  render-domain/session/mod parity, all version backends, shader-pack semantics,
+  world/tick integration and measured performance remain open acceptance gates.

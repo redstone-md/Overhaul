@@ -1,0 +1,62 @@
+{
+  "verifiedAtUtc": "2026-11-03T16:47:01.1448141Z",
+  "guiSourceCommit": "21fee563536ea7673ee82da75e1c8da43ea43b73",
+  "worldSourceCommit": "043570e8ce95b7a833a96c650213c99685097f9e",
+  "backend": "Overhaul Vulkan",
+  "capture": "Readback of actual swapchain-blit source; native presentation Y flip applied",
+  "guiCommand": ".\\gradlew.bat -p platform-adapters/minecraft -Ptarget=fabric-26.3 -PoverhaulBackend -PsmokeClient=200 verifyBackendSmoke --console=plain --no-configuration-cache",
+  "worldCommand": ".\\gradlew.bat -p platform-adapters/minecraft -Ptarget=fabric-26.3 -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+  "tests": {
+    "engineUnit": 48,
+    "portableNative": 11,
+    "adapterNative": 9,
+    "normalLoader": 22,
+    "failures": 0
+  },
+  "validationLayers": false,
+  "performanceCompared": false,
+  "camera": {
+    "x": 6.5,
+    "y": 4,
+    "z": -5.5,
+    "yaw": 0,
+    "pitch": 7,
+    "owner": "integrated server"
+  },
+  "engineArtifacts": [
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "1e1476726831e2df28909fa9e21172412ec0790c248b8f0f67997e461233de71"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-screen-2026-11-03.png",
+      "sha256": "6568737dafc58278f18baef7375b022df551e5c24625a784bed23b6185efbdfb"
+    },
+    {
+      "file": "backend-screen-2026-11-03.json",
+      "sha256": "72605946aa46c1474c62b3d82f756022c3607b26fe399468856bd573d9a1db2d"
+    },
+    {
+      "file": "backend-world-2026-11-03.png",
+      "sha256": "7b7a5aaf7ad0fe952747c9595d3fa90aade94a6b26e03ebfe9245e188b27a6a5"
+    },
+    {
+      "file": "backend-world-2026-11-03.json",
+      "sha256": "bcdb80f2ce9fa2acbf36331887b1d3ef73354869c371fd5502a5950f9ec9fda9"
+    },
+    {
+      "file": "backend-world-fixture-2026-11-03.json",
+      "sha256": "c7d85d168b54b9cda2abcee6d6834664d79301f488373799ffcad4a9eeac5cb1"
+    }
+  ]
+}

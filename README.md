@@ -2,10 +2,10 @@
 
 A modular Vulkan rendering and world-processing overhaul for Minecraft.
 
-Development is underway. See [roadmap.md](roadmap.md) for the complete requested
-scope and acceptance gates. This repository must not be described as a working
-replacement for Minecraft's renderer until loader integration and gameplay
-validation pass.
+Development is underway. An opt-in Fabric 26.3 build now runs the actual game
+window through Overhaul's Vulkan backend, with GUI and disposable-world evidence.
+See [roadmap.md](roadmap.md) for the remaining scene, shader-pack, version and
+performance acceptance gates. Production support and full parity are not established.
 
 The engine separates immutable world processing, explicit native resource
 ownership, shader translation and loader-specific adapters. Legacy and modern
@@ -60,16 +60,17 @@ The cube mesher is separate from the new baked-model path. A Fabric 26.3
 development smoke captures actual baked geometry, final tint/AO, atlas and
 lightmap, then draws those assets through Vulkan on a worker. See the
 [captured result](docs/evidence/world-model-2026-11-03.png). Its extraction still
-uses Minecraft's tessellator, and the game window remains on OpenGL.
+uses Minecraft's tessellator. That model-only smoke leaves the game window on its
+normal backend; the separate backend build below selects Overhaul itself.
 Emissive lighting is not the vanilla
 skylight/lighting engine. The deferred graph still needs actual scene lighting,
 shadow and post-processing passes. Shader-pack support remains a defined subset.
 Direct slabs are reusable within their fixed budget; the JVM reclaims the pool's
 backing direct memory after collection.
 
-Loader builds are isolated under `platform-adapters/minecraft`; their diagnostic
-lifecycle hooks leave vanilla rendering active. A packaged diagnostic adapter is
-not a completed Vulkan renderer replacement. See the roadmap for remaining gates.
+Loader builds are isolated under `platform-adapters/minecraft`; normal artifacts
+retain their diagnostic behavior. The experimental native backend is selected
+explicitly and currently targets Fabric 26.3 only.
 All 11 pinned loader builds pass; see [validation evidence](docs/VALIDATION.md)
 and the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact limits.
 
@@ -85,3 +86,20 @@ server-to-client block fixtures, renders their captured assets, then saves and
 disconnects normally. Development drivers use separate build directories and are
 excluded from normal loader jars. The optional `-sdl34.jar` surface adapter is
 packaged separately and requires a runtime with matching LWJGL 3.4.3 bindings.
+
+To verify the actual game backend:
+
+```powershell
+.\gradlew.bat :vulkan-backend:assemble :shader-pipeline:jar
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --no-configuration-cache
+```
+
+The [world frame](docs/evidence/backend-world-2026-11-03.png) includes terrain,
+clouds, the player hand, HUD and five server-placed block models. Its GPU source
+image is saved with the presentation Y flip applied. Overhaul owns the native
+device, resources, pipelines, commands and SDL swapchain; Minecraft's shared
+frontend supplies shader compilation and validation. No vanilla graphics backend
+acts as fallback. This first adapter uses synchronous submissions and host-visible
+buffers; throughput improvements have not been measured. Run adapter builds and
+clients serially because Gradle can clean a previous variant's class output.

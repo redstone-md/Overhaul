@@ -17,7 +17,8 @@ The combined command passed:
 | shader-pipeline | 16 | 0 | 0 |
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
-| native integration | 8 | 0 | 0 |
+| native integration | 11 | 0 | 0 |
+| experimental Fabric 26.3 backend | 9 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
 
@@ -119,9 +120,61 @@ The mixed-layer fixture uploads 48 translucent index bytes on movement instead o
 the full 96-byte index buffer. This is a measured transfer count for that fixture,
 not an FPS claim.
 
+## Actual Overhaul game backend
+
+The opt-in Fabric 26.3 commands passed:
+
+```powershell
+.\gradlew.bat :vulkan-backend:assemble :shader-pipeline:jar
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend '-PsmokeClient=200' verifyBackendSmoke --console=plain --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache
+```
+
+The actual game logged `Using graphics backend Overhaul Vulkan`. Its factory
+created the device before the SDL window. All native resources, pipelines,
+commands and presentation use Overhaul; the shared game frontend supplies shader
+compilation/validation. The backend list contains no fallback.
+
+Nine native tests pass with LWJGL's debug allocator enabled. They verify actual
+frontend shader compilation, UBO/image/texel descriptors, MRT masks, depth
+load/test/write, push constants, direct/indexed/indirect/multi-draw results,
+logical-close pins, nullable vertex-slot unbinding, mapping/transient reuse,
+pitched/mip transfers, partial clears, timestamps, SDL acquire/blit/present,
+resize and borrowed-window ownership. Three additional portable native tests
+cover images/mapped ranges. The existing renderer smoke paths still pass.
+
+The 200-tick GUI run rendered accessibility onboarding, panorama, text and buttons,
+then stopped normally. Its [receipt](evidence/backend-screen-2026-11-03.json) and
+[GPU image](evidence/backend-screen-2026-11-03.png) are retained. Inspection exposed
+a missing presentation Y inversion, which was corrected before the retained run.
+
+The live-world run verified all five server-to-client fixture states and latest
+snapshot revision. It rendered world terrain, clouds, hand, HUD and fixture
+models through the actual selected backend, then saved, disconnected and closed
+with zero snapshot leases. The [world receipt](evidence/backend-world-2026-11-03.json),
+[fixture receipt](evidence/backend-world-fixture-2026-11-03.json) and image are retained:
+
+![Actual Overhaul backend world frame](evidence/backend-world-2026-11-03.png)
+
+The [evidence manifest](evidence/backend-2026-11-03.json) records matching source
+commits, native jar/image hashes, commands, test counts and the server-owned
+reference camera pose.
+
+These images are readbacks of the actual source passed to the swapchain blit,
+with its presentation Y inversion applied; they are not desktop screenshots.
+The test does not cover every entity/particle/weather path, long sessions,
+reloads, dimensions or mod coexistence. The first game bridge waits for each
+submission and uses host-visible buffers. Performance remains unmeasured.
+No Khronos validation layers were available.
+
+Adapter builds/clients must run serially: switching the same Gradle project to
+another variant can clean the previous output directory while a client still
+loads its classes. The final world checks ran without concurrent adapter builds.
+
 ## Remaining evidence
 
-Remote CI has not executed. Full onscreen Minecraft Vulkan replacement, complete shader
+Remote CI has not executed. Complete Minecraft Vulkan scene parity, full shader
 packs, actual world-generation/loading/lighting/tick changes, all render domains,
 remaining versions, ecosystem parity and controlled performance comparisons are
 still required. See `IMPLEMENTATION_STATUS.md` and `roadmap.md`.

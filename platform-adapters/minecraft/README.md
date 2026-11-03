@@ -1,7 +1,8 @@
 # Minecraft adapter targets
 
-These are lifecycle and world-worker adapters. They do not replace Minecraft's
-renderer. No Vulkan, shaderc, GLFW or VMA code is bundled into the adapter jars.
+Normal builds are lifecycle and world-worker adapters. An opt-in Fabric 26.3
+source variant implements the game's graphics backend with Overhaul's Vulkan
+engine. Native libraries are not bundled into the adapter jars.
 Client and dedicated-server runtime state belongs to each game/server instance.
 
 `targets.json` is the target inventory. Fabric and NeoForge did not exist for
@@ -90,6 +91,36 @@ light on the owner thread. Packing/native draw run on a bounded worker. Replacin
 the original tessellator, fluids, special block entities and continuous scene
 updates remain required work. Vertex UV/light coordinates use UNORM16, normals
 use SNORM8 and cutoff uses UNORM8; full scene parity is not established.
+
+## Experimental Fabric 26.3 backend
+
+```powershell
+.\gradlew.bat :vulkan-backend:assemble :shader-pipeline:jar
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend '-PsmokeClient=200' verifyBackendSmoke --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --no-configuration-cache
+```
+
+The factory installs Overhaul before window creation, reuses the game's shared
+shader/validation frontend, and implements native Vulkan execution itself. The
+selection contains only Overhaul. Buffers, textures, views, samplers, pipelines,
+descriptors and command pins have explicit owners. Native tests use Minecraft's
+matching LWJGL 3.4.3 runtime and enable its debug allocator.
+
+The world variant waits for an actual world image before normal save/disconnect.
+PNG and JSON evidence is written under `run/fabric-26.3/overhaul-backend-smoke`.
+These are GPU presentation-source captures with the surface's Y flip applied,
+not desktop screenshots. The backend build has separate `-backend` output and
+development dependencies; it is not a self-contained release jar. Normal artifacts
+exclude these classes. Run all adapter Gradle commands serially, including native
+tests: changing variants can delete a running client's classes through Gradle's
+stale-output cleanup.
+
+The first bridge waits for submissions and uses host-visible VMA buffers.
+Long sessions, every render domain, complete shader packs, reload/dimension/mod
+parity, other loader/version renderers and controlled performance remain open.
+Instance divisors above one are unavailable; DrawIndex-sensitive direct multi-draw
+fallback is rejected explicitly rather than assigned incorrect semantics.
 
 ## Server boundary
 
