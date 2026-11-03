@@ -39,6 +39,7 @@ public final class OverhaulBuffer extends BackendResource implements GpuBuffer {
         if ((read&&(usage&USAGE_MAP_READ)==0) || (write&&(usage&USAGE_MAP_WRITE)==0)) {
             throw new IllegalArgumentException("Buffer mapping access was not requested at creation");
         }
+        owner().queue().awaitBuffer(this,offset,length);
         AutoCloseable pin=pin();
         try {
             var mapping=storage.mapRange(Math.toIntExact(offset),Math.toIntExact(length),read,write);

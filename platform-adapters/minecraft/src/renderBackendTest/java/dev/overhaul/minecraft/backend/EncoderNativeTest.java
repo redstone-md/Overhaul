@@ -53,6 +53,14 @@ class EncoderNativeTest {
                     for (int index=0;index<13;index++) assertEquals(100+index,mapped.data().get(index)&255);
                 }
                 encoder.submit();
+                try (var next=transientMemory.allocateGpuMapped(13,256,GpuBuffer.USAGE_VERTEX,16,4)) {
+                    assertNotSame(first.buffer(),next.slice().buffer(),"The next frame needs its own arena");
+                }
+                encoder.submit();
+                try (var third=transientMemory.allocateGpuMapped(13,256,GpuBuffer.USAGE_VERTEX,16,4)) {
+                    assertNotSame(first.buffer(),third.slice().buffer());
+                }
+                encoder.submit();
                 try (var reused=transientMemory.allocateGpuMapped(13,256,GpuBuffer.USAGE_VERTEX,16,4)) {
                     assertSame(first.buffer(),reused.slice().buffer());
                     assertEquals(first.offset(),reused.slice().offset());
@@ -62,12 +70,14 @@ class EncoderNativeTest {
                 }
                 assertTrue(queries.getValue(0).isEmpty());
                 encoder.writeTimestamp(queries,0);
+                try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(-1L)); }
                 assertTrue(queries.getValue(0).isPresent());
                 assertTrue(queries.getValue(1).isEmpty());
                 encoder.writeTimestamp(queries,1);
+                try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(-1L)); }
                 assertTrue(queries.getValue(1).isPresent());
                 backend.getTimestampCalibrationOffset();
-                try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(0)); }
+                try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(-1L)); }
                 encoder.submit();
             }
             assertTrue(backend.context().validationErrors().isEmpty(),backend.context().validationErrors().toString());
@@ -92,8 +102,9 @@ class EncoderNativeTest {
                 encoder.copyTextureToTexture(source,destination,0,3,1,1,2,3,4);
                 AtomicInteger callbacks=new AtomicInteger();
                 encoder.copyTextureToBuffer(destination,readback,0,callbacks::incrementAndGet,0);
-                assertEquals(1,callbacks.get());
+                assertEquals(0,callbacks.get(),"An unsubmitted readback has not completed");
                 try (var mapped=readback.map(0,256,true,false)) {
+                    assertEquals(1,callbacks.get(),"Mapping waits for queued readback completion");
                     for (int y=0;y<8;y++) for (int x=0;x<8;x++) {
                         int offset=(y*8+x)*4;
                         boolean copied=x>=3 && x<6 && y>=1 && y<5;

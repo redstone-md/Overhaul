@@ -44,8 +44,8 @@ class SurfaceNativeTest {
                     surface.acquireNextTexture();
                     assertTrue(surface.isAcquired());
                     surface.blitFromTexture(encoder,view);
-                    // Surface blit must actually be finished, not deferred behind this fence.
-                    try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(0)); }
+                    // The fence covers the actual asynchronous surface copy, too.
+                    try (var fence=encoder.createFence()) { assertTrue(fence.awaitCompletion(-1L)); }
                     surface.present();
                     assertFalse(surface.isAcquired());
                     encoder.submit();

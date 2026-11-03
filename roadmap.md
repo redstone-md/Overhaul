@@ -147,3 +147,17 @@ shader-pack, world/tick, version and performance gates remain required.
 - Game submissions are currently synchronous and buffers host-visible. Full
   render-domain/session/mod parity, all version backends, shader-pack semantics,
   world/tick integration and measured performance remain open acceptance gates.
+
+## Active bounded asynchronous game submission increment
+
+Replace the game bridge's per-pass CPU waits with an ordered operation batch on
+the existing fenced frame ring. Seal pass capture immediately, commit image
+layouts only after successful queue submission, and retire descriptors, attachment
+views and resource pins after the real fence. Staged buffer writes preserve draw
+ordering; CPU mappings wait only on overlapping GPU buffer ranges. Triple-buffered
+transient arenas remain unavailable for reuse until their submission completes.
+Surface blits use frame-owned acquire semaphores and return real completion tokens;
+explicit game fences and readback callbacks must cover all earlier queue work.
+Test timeout/rollback/reuse/hazard cases, then repeat the isolated GUI/world runs
+with submission/wait counters. Full scene/version/shader/world/tick and controlled
+performance gates remain intact; batching counters alone are not an FPS claim.

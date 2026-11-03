@@ -9,11 +9,8 @@ import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.backend.api.CommandEncoderBackend;
 import com.mojang.renderpearl.backend.api.RenderPassBackend;
 import org.joml.Vector4fc;
-import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
-import static org.lwjgl.vulkan.VK10.*;
 
 /** Own command execution over fence-backed Vulkan submissions; no vanilla backend delegation. */
 public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoCloseable {
@@ -42,51 +39,29 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
         requireOpen();
         if (activePass==null) throw new IllegalStateException("No render pass is open");
         OverhaulRenderPass pass=activePass; activePass=null;
-        try (pass) {
-            owner.commands().submit(pass::record);
-            pass.complete();
-            owner.rendered(pass.drawCount());
-        }
+        owner.queue().enqueue(new PassOperation(pass));
+        owner.rendered(pass.drawCount());
     }
 
     @Override public void submit() {
         requireNoPass();
-        // Every prior upload/pass was already fence-waited; arenas can now be reused.
-        transientMemory.rewindAfterCompletion();
+        transientMemory.finishFrame(owner.queue().flush());
+        owner.queue().poll();
     }
 
     @Override public void writeToBuffer(GpuBufferSlice destination,ByteBuffer source) {
         requireNoPass();
         if (source.remaining()>destination.length()) throw new IllegalArgumentException("Source exceeds destination slice");
         if (source.remaining()==0) return;
-        try (BackendPins pins=new BackendPins(owner,destination.buffer())) {
-            // This backend's buffers are host-visible VMA allocations. write flushes non-coherent ranges.
-            owner.buffer(destination.buffer()).write(Math.toIntExact(destination.offset()),source);
-        }
+        var staging=transientMemory.uploadStaging(java.util.List.of(source),4,GpuBuffer.USAGE_COPY_SRC,source.remaining(),1);
+        owner.queue().enqueue(new BufferCopyOperation(owner,staging,destination));
     }
 
     @Override public void copyToBuffer(GpuBufferSlice source,GpuBufferSlice destination) {
         requireNoPass();
         if (source.length()>destination.length()) throw new IllegalArgumentException("Destination slice is too short");
         if (source.length()==0) return;
-        var src=owner.buffer(source.buffer()); var dst=owner.buffer(destination.buffer());
-        if (src==dst && source.offset()<destination.offset()+source.length() && destination.offset()<source.offset()+source.length()) {
-            throw new IllegalArgumentException("Buffer copy ranges overlap");
-        }
-        try (BackendPins pins=new BackendPins(owner,source.buffer(),destination.buffer())) {
-            owner.commands().submit(command-> {
-                try (MemoryStack stack=MemoryStack.stackPush()) {
-                    VkBufferCopy.Buffer region=VkBufferCopy.calloc(1,stack).srcOffset(source.offset())
-                            .dstOffset(destination.offset()).size(source.length());
-                    vkCmdCopyBuffer(command,src.handle(),dst.handle(),region);
-                    VkMemoryBarrier.Buffer barrier=VkMemoryBarrier.calloc(1,stack).sType$Default()
-                            .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                            .dstAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_READ_BIT);
-                    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,
-                            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,0,barrier,null,null);
-                }
-            });
-        }
+        owner.queue().enqueue(new BufferCopyOperation(owner,source,destination));
     }
 
     @Override public void clearColorTexture(GpuTexture texture,Vector4fc color) {
@@ -130,15 +105,12 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
 
     @Override public GpuFence createFence() {
         requireNoPass();
-        return new CompletedGpuFence(owner);
+        return new SubmissionGpuFence(owner,owner.queue().flush());
     }
     @Override public void writeTimestamp(GpuQueryPool pool,int index) {
         requireNoPass();
         if (!(pool instanceof OverhaulQueryPool query) || query.owner()!=owner) throw new IllegalArgumentException("Foreign query pool");
-        try (BackendPins pins=new BackendPins(owner,pool)) {
-            query.prepare(index);
-            owner.commands().submit(command->query.write(command,index));
-        }
+        owner.queue().enqueue(new TimestampOperation(owner,query,index));
     }
 
     public void requireNoPass() {
@@ -153,6 +125,6 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
         if (closed) return;
         requireOpen();
         if (activePass!=null) { activePass.close(); activePass=null; }
-        transientMemory.close(); closed=true;
+        owner.queue().drain(); transientMemory.close(); closed=true;
     }
 }

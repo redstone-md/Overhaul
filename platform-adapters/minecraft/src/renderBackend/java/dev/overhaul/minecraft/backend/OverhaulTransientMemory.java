@@ -15,8 +15,10 @@ final class OverhaulTransientMemory implements TransientMemory,AutoCloseable {
     private static final int BLOCK_BYTES=1024*1024;
     private static final long BUDGET=128L*1024*1024;
     private final OverhaulDeviceBackend owner;
-    private final List<CpuBlock> cpu=new ArrayList<>();
-    private final List<GpuBlock> gpu=new ArrayList<>();
+    private final Arena[] arenas={new Arena(),new Arena(),new Arena()};
+    private int arenaIndex;
+    private List<CpuBlock> cpu=arenas[0].cpu;
+    private List<GpuBlock> gpu=arenas[0].gpu;
     private long allocatedBytes;
     private int liveMappings;
     private boolean closed;
@@ -52,6 +54,8 @@ final class OverhaulTransientMemory implements TransientMemory,AutoCloseable {
         requireOpen();
         int bytes=allocationSize(size,minimum,elementSize);
         checkAlignment(alignment);
+        // Independent host writes must not share a non-coherent atom with earlier GPU reads.
+        alignment=Math.max(alignment,owner.queue().mappingAlignment());
         int hostUsage=usage|GpuBuffer.USAGE_MAP_WRITE|GpuBuffer.USAGE_COPY_SRC|GpuBuffer.USAGE_COPY_DST;
         for (GpuBlock block:gpu) {
             if (block.usage!=hostUsage || block.buffer.isClosed()) continue;
@@ -123,9 +127,14 @@ final class OverhaulTransientMemory implements TransientMemory,AutoCloseable {
         }
     }
 
-    void rewindAfterCompletion() {
+    void finishFrame(dev.overhaul.vulkan.FrameRing.Submission completion) {
         requireOpen();
         if (liveMappings!=0) throw new IllegalStateException("Transient mappings remain open at frame submission");
+        arenas[arenaIndex].completion=completion;
+        arenaIndex=(arenaIndex+1)%arenas.length;
+        Arena next=arenas[arenaIndex];
+        owner.queue().await(next.completion,-1L);
+        cpu=next.cpu; gpu=next.gpu;
         for (CpuBlock block:cpu) block.cursor=0;
         gpu.removeIf(block-> {
             if (!block.buffer.isClosed()) return false;
@@ -163,9 +172,19 @@ final class OverhaulTransientMemory implements TransientMemory,AutoCloseable {
         if (closed) return;
         requireOpen(); owner.context().waitIdle();
         if (liveMappings!=0) throw new IllegalStateException("Cannot destroy live transient mappings");
-        for (GpuBlock block:gpu) block.buffer.close();
-        for (CpuBlock block:cpu) MemoryUtil.memAlignedFree(block.data);
-        gpu.clear(); cpu.clear(); allocatedBytes=0; closed=true;
+        for (Arena arena:arenas) {
+            owner.queue().await(arena.completion,-1L);
+            for (GpuBlock block:arena.gpu) block.buffer.close();
+            for (CpuBlock block:arena.cpu) MemoryUtil.memAlignedFree(block.data);
+            arena.gpu.clear(); arena.cpu.clear();
+        }
+        allocatedBytes=0; closed=true;
+    }
+
+    private static final class Arena {
+        private final List<CpuBlock> cpu=new ArrayList<>();
+        private final List<GpuBlock> gpu=new ArrayList<>();
+        private dev.overhaul.vulkan.FrameRing.Submission completion;
     }
 
     private static final class CpuBlock {

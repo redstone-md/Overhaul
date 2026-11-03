@@ -21,6 +21,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     private final VulkanContext context;
     private final GpuAllocator allocator;
     private final ImmediateCommands commands;
+    private final OverhaulCommandQueue queue;
     private final DeviceInfo info;
     private final BackendSmokeProbe smoke;
     private final Set<BackendResource> resources=new LinkedHashSet<>();
@@ -35,16 +36,19 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
         debugging=debug.useValidationLayers()&&VulkanContext.validationAvailable();
         GpuAllocator allocated=null;
         ImmediateCommands lane=null;
+        OverhaulCommandQueue work=null;
         try {
             allocated=new GpuAllocator(context);
             lane=new ImmediateCommands(context);
             info=OverhaulDeviceInfo.read(context);
+            work=new OverhaulCommandQueue(this);
         } catch (RuntimeException|Error failure) {
+            if (work!=null) work.close();
             if (lane!=null) lane.close();
             if (allocated!=null) allocated.close();
             context.close(); throw failure;
         }
-        allocator=allocated; commands=lane;
+        allocator=allocated; commands=lane; queue=work;
         smoke=new BackendSmokeProbe(this);
     }
 
@@ -57,10 +61,19 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     void forget(BackendResource resource) { requireOwner(); resources.remove(resource); }
     @Override public VulkanContext context() { requireOwner(); return context; }
     public GpuAllocator allocator() { requireOwner(); return allocator; }
-    public ImmediateCommands commands() { requireOwner(); return commands; }
+    public ImmediateCommands commands() { requireOwner(); if (queue!=null) queue.flush(); return commands; }
+    OverhaulCommandQueue queue() { requireOwner(); return queue; }
     void rendered(int draws) { smoke.rendered(draws); }
     void presented(GpuTextureView source) { smoke.presented(source); }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() { requireOpen(); return smoke.awaitWorldCapture(); }
+    Map<String,Long> submissionStatistics() {
+        long surfaceWaits=0;
+        for (var surface:surfaces) surfaceWaits+=surface.blockingWaitCalls();
+        return Map.of("queueSubmissions",queue.submissions(),"queuedOperations",queue.operations(),
+                "queueFenceWaitCalls",queue.blockingWaitCalls(),"explicitHostWaits",queue.hostWaits(),
+                "surfaceFenceWaitCalls",surfaceWaits,"immediateSubmissions",commands.submissionCount(),
+                "immediateFenceWaitCalls",commands.fenceWaitCalls());
+    }
 
     @Override public GpuSurfaceBackend createSurface(long window,BooleanSupplier isIconified) {
         requireOpen();
@@ -107,14 +120,19 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     @Override public dev.overhaul.vulkan.GpuSampler sampler(GpuSampler sampler) { return owned(sampler,OverhaulSampler.class).nativeSampler(); }
     @Override public AutoCloseable retain(Object resource) { return owned(resource,BackendResource.class).pin(); }
     @Override public void prepareTimestamp(GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).prepare(index); }
+    @Override public void resetTimestamp(VkCommandBuffer command,GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).reset(command,index); }
+    @Override public long timestampGeneration(GpuQueryPool pool,int index) { return owned(pool,OverhaulQueryPool.class).generation(index); }
+    @Override public void timestampSubmitted(GpuQueryPool pool,int index,long generation) { owned(pool,OverhaulQueryPool.class).markSubmitted(index,generation); }
     @Override public void timestamp(VkCommandBuffer command,GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).write(command,index); }
 
     @Override public void close() {
         if (closed) return;
         requireOwner();
         if (!closing) {
+            queue.drain();
             for (var encoder:encoders) encoder.close();
             for (var surface:surfaces) surface.close();
+            queue.close();
             closing=true;
         }
         context.waitIdle();

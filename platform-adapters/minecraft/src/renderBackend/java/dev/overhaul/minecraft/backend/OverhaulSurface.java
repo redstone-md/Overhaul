@@ -17,6 +17,7 @@ import java.util.function.BooleanSupplier;
 public final class OverhaulSurface extends BackendResource implements GpuSurfaceBackend {
     private final BooleanSupplier isIconified;
     private SwapchainPresenter presenter;
+    private long retiredWaitCalls;
     private boolean acquired,blitted;
 
     public OverhaulSurface(OverhaulDeviceBackend owner,long window,BooleanSupplier isIconified) {
@@ -44,6 +45,7 @@ public final class OverhaulSurface extends BackendResource implements GpuSurface
 
     @Override public void acquireNextTexture() throws SurfaceException {
         requireOpen();
+        owner().queue().poll();
         if (acquired) throw new IllegalStateException("A surface image is already acquired");
         if (presenter==null) throw new SurfaceException("Configure the surface before acquisition");
         if (isIconified.getAsBoolean()) throw new SurfaceException("The window is iconified");
@@ -58,13 +60,17 @@ public final class OverhaulSurface extends BackendResource implements GpuSurface
         if (!(encoder instanceof OverhaulCommandEncoder own) || own.owner()!=owner()) throw new IllegalArgumentException("Foreign command encoder");
         own.requireNoPass();
         if (!acquired || blitted) throw new IllegalStateException("Acquire one surface image before blitting");
-        try (BackendPins pins=new BackendPins(owner(),texture,texture.texture())) {
-            // The native blit fence completes before return; a subsequently created GpuFence is truthful.
-            // RenderPearl render targets use bottom-left image coordinates.
-            presenter.blitAcquiredImage(owner().texture(texture),true);
+        BackendPins pins=new BackendPins(owner(),texture,texture.texture());
+        boolean transferred=false;
+        try {
+            owner().queue().flush();
+            // The game fence created after this call includes this real asynchronous blit.
+            var completion=presenter.blitAcquiredImageAsync(owner().texture(texture),true);
+            owner().queue().submittedExternal(completion);
+            completion.retireAfterFence(pins); transferred=true;
             owner().presented(texture);
             blitted=true;
-        }
+        } finally { if (!transferred) pins.close(); }
     }
 
     @Override public void present() {
@@ -75,8 +81,11 @@ public final class OverhaulSurface extends BackendResource implements GpuSurface
     }
 
     @Override public Collection<GpuSurface.PresentMode> supportedPresentModes() { return List.of(GpuSurface.PresentMode.FIFO); }
+    long blockingWaitCalls() { return retiredWaitCalls+(presenter==null?0:presenter.blockingWaitCalls()); }
 
     @Override protected void destroyNative() {
-        if (presenter!=null) { presenter.close(); presenter=null; }
+        if (presenter!=null) {
+            presenter.close(); retiredWaitCalls+=presenter.blockingWaitCalls(); presenter=null;
+        }
     }
 }

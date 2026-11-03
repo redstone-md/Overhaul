@@ -14,5 +14,8 @@ public interface NativePassResources {
     GpuSampler sampler(com.mojang.renderpearl.api.textures.GpuSampler sampler);
     AutoCloseable retain(Object resource);
     void prepareTimestamp(com.mojang.renderpearl.api.commands.GpuQueryPool pool,int index);
+    long timestampGeneration(com.mojang.renderpearl.api.commands.GpuQueryPool pool,int index);
+    void resetTimestamp(VkCommandBuffer command,com.mojang.renderpearl.api.commands.GpuQueryPool pool,int index);
+    void timestampSubmitted(com.mojang.renderpearl.api.commands.GpuQueryPool pool,int index,long generation);
     void timestamp(VkCommandBuffer command,com.mojang.renderpearl.api.commands.GpuQueryPool pool,int index);
 }

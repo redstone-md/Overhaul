@@ -59,24 +59,52 @@ class PipelineDrawNativeTest {
             var pipeline=OverhaulPipeline.compile(owner,info).finishCompile();
             var vertices=owner.createBuffer(()->"vertices",GpuBuffer.USAGE_VERTEX,floats(-1,-1,.5f,.5f,3,-1,.5f,.5f,-1,3,.5f,.5f));
             var indices=owner.createBuffer(()->"indices",GpuBuffer.USAGE_INDEX,ints(0,1,2));
-            var params=owner.createBuffer(()->"params",GpuBuffer.USAGE_UNIFORM,floats(.5f,.25f,0,1));
+            int uniformStride=Math.max(64,owner.getDeviceInfo().limits().minUniformOffsetAlignment());
+            ByteBuffer parameterData=ByteBuffer.allocateDirect(uniformStride*4).order(ByteOrder.nativeOrder());
+            parameterData.put(uniformStride,floats(.5f,.25f,0,1),0,16);parameterData.put(uniformStride*3,floats(.5f,.25f,0,1),0,16);
+            var params=owner.createBuffer(()->"params",GpuBuffer.USAGE_UNIFORM,parameterData);
+            var unused=owner.createBuffer(()->"unused bound vertex",GpuBuffer.USAGE_VERTEX,floats(0,0,0,0));
             var texels=owner.createBuffer(()->"texels",GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER,floats(0,0,.25f,0));
             var image=owner.createTexture("sample",GpuTexture.USAGE_TEXTURE_BINDING|GpuTexture.USAGE_COPY_DST,GpuFormat.RGBA8_UNORM,1,1,1,1);
             var view=owner.createTextureView(image,0,1);
             var sampler=owner.createSampler(AddressMode.CLAMP_TO_EDGE,AddressMode.CLAMP_TO_EDGE,FilterMode.NEAREST,FilterMode.NEAREST,1,OptionalDouble.empty());
             var encoder=owner.createCommandEncoder();encoder.writeToTexture(image,bytes((byte)128,(byte)255,(byte)0,(byte)255),0,0,0,0,1,1);
-            var pass=encoder.createRenderPass(RenderPassDescriptor.builder(()->"descriptors").withColorAttachment(targetView,Optional.of(new Vector4f(0,0,0,1))).build());
+            try(var upload=encoder.createFence()){assertTrue(upload.awaitCompletion(-1L));}
+            var query=new OverhaulQueryPool(owner,1);
+            try(var pass=new OverhaulRenderPass(owner,RenderPassDescriptor.builder(()->"descriptors").withColorAttachment(targetView,Optional.of(new Vector4f(0,0,0,1))).build())){
             pass.setPipeline(pipeline);pass.setVertexBuffer(0,vertices.slice());pass.setIndexBuffer(indices,IndexType.INT);
-            pass.setUniform(0,params.slice());pass.setUniform(1,new TextureViewAndSampler(view,sampler));pass.setUniform(2,texels.slice());pass.enableScissor(8,8,16,16);pass.drawIndexed(3,1,0,0,0);
+            pass.setVertexBuffer(15,unused.slice());
+            pass.setUniform(0,params.slice(uniformStride,16));pass.setUniform(1,new TextureViewAndSampler(view,sampler));pass.setUniform(2,texels.slice());pass.enableScissor(8,8,16,16);pass.drawIndexed(3,1,0,0,0);
+            pass.setUniform(0,params.slice(uniformStride*3,16));pass.drawIndexed(3,1,0,0,0);
+            pass.writeTimestamp(query,0);long queryGeneration=query.generation(0);
+            assertThrows(IllegalStateException.class,()->pass.writeTimestamp(query,0));assertEquals(queryGeneration,query.generation(0));
             pass.setVertexBuffer(0,null);
             assertThrows(IllegalStateException.class,()->pass.drawIndexed(3,1,0,0,0),"Unbinding a required slot must affect subsequent draws");
             assertThrows(NullPointerException.class,()->pass.setIndexBuffer(null,IndexType.INT));
             assertThrows(NullPointerException.class,()->pass.setIndexBuffer(indices,null));
+            assertTrue(pass.usesBuffer((OverhaulBuffer)params,uniformStride,16));assertTrue(pass.usesBuffer((OverhaulBuffer)params,uniformStride*3,16));
+            assertFalse(pass.usesBuffer((OverhaulBuffer)params,uniformStride+16,uniformStride*2-16),"Disjoint transient slices must not invent reads in their gap");
+            assertFalse(pass.usesBuffer((OverhaulBuffer)params,0,16));assertTrue(pass.usesBuffer((OverhaulBuffer)vertices,0,vertices.size()));
+            assertTrue(pass.usesBuffer((OverhaulBuffer)indices,0,indices.size()));assertFalse(pass.usesBuffer((OverhaulBuffer)unused,0,unused.size()),"Binding an unused vertex slot is not a draw read");
+            assertTrue(pass.usesResource((BackendResource)unused));
+            var retained=pass.retainedResources();assertTrue(retained.containsAll(List.of(pipeline,vertices,indices,params,texels,view,sampler,targetView,unused,query)));
+            assertThrows(UnsupportedOperationException.class,retained::clear);
+            assertFalse(pass.isSealed());assertFalse(pass.isRecorded());assertThrows(IllegalStateException.class,pass::complete);
+            pass.seal();pass.seal();assertTrue(pass.isSealed());assertFalse(pass.isRecorded());
+            assertThrows(IllegalStateException.class,()->pass.setVertexBuffer(0,null));assertThrows(IllegalStateException.class,()->pass.setUniform(0,params.slice(uniformStride,16)));
+            assertThrows(IllegalStateException.class,pass::disableScissor);assertThrows(IllegalStateException.class,()->pass.draw(3,1,0,0));
+            assertThrows(IllegalStateException.class,()->pass.writeTimestamp(null,0));
             // The earlier draw still owns its captured vertex binding after logical unbind.
-            pipeline.close();vertices.close();indices.close();params.close();texels.close();view.close();image.close();sampler.close();
-            encoder.submitRenderPass();
+            pipeline.close();vertices.close();indices.close();params.close();texels.close();view.close();image.close();sampler.close();unused.close();
+            assertTrue(((BackendResource)vertices).isClosed());assertDoesNotThrow(()->owner.buffer(vertices).handle());
+            assertFalse(pass.isRecorded(),"Sealing and logical resource close must not record or submit work");
+            owner.commands().submit(pass::record);assertTrue(pass.isRecorded());assertThrows(IllegalStateException.class,()->pass.record(null));
+            assertTrue(query.getValue(0).isEmpty(),"Recording is not submission publication, even if the test lane already completed");
+            pass.complete();assertThrows(IllegalStateException.class,pass::complete);assertTrue(query.getValue(0).isPresent());query.close();pass.close();
+            assertThrows(IllegalStateException.class,()->owner.buffer(vertices));assertTrue(pass.retainedResources().isEmpty());assertFalse(retained.isEmpty());
             var pixels=owner.commands().readback(owner.image(target),ImageRegion.whole(owner.image(target),0,0),0);
             pixel(pixels,16,16,64,64,64,255);pixel(pixels,4,4,0,0,0,255);
+            }
         }
     }
 
@@ -106,6 +134,7 @@ class PipelineDrawNativeTest {
                 var load=encoder.createRenderPass(RenderPassDescriptor.builder(()->"load previous depth").withColorAttachment(firstView,Optional.empty())
                         .withColorAttachment(secondView,Optional.empty()).withDepthAttachment(depthView,OptionalDouble.empty()).build());
                 load.setPipeline(pipeline);load.pushConstants(floats(0,1,0,1,.3f));load.draw(3,1,0,0);encoder.submitRenderPass();
+                try(var complete=encoder.createFence()){assertTrue(complete.awaitCompletion(-1L));}
                 pixel(owner.commands().readback(owner.image(first),ImageRegion.whole(owner.image(first),0,0),0),16,16,204,77,102,255);
                 pixel(owner.commands().readback(owner.image(second),ImageRegion.whole(owner.image(second),0,0),0),16,16,26,204,51,255);
             }
@@ -138,10 +167,58 @@ class PipelineDrawNativeTest {
                 try(MemoryStack stack=MemoryStack.stackPush()){
                     pass.pushConstants(floats(.2f,.2f,0,0));pass.enableScissor(28,0,4,SIZE);pass.multiDrawIndexed(stack.pointers(0,0,0,0),IntBuffer.wrap(new int[]{3,3,3,3}),IntBuffer.wrap(new int[]{0,0,0,0}),4);
                 }
-                encoder.submitRenderPass();var pixels=owner.commands().readback(owner.image(target),ImageRegion.whole(owner.image(target),0,0),0);
+                encoder.submitRenderPass();try(var complete=encoder.createFence()){assertTrue(complete.awaitCompletion(-1L));}
+                var pixels=owner.commands().readback(owner.image(target),ImageRegion.whole(owner.image(target),0,0),0);
                 pixel(pixels,2,16,51,0,0,255);pixel(pixels,6,16,0,51,0,255);pixel(pixels,10,16,0,0,102,255);pixel(pixels,14,16,102,0,102,255);
                 pixel(pixels,18,16,153,0,0,255);pixel(pixels,22,16,0,153,0,255);pixel(pixels,26,16,0,0,204,255);pixel(pixels,30,16,204,204,0,255);
             }
+        }
+    }
+
+    @Test void stagedUniformOverwriteBetweenQueuedPassesPreservesEarlierDrawAndSourceSnapshot() throws Exception {
+        var owner=device();
+        try(AutoCloseable cleanup=owner::close;var compiler=new ShadercCompiler();
+            var target=owner.createTexture("ordered shared UBO",GpuTexture.USAGE_RENDER_ATTACHMENT|GpuTexture.USAGE_COPY_SRC,GpuFormat.RGBA8_UNORM,SIZE,SIZE,1,1);
+            var view=owner.createTextureView(target,0,1);
+            var uniform=owner.createBuffer(()->"shared color",GpuBuffer.USAGE_UNIFORM|GpuBuffer.USAGE_COPY_DST,floats(1,0,0,1))) {
+            String fragment="#version 450\nlayout(set=0,binding=0,std140)uniform Params{vec4 color;}params;layout(location=0)out vec4 result;void main(){result=params.color;}";
+            try(var pipeline=OverhaulPipeline.compile(owner,info(shaders(compiler,VERTEX,fragment),List.of(),List.of(),
+                    List.of(new BindGroupLayout.UniformDescription("Params",UniformType.UNIFORM_BUFFER)),0,null,List.of(ColorTargetState.DEFAULT))).finishCompile()) {
+                var encoder=owner.createCommandEncoder();
+                var first=encoder.createRenderPass(RenderPassDescriptor.builder(()->"old uniform draw").withColorAttachment(view,Optional.of(new Vector4f(0,0,0,1))).build());
+                first.setPipeline(pipeline);first.setUniform(0,uniform.slice());first.enableScissor(0,0,SIZE/2,SIZE);first.draw(3,1,0,0);encoder.submitRenderPass();
+                ByteBuffer green=floats(0,1,0,1);encoder.writeToBuffer(uniform.slice(),green);
+                green.putFloat(0,1).putFloat(4,0); // Mutate the caller's storage after staging capture.
+                var second=encoder.createRenderPass(RenderPassDescriptor.builder(()->"new uniform draw").withColorAttachment(view,Optional.empty()).build());
+                second.setPipeline(pipeline);second.setUniform(0,uniform.slice());second.enableScissor(SIZE/2,0,SIZE/2,SIZE);second.draw(3,1,0,0);encoder.submitRenderPass();
+                assertEquals(0,owner.queue().submissions(),"Capturing two passes and an upload must not submit or wait");
+                assertEquals(0,owner.queue().hostWaits());assertEquals(3,owner.queue().pendingOperations());
+                uniform.close();pipeline.close();
+                try(var fence=encoder.createFence()){assertTrue(fence.awaitCompletion(-1L));}
+                assertEquals(1,owner.queue().submissions());
+                ByteBuffer pixels=owner.commands().readback(owner.image(target),ImageRegion.whole(owner.image(target),0,0),0);
+                pixel(pixels,8,16,255,0,0,255);pixel(pixels,24,16,0,255,0,255);
+            }
+        }
+    }
+
+    @Test void timestampGenerationsHideOldAvailabilityAndFailedRecordings() throws Exception {
+        var owner=device();
+        try(AutoCloseable cleanup=owner::close;var query=new OverhaulQueryPool(owner,1)) {
+            query.prepare(0);long first=query.generation(0);
+            owner.commands().submit(command->{query.reset(command,0);query.write(command,0);});
+            assertTrue(query.getValue(0).isEmpty());query.markSubmitted(0,first);assertTrue(query.getValue(0).isPresent());
+            query.prepare(0);long older=query.generation(0);query.prepare(0);long latest=query.generation(0);
+            owner.commands().submit(command->{query.reset(command,0);query.write(command,0);});
+            query.markSubmitted(0,older);assertTrue(query.getValue(0).isEmpty(),"A superseded submission cannot publish the latest query generation");
+            owner.commands().submit(command->{query.reset(command,0);query.write(command,0);});
+            query.markSubmitted(0,latest);assertTrue(query.getValue(0).isPresent());
+            query.prepare(0);
+            assertThrows(IllegalStateException.class,()->owner.commands().submit(command->{query.reset(command,0);query.write(command,0);throw new IllegalStateException("recording interrupted");}));
+            assertTrue(query.getValue(0).isEmpty(),"Old native availability must not escape a failed recording");
+            query.prepare(0);long recovered=query.generation(0);
+            owner.commands().submit(command->{query.reset(command,0);query.write(command,0);});query.markSubmitted(0,recovered);
+            assertTrue(query.getValue(0).isPresent());
         }
     }
 

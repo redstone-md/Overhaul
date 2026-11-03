@@ -17,13 +17,14 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
     private final float nanosecondsPerTick;
     private final long timestampMask;
     private final boolean[] prepared,written;
+    private final long[] generations;
     private long handle;
 
     public OverhaulQueryPool(OverhaulDeviceBackend owner,int count) {
         super(owner);
         if (count<1) { close(); throw new IllegalArgumentException("query count must be positive"); }
         this.count=count;
-        prepared=new boolean[count]; written=new boolean[count];
+        prepared=new boolean[count]; written=new boolean[count];generations=new long[count];
         try (MemoryStack stack=MemoryStack.stackPush()) {
             IntBuffer familyCount=stack.ints(0);
             vkGetPhysicalDeviceQueueFamilyProperties(owner.context().physicalDevice(),familyCount,null);
@@ -45,26 +46,45 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
         }
     }
 
-    /** Called while recording pass state, before a native render pass has begun. */
+    /** Logical reset intent only; no queue submission or GPU wait during frontend capture. */
     public void prepare(int index) {
         requireIndex(index);
-        owner().commands().submit(command->vkCmdResetQueryPool(command,handle,index,1));
-        prepared[index]=true; written[index]=false;
+        generations[index]=Math.incrementExact(generations[index]);prepared[index]=false;written[index]=false;
     }
 
-    /** Records only the timestamp; its reset has already completed outside the render pass. */
+    public long generation(int index){requireNativeAlive();checkIndex(index);return generations[index];}
+
+    /** Records reset outside a render pass, ordered after prior query use on this queue. */
+    public void reset(VkCommandBuffer command,int index){
+        requireNativeAlive();checkIndex(index);
+        if(generations[index]==0)throw new IllegalStateException("Timestamp query has no prepared generation");
+        if(command.getDevice()!=owner().context().device())throw new IllegalArgumentException("Foreign timestamp command buffer");
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,null,null,null);
+        vkCmdResetQueryPool(command,handle,index,1);prepared[index]=true;
+    }
+
+    /** Accepted submission publishes only the latest capture generation, never a superseded result. */
+    public void markSubmitted(int index,long generation){
+        requireNativeAlive();checkIndex(index);
+        if(generation<1||generation>generations[index])throw new IllegalArgumentException("Unknown timestamp generation");
+        if(generation==generations[index])written[index]=true;
+    }
+
+    /** Records only the timestamp; recording alone never makes the CPU result readable. */
     public void write(VkCommandBuffer command,int index) {
         requireNativeAlive();
-        if (index<0 || index>=count) throw new IndexOutOfBoundsException("query index");
+        checkIndex(index);
         if (!prepared[index]) throw new IllegalStateException("Timestamp query was not prepared outside the render pass");
         vkCmdWriteTimestamp(command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,handle,index);
-        prepared[index]=false; written[index]=true;
+        prepared[index]=false;
     }
 
     @Override public int size() { requirePoolOpen(); return count; }
 
     @Override public OptionalLong getValue(int index) {
         requireIndex(index);
+        if(!owner().queue().resourceComplete(this))return OptionalLong.empty();
+        requireIndex(index); // Retirement callbacks may have changed this resource's lifetime/generation.
         if (!written[index]) return OptionalLong.empty();
         try (MemoryStack stack=MemoryStack.stackPush()) {
             LongBuffer result=stack.callocLong(2);
@@ -90,8 +110,10 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
     public static long calibrationOffset(OverhaulDeviceBackend owner) {
         try (OverhaulQueryPool pool=new OverhaulQueryPool(owner,1)) {
             pool.prepare(0);
+            long generation=pool.generation(0);
             long before=System.nanoTime();
-            owner.commands().submit(command->pool.write(command,0));
+            owner.commands().submit(command->{pool.reset(command,0);pool.write(command,0);});
+            pool.markSubmitted(0,generation);
             long after=System.nanoTime();
             long gpu=pool.getValue(0).orElseThrow(()->new IllegalStateException("Completed calibration timestamp is unavailable"));
             return before+(after-before)/2-gpu;
@@ -100,8 +122,9 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
 
     private void requireIndex(int index) {
         requirePoolOpen();
-        if (index<0 || index>=count) throw new IndexOutOfBoundsException("query index");
+        checkIndex(index);
     }
+    private void checkIndex(int index){if(index<0||index>=count)throw new IndexOutOfBoundsException("query index");}
 
     private void requirePoolOpen() {
         requireOpen();
@@ -110,7 +133,6 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
 
     @Override protected void destroyNative() {
         if (handle==0) return;
-        owner().context().waitIdle();
         vkDestroyQueryPool(owner().context().device(),handle,null); handle=0;
     }
 }

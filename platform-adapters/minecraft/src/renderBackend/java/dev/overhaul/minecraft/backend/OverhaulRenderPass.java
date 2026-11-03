@@ -18,6 +18,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,11 +30,16 @@ import static org.lwjgl.vulkan.VK10.*;
 /** Captures frontend calls, pins resources, and records native commands into the encoder's submission. */
 public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable {
     private record Command(PassBindings bindings,Consumer<VkCommandBuffer> draw) {}
+    private record TimestampKey(GpuQueryPool pool,int index) {}
+    private record TimestampReset(GpuQueryPool pool,int index,long generation) {}
     private final OverhaulDeviceBackend owner;
     private final PassAttachments attachments;
     private final PassDescriptors descriptors;
     private final List<Command> commands=new ArrayList<>();
-    private final Set<Object> retained=Collections.newSetFromMap(new IdentityHashMap<>());
+    private final List<TimestampReset> timestampResets=new ArrayList<>();
+    private final Set<TimestampKey> timestampKeys=new HashSet<>();
+    private final Set<BackendResource> retained=Collections.newSetFromMap(new IdentityHashMap<>());
+    private final ReadFootprints<OverhaulBuffer> bufferReads=new ReadFootprints<>();
     private final List<AutoCloseable> pins=new ArrayList<>();
     private final List<GpuImage.LayoutChange> transitions=new ArrayList<>();
     private final Set<GpuImageView> sampled=Collections.newSetFromMap(new IdentityHashMap<>());
@@ -45,7 +51,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private GpuBuffer indices;
     private IndexType indexType;
     private PassBindings.Scissor scissor;
-    private boolean recorded,closed,complete;
+    private boolean sealed,recorded,recordingSucceeded,closed,complete;
     private int drawCount;
 
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
@@ -53,8 +59,12 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         try{attachments=new PassAttachments(owner,descriptor,this::retain);}
         catch(RuntimeException|Error failure){releasePins();throw failure;}
     }
-    private void requireCapture(){owner.requireOpen();if(closed||recorded)throw new IllegalStateException("Render pass no longer accepts commands");}
-    private void retain(Object resource){if(resource!=null&&retained.add(resource))pins.add(owner.retain(resource));}
+    private void requireCapture(){owner.requireOpen();if(closed||sealed)throw new IllegalStateException("Render pass no longer accepts commands");}
+    private void retain(Object resource){
+        if(resource==null||retained.contains(resource))return;
+        if(!(resource instanceof BackendResource backend)||backend.owner()!=owner)throw new IllegalArgumentException("Foreign backend resource");
+        AutoCloseable pin=owner.retain(backend);retained.add(backend);pins.add(pin);
+    }
     @Override public void pushDebugGroup(Supplier<String> label){requireCapture();debugGroups.push(java.util.Objects.requireNonNull(label.get()));}
     @Override public void popDebugGroup(){requireCapture();if(debugGroups.isEmpty())throw new IllegalStateException("Unbalanced render-pass debug scopes");debugGroups.pop();}
     @Override public void setPipeline(BackendRenderPipeline value){
@@ -101,10 +111,12 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         checkUnsigned(indexCount,instanceCount,firstIndex,firstInstance);var state=snapshot(true);
         if(((long)firstIndex+indexCount)*indexType.bytes>owner.buffer(indices).size())throw new IllegalArgumentException("Indexed draw exceeds the index allocation");
         commands.add(new Command(state,command->vkCmdDrawIndexed(command,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance)));drawCount++;
+        if(indexCount>0&&instanceCount>0)captureReads(state,true);
     }
     @Override public void draw(int vertexCount,int instanceCount,int firstVertex,int firstInstance){
         checkUnsigned(vertexCount,instanceCount,firstVertex,firstInstance);var state=snapshot(false);
         commands.add(new Command(state,command->vkCmdDraw(command,vertexCount,instanceCount,firstVertex,firstInstance)));drawCount++;
+        if(vertexCount>0&&instanceCount>0)captureReads(state,false);
     }
     @Override public void multiDrawIndexed(IntBuffer info,int instances,int firstInstance,int count){
         validateDirectMultiDraw(count);checkUnsigned(instances,firstInstance,count);if(info.remaining()<(long)count*3)throw new IllegalArgumentException("Indexed multi-draw data truncated");
@@ -135,24 +147,66 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
                 if(indexed)vkCmdDrawIndexedIndirect(command,buffer.handle(),slice.offset()+(long)index*stride,1,stride);else vkCmdDrawIndirect(command,buffer.handle(),slice.offset()+(long)index*stride,1,stride);
             }
         }));drawCount+=count;
+        if(count>0){captureReads(state,indexed);readBuffer(slice.buffer(),slice.offset(),(long)count*stride);}
     }
-    @Override public void writeTimestamp(GpuQueryPool pool,int index){requireCapture();retain(pool);owner.prepareTimestamp(pool,index);commands.add(new Command(null,command->owner.timestamp(command,pool,index)));}
+    @Override public void writeTimestamp(GpuQueryPool pool,int index){
+        requireCapture();TimestampKey key=new TimestampKey(pool,index);
+        if(timestampKeys.contains(key))throw new IllegalStateException("A timestamp index can be written only once per render pass");
+        retain(pool);owner.prepareTimestamp(pool,index);long generation=owner.timestampGeneration(pool,index);
+        timestampKeys.add(key);timestampResets.add(new TimestampReset(pool,index,generation));
+        commands.add(new Command(null,command->owner.timestamp(command,pool,index)));
+    }
     public int drawCount(){return drawCount;}
+    /** Freezes frontend capture without beginning native recording or waiting for the GPU. */
+    public void seal(){
+        owner.requireOpen();if(closed)throw new IllegalStateException("Render pass is closed");if(sealed)return;
+        if(!debugGroups.isEmpty())throw new IllegalStateException("Unclosed render-pass debug scopes");sealed=true;
+    }
+    public boolean isSealed(){owner.requireOwner();return sealed;}
+    public boolean isRecorded(){owner.requireOwner();return recorded;}
+    /** Queue tracking receives a detached snapshot, never the mutable retention set. */
+    List<BackendResource> retainedResources(){owner.requireOwner();return List.copyOf(retained);}
+    boolean usesResource(BackendResource resource){owner.requireOwner();return retained.contains(resource);}
+    boolean usesBuffer(OverhaulBuffer buffer,long offset,long length){
+        owner.requireOwner();if(buffer.owner()!=owner)throw new IllegalArgumentException("Foreign buffer");
+        if(offset<0||length<0||offset>buffer.size()||length>buffer.size()-offset)throw new IllegalArgumentException("Buffer query range outside allocation");
+        return bufferReads.overlaps(buffer,offset,length);
+    }
+    private void captureReads(PassBindings state,boolean indexed){
+        var active=state.pipeline().activeUniforms();
+        for(int slot=active.nextSetBit(0);slot>=0;slot=active.nextSetBit(slot+1))if(state.uniforms()[slot] instanceof GpuBufferSlice slice)readBuffer(slice.buffer(),slice.offset(),slice.length());
+        for(var expected:state.pipeline().info().vertexBuffers()){
+            GpuBufferSlice slice=state.vertices().get(expected.bufferSlot());readBuffer(slice.buffer(),slice.offset(),slice.length());
+        }
+        if(indexed)readBuffer(state.indices(),0,state.indices().size());
+    }
+    private void readBuffer(GpuBuffer buffer,long offset,long length){
+        if(!(buffer instanceof OverhaulBuffer own)||own.owner()!=owner)throw new IllegalArgumentException("Foreign read buffer");
+        if(offset<0||length<0||offset>own.size()||length>own.size()-offset)throw new IllegalArgumentException("Draw read outside buffer allocation");
+        bufferReads.add(own,offset,length);
+    }
     public void record(VkCommandBuffer command){
-        requireCapture();if(!debugGroups.isEmpty())throw new IllegalStateException("Unclosed render-pass debug scopes");recorded=true;
+        owner.requireOpen();if(closed||recorded)throw new IllegalStateException("Render pass can be recorded only once");
+        if(!sealed)seal();recorded=true;
+        for(var reset:timestampResets)owner.resetTimestamp(command,reset.pool(),reset.index());
         for(var view:sampled)transitions.add(view.image().recordTransition(command,view.baseMip(),view.mipCount(),view.baseLayer(),view.layerCount(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
         attachments.begin(command,transitions);
         try{for(Command entry:commands){if(entry.bindings()!=null)entry.bindings().bind(command,owner,attachments,descriptors);entry.draw().accept(command);}}
         finally{vkCmdEndRenderPass(command);}
+        recordingSucceeded=true;
     }
     /** Called only after the encoder's native queue submission succeeds. */
-    public void complete(){if(closed||!recorded||complete)throw new IllegalStateException("Invalid render-pass completion");for(var change:transitions)change.commit();complete=true;}
+    public void complete(){
+        owner.requireOwner();if(closed||!recordingSucceeded||complete)throw new IllegalStateException("Invalid render-pass completion");
+        for(var change:transitions)change.commit();
+        for(var reset:timestampResets)owner.timestampSubmitted(reset.pool(),reset.index(),reset.generation());complete=true;
+    }
     private static void checkUnsigned(int... values){for(int value:values)if(value<0)throw new IllegalArgumentException("Negative draw parameter");}
     private void validateDirectMultiDraw(int count){requireCapture();checkUnsigned(count);if(pipeline==null)throw new IllegalStateException("Multi-draw requires a pipeline");if(count>1&&pipeline.usesDrawIndex())throw new UnsupportedOperationException("Native direct multi-draw extension is unavailable for DrawIndex shaders");}
     private void releasePins(){RuntimeException failure=null;for(int index=pins.size()-1;index>=0;index--)try{pins.get(index).close();}catch(Exception error){if(failure==null)failure=new IllegalStateException("Resource pin release failed",error);else failure.addSuppressed(error);}pins.clear();retained.clear();if(failure!=null)throw failure;}
     @Override public void close(){
         if(closed)return;owner.requireOwner();closed=true;
         try{descriptors.close();attachments.close();}
-        finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();sampled.clear();releasePins();}}
+        finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();timestampResets.clear();timestampKeys.clear();sampled.clear();bufferReads.clear();releasePins();}}
     }
 }
