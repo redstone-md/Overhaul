@@ -114,3 +114,10 @@ normal terrain upload/draw path. The live check verifies edits after received
 client states and resource reload. Shared game tessellation/light/tint queries
 remain a compatibility boundary; fully frozen inputs and broader parity remain
 open. See [terrain integration](docs/TERRAIN_INTEGRATION.md).
+
+Ordinary terrain draw groups now use mesh-owned certified faces for bounded
+software occlusion. The live smoke checks hiding behind a wall and restoration
+after opening geometry or moving the camera. Unknown shader/mod semantics disable
+the filter. Accepted native counters also verify indirect instanced terrain
+batches. See [occlusion integration](docs/OCCLUSION_INTEGRATION.md); controlled
+performance comparisons and broader compatibility remain open.

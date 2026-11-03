@@ -1,0 +1,544 @@
+{
+  "status": "PASS",
+  "phase": "DONE",
+  "stages": [
+    {
+      "culling": {
+        "rasterizedFaceBudget": 256,
+        "frames": 987,
+        "tested": 2221,
+        "shaderEligibility": "pinned terrain shaders and known mods",
+        "precisionRejectedBounds": 5311,
+        "faceAttemptBudget": 8192,
+        "eligibilityReason": "pinned terrain shaders and known mods",
+        "eligible": true,
+        "budgetExhaustedFrames": 0,
+        "lastTested": 6,
+        "precisionRejectedFaces": 5454,
+        "depthWidth": 160,
+        "lastFaceAttempts": 37,
+        "maxCulled": 4,
+        "resourceGeneration": 1,
+        "culled": 358,
+        "rasterized": 7045,
+        "restored": 0,
+        "lastCulled": 4,
+        "lastRasterized": 7,
+        "depthHeight": 90
+      },
+      "stage": "occlusion-wall",
+      "camera": [
+        8.0,
+        20.0,
+        0.5
+      ],
+      "observation": {
+        "lastCulledFrame": 987,
+        "eligible": true,
+        "coherent": true,
+        "lastVisibleFrame": 881,
+        "culledCount": 106,
+        "lastTestedFrame": 987,
+        "frame": 987,
+        "lastCulled": true,
+        "lastMeshStart": 19736294000,
+        "visibleCount": 2
+      },
+      "baselineFrame": 881,
+      "expectedCulled": true,
+      "targetCompileStart": 19736294000,
+      "image": "backend\u003dOverhaul Vulkan;scene\u003dworld-occlusion-wall;frames\u003d1128;draws\u003d88149;image\u003dbackend-world-occlusion-wall.png",
+      "sections": [
+        {
+          "origin": "MutableBlockPos{x\u003d-16, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 987,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 987,
+            "lastCulled": false,
+            "lastMeshStart": 19736306600,
+            "visibleCount": 108
+          },
+          "bounds": [
+            8.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": -4398046511103
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 987,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 987,
+            "lastCulled": false,
+            "lastMeshStart": 19736262000,
+            "visibleCount": 108
+          },
+          "bounds": [
+            0.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": 1
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d16}",
+          "observation": {
+            "lastCulledFrame": 987,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 881,
+            "culledCount": 106,
+            "lastTestedFrame": 987,
+            "frame": 987,
+            "lastCulled": true,
+            "lastMeshStart": 19736294000,
+            "visibleCount": 2
+          },
+          "bounds": [
+            8.0,
+            4.0,
+            8.0,
+            9.0,
+            5.0,
+            9.0
+          ],
+          "faces": 6,
+          "section": 1048577
+        }
+      ],
+      "finalClientStateBarrier": 19733886900
+    },
+    {
+      "culling": {
+        "rasterizedFaceBudget": 256,
+        "frames": 1096,
+        "tested": 2875,
+        "shaderEligibility": "pinned terrain shaders and known mods",
+        "precisionRejectedBounds": 6183,
+        "faceAttemptBudget": 8192,
+        "eligibilityReason": "pinned terrain shaders and known mods",
+        "eligible": true,
+        "budgetExhaustedFrames": 0,
+        "lastTested": 6,
+        "precisionRejectedFaces": 6544,
+        "depthWidth": 160,
+        "lastFaceAttempts": 58,
+        "maxCulled": 4,
+        "resourceGeneration": 1,
+        "culled": 378,
+        "rasterized": 8962,
+        "restored": 4,
+        "lastCulled": 0,
+        "lastRasterized": 18,
+        "depthHeight": 90
+      },
+      "stage": "occlusion-open",
+      "camera": [
+        8.0,
+        20.0,
+        0.5
+      ],
+      "observation": {
+        "lastCulledFrame": 992,
+        "eligible": true,
+        "coherent": true,
+        "lastVisibleFrame": 1096,
+        "culledCount": 111,
+        "lastTestedFrame": 1096,
+        "frame": 1096,
+        "lastCulled": false,
+        "lastMeshStart": 20687086600,
+        "visibleCount": 106
+      },
+      "baselineFrame": 990,
+      "expectedCulled": false,
+      "targetCompileStart": 20687086600,
+      "image": "backend\u003dOverhaul Vulkan;scene\u003dworld-occlusion-open;frames\u003d1237;draws\u003d96342;image\u003dbackend-world-occlusion-open.png",
+      "sections": [
+        {
+          "origin": "MutableBlockPos{x\u003d-16, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1096,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 1096,
+            "lastCulled": false,
+            "lastMeshStart": 20687092800,
+            "visibleCount": 217
+          },
+          "bounds": [
+            8.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": -4398046511103
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1096,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 1096,
+            "lastCulled": false,
+            "lastMeshStart": 20687057300,
+            "visibleCount": 217
+          },
+          "bounds": [
+            0.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 15,
+          "section": 1
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d16}",
+          "observation": {
+            "lastCulledFrame": 992,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1096,
+            "culledCount": 111,
+            "lastTestedFrame": 1096,
+            "frame": 1096,
+            "lastCulled": false,
+            "lastMeshStart": 20687086600,
+            "visibleCount": 106
+          },
+          "bounds": [
+            8.0,
+            4.0,
+            8.0,
+            9.0,
+            5.0,
+            9.0
+          ],
+          "faces": 6,
+          "section": 1048577
+        }
+      ],
+      "finalClientStateBarrier": 20685334400
+    },
+    {
+      "culling": {
+        "rasterizedFaceBudget": 256,
+        "frames": 1208,
+        "tested": 3547,
+        "shaderEligibility": "pinned terrain shaders and known mods",
+        "precisionRejectedBounds": 7079,
+        "faceAttemptBudget": 8192,
+        "eligibilityReason": "pinned terrain shaders and known mods",
+        "eligible": true,
+        "budgetExhaustedFrames": 0,
+        "lastTested": 6,
+        "precisionRejectedFaces": 7664,
+        "depthWidth": 160,
+        "lastFaceAttempts": 39,
+        "maxCulled": 4,
+        "resourceGeneration": 1,
+        "culled": 810,
+        "rasterized": 10006,
+        "restored": 4,
+        "lastCulled": 4,
+        "lastRasterized": 9,
+        "depthHeight": 90
+      },
+      "stage": "occlusion-closed",
+      "camera": [
+        8.0,
+        20.0,
+        0.5
+      ],
+      "observation": {
+        "lastCulledFrame": 1208,
+        "eligible": true,
+        "coherent": true,
+        "lastVisibleFrame": 1100,
+        "culledCount": 219,
+        "lastTestedFrame": 1208,
+        "frame": 1208,
+        "lastCulled": true,
+        "lastMeshStart": 21688130100,
+        "visibleCount": 110
+      },
+      "baselineFrame": 1102,
+      "expectedCulled": true,
+      "targetCompileStart": 21688130100,
+      "image": "backend\u003dOverhaul Vulkan;scene\u003dworld-occlusion-closed;frames\u003d1349;draws\u003d104493;image\u003dbackend-world-occlusion-closed.png",
+      "sections": [
+        {
+          "origin": "MutableBlockPos{x\u003d-16, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1208,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 1208,
+            "lastCulled": false,
+            "lastMeshStart": 21688145600,
+            "visibleCount": 329
+          },
+          "bounds": [
+            8.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": -4398046511103
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1208,
+            "culledCount": 0,
+            "lastTestedFrame": 0,
+            "frame": 1208,
+            "lastCulled": false,
+            "lastMeshStart": 21688083600,
+            "visibleCount": 329
+          },
+          "bounds": [
+            0.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": 1
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d16}",
+          "observation": {
+            "lastCulledFrame": 1208,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1100,
+            "culledCount": 219,
+            "lastTestedFrame": 1208,
+            "frame": 1208,
+            "lastCulled": true,
+            "lastMeshStart": 21688130100,
+            "visibleCount": 110
+          },
+          "bounds": [
+            8.0,
+            4.0,
+            8.0,
+            9.0,
+            5.0,
+            9.0
+          ],
+          "faces": 6,
+          "section": 1048577
+        }
+      ],
+      "finalClientStateBarrier": 21684626400
+    },
+    {
+      "culling": {
+        "rasterizedFaceBudget": 256,
+        "frames": 1317,
+        "tested": 4309,
+        "shaderEligibility": "pinned terrain shaders and known mods",
+        "precisionRejectedBounds": 7735,
+        "faceAttemptBudget": 8192,
+        "eligibilityReason": "pinned terrain shaders and known mods",
+        "eligible": true,
+        "budgetExhaustedFrames": 0,
+        "lastTested": 7,
+        "precisionRejectedFaces": 8756,
+        "depthWidth": 160,
+        "lastFaceAttempts": 47,
+        "maxCulled": 4,
+        "resourceGeneration": 1,
+        "culled": 814,
+        "rasterized": 11203,
+        "restored": 8,
+        "lastCulled": 0,
+        "lastRasterized": 11,
+        "depthHeight": 90
+      },
+      "stage": "occlusion-camera",
+      "camera": [
+        28.0,
+        20.0,
+        0.5
+      ],
+      "observation": {
+        "lastCulledFrame": 1209,
+        "eligible": true,
+        "coherent": true,
+        "lastVisibleFrame": 1317,
+        "culledCount": 220,
+        "lastTestedFrame": 1317,
+        "frame": 1317,
+        "lastCulled": false,
+        "lastMeshStart": 22632957000,
+        "visibleCount": 218
+      },
+      "baselineFrame": 1211,
+      "expectedCulled": false,
+      "targetCompileStart": 22632957000,
+      "image": "backend\u003dOverhaul Vulkan;scene\u003dworld-occlusion-camera;frames\u003d1458;draws\u003d112663;image\u003dbackend-world-occlusion-camera.png",
+      "sections": [
+        {
+          "origin": "MutableBlockPos{x\u003d-16, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1317,
+            "culledCount": 0,
+            "lastTestedFrame": 1317,
+            "frame": 1317,
+            "lastCulled": false,
+            "lastMeshStart": 22632960100,
+            "visibleCount": 438
+          },
+          "bounds": [
+            8.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": -4398046511103
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d0}",
+          "observation": {
+            "lastCulledFrame": 0,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1317,
+            "culledCount": 0,
+            "lastTestedFrame": 1317,
+            "frame": 1317,
+            "lastCulled": false,
+            "lastMeshStart": 22632937500,
+            "visibleCount": 438
+          },
+          "bounds": [
+            0.0,
+            0.0,
+            8.0,
+            16.0,
+            12.0,
+            9.0
+          ],
+          "faces": 5,
+          "section": 1
+        },
+        {
+          "origin": "MutableBlockPos{x\u003d0, y\u003d16, z\u003d16}",
+          "observation": {
+            "lastCulledFrame": 1209,
+            "eligible": true,
+            "coherent": true,
+            "lastVisibleFrame": 1317,
+            "culledCount": 220,
+            "lastTestedFrame": 1317,
+            "frame": 1317,
+            "lastCulled": false,
+            "lastMeshStart": 22632957000,
+            "visibleCount": 218
+          },
+          "bounds": [
+            8.0,
+            4.0,
+            8.0,
+            9.0,
+            5.0,
+            9.0
+          ],
+          "faces": 6,
+          "section": 1048577
+        }
+      ],
+      "finalClientStateBarrier": 22631323800
+    }
+  ],
+  "failure": "",
+  "targetSection": 1048577,
+  "culling": {
+    "rasterizedFaceBudget": 256,
+    "frames": 1317,
+    "tested": 4309,
+    "shaderEligibility": "pinned terrain shaders and known mods",
+    "precisionRejectedBounds": 7735,
+    "faceAttemptBudget": 8192,
+    "eligibilityReason": "pinned terrain shaders and known mods",
+    "eligible": true,
+    "budgetExhaustedFrames": 0,
+    "lastTested": 7,
+    "precisionRejectedFaces": 8756,
+    "depthWidth": 160,
+    "lastFaceAttempts": 47,
+    "maxCulled": 4,
+    "resourceGeneration": 1,
+    "culled": 814,
+    "rasterized": 11203,
+    "restored": 8,
+    "lastCulled": 0,
+    "lastRasterized": 11,
+    "depthHeight": 90
+  },
+  "observation": {
+    "lastCulledFrame": 1209,
+    "eligible": true,
+    "coherent": true,
+    "lastVisibleFrame": 1317,
+    "culledCount": 220,
+    "lastTestedFrame": 1317,
+    "frame": 1317,
+    "lastCulled": false,
+    "lastMeshStart": 22632957000,
+    "visibleCount": 218
+  },
+  "finalClientStateBarrier": 22631323800
+}

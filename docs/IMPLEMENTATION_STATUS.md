@@ -9,10 +9,10 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Fabric, Forge, NeoForge | All 11 pinned targets build; 22 loader tests and source/artifact receipts pass | Full client/server gameplay and remaining releases in the requested range |
 | Legacy/intermediate/modern separation | Java 8 common contracts; loader-specific source sets; isolated legacy CoreMod toolchain | Real legacy game execution and rendering integration |
 | Owned native resources | Vulkan context, queue, VMA buffers, image ownership, descriptors and teardown | Validation-layer runs and broader GPU/OS coverage |
-| Indexed indirect rendering | Worker geometry/instancing and captured actual Minecraft baked-model assets render through Vulkan | Continuous game scene integration and every render domain |
+| Indexed indirect rendering | Ordinary 26.3 terrain uses accepted native indirect instanced batches; unsigned device-limit handling and two-record pixel results verified | Every remaining render domain, loader/version and controlled throughput |
 | Async upload/render | Actual Fabric 26.3 game passes/transfers batch on three fenced slots; staged writes, range-aware maps, triple transient arenas and deferred pins/callbacks verified; bounded descriptor/framebuffer caches and device-preferred unmappable buffers pass native checks | Broader sessions, allocation profiling, pipeline reuse and measured throughput |
 | Presentation | Borrowed GLFW/SDL surfaces, asynchronous split acquire/blit/present with three acquire semaphores; own Fabric 26.3 backend installed before its game window | Broader window/OS/GPU coverage and session/resize parity |
-| CPU occlusion | Frustum/software depth tests drive sparse GPU indirect-count updates; pixels and command restoration verified | Actual world occluder extraction/projection and game draw integration |
+| CPU occlusion | Ordinary 26.3 draw groups use mesh-owned emitted bounds/certified SOLID faces, bounded final-projection software depth and float uncertainty guards; live wall/hole/camera rejection and restoration verified | Broader scenes, camera effects, shaders/mods, GPUs, allocation reduction and measured improvement |
 | Shader compilation | Native shaderc preprocessing and GLSL-to-SPIR-V compilation | Broader pack syntax, stages, custom uniforms and resources |
 | Iris/OptiFine compatibility | Unchanged pinned Iris basic/textured programs compile and draw with native uniforms/textures/blending; pixel checks pass | Full-pack semantics, unsupported states/stages and real scene visual parity |
 | Render graph | Dependency/lifetime plan plus native image allocation, barriers and callback execution | Actual depth/shadow/lighting/postprocessing shader passes and transient aliasing |
@@ -55,7 +55,7 @@ normal save/disconnect. GPU frame captures are retained in `docs/evidence`.
 The bridge now batches GPU work asynchronously and preserves resource lifetimes
 and upload order. Unmappable buffers use device-preferred allocations; mapped
 buffers keep host access. Bounded descriptor/framebuffer caches reuse only retired
-objects and release their pins on logical texture/view closure. The latest world run
+objects and release their pins on logical texture/view closure. The earlier cache verification run
 recorded 2,947 passes in 400 rendering submissions plus 355 presentation blits,
 with 28 positive-timeout fence-wait calls including the debug readback. It reused
 attachment bundles 2,909 times with 38 native framebuffer/render-pass creations,
@@ -65,7 +65,7 @@ API-call counts, not blocked durations or a measured FPS gain. Full performance
 and allocation profiling remains required.
 
 Continuous terrain compilation now emits all model and fluid layers directly into
-the normal game upload path. The latest scenario spans both sides of x=16, checks
+the normal game upload path. The retained terrain-only scenario spans both sides of x=16, checks
 installed compile timestamps after final client states, preserves a chest's
 block-entity metadata and captures four native frames across resource reload.
 The two compiler generations complete 98 and 66 calls exclusively on Overhaul
@@ -73,6 +73,16 @@ workers, with zero failures, owner-thread compiles or outstanding page leases.
 The compiler still uses Minecraft's task-local tessellators and worker-region
 light/tint queries; this is not a fully frozen portable world snapshot or an
 independent replacement of the game's lighting algorithm.
+
+The newer occlusion scenario retains four additional actual GPU frames: a wall
+hides a watched section, opening a hole restores it, closing the hole hides it
+again and moving the camera around the wall restores it. Decisions must match
+the current draw-filter frame and a coherent installed mesh newer than the final
+client-state barrier. All stages pass with precision guards enabled. The final
+native receipt records 2,410 multi-record indexed-indirect calls, 3,903 calls with
+an instanced binding and a maximum batch of 21 records. These are cumulative
+execution counts across the scenario, not FPS or unique section counts. See
+[occlusion integration](OCCLUSION_INTEGRATION.md) and its retained evidence.
 
 Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those

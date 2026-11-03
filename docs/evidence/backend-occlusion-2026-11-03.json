@@ -1,0 +1,191 @@
+{
+  "verifiedAtUtc": "2026-11-03T18:45:22.969713+00:00",
+  "sourceCommit": "f1787f1a48006bd483a488e0c044209f8bd843b9",
+  "loaderInputsSha256": "748ac9cf6fdc282d5524dbd91469926b26a652fa493cb7470fdb2e304421bede",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "capture": "Actual GPU surface source; native presentation Y flip applied; all four frames visually inspected",
+  "tests": {
+    "engineUnit": 74,
+    "portableNative": 17,
+    "adapterGpu": 29,
+    "terrainNativeParity": 3,
+    "terrainGeometryCapture": 1,
+    "backendRange": 2,
+    "terrainWorkers": 4,
+    "normalLoader": 22,
+    "total": 152
+  },
+  "failures": 0,
+  "skipped": 0,
+  "commands": [
+    ".\\gradlew.bat build :integration-tests:nativeTest --console=plain",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1 -CheckReceipts"
+  ],
+  "cullingLimits": {
+    "depthWidth": 160,
+    "depthHeight": 90,
+    "sections": 8192,
+    "faceAttempts": 8192,
+    "rasterizedFaces": 256,
+    "faceRectanglesPerMesh": 4096,
+    "occluderPixelError": 0.002,
+    "occluderDepthError": 1e-06,
+    "candidatePixelError": 0.25,
+    "candidateDepthError": 1e-05
+  },
+  "scenarios": [
+    {
+      "stage": "occlusion-wall",
+      "culled": true,
+      "frame": 987,
+      "meshNewerThanFinalClientBarrier": true
+    },
+    {
+      "stage": "occlusion-open",
+      "culled": false,
+      "frame": 1096,
+      "meshNewerThanFinalClientBarrier": true
+    },
+    {
+      "stage": "occlusion-closed",
+      "culled": true,
+      "frame": 1208,
+      "meshNewerThanFinalClientBarrier": true
+    },
+    {
+      "stage": "occlusion-camera",
+      "culled": false,
+      "frame": 1317,
+      "meshNewerThanFinalClientBarrier": true
+    }
+  ],
+  "nativeDrawStatistics": {
+    "instancedNonIndexedIndirectCalls": 0,
+    "maxIndexedIndirectBatch": 21,
+    "nonIndexedIndirectCalls": 0,
+    "directIndexedCalls": 15305,
+    "acceptedPasses": 8812,
+    "indexedIndirectCommands": 25341,
+    "indexedIndirectCalls": 3903,
+    "nonIndexedIndirectMultiRecordCalls": 0,
+    "maxNonIndexedIndirectBatch": 0,
+    "indexedIndirectMultiRecordCalls": 2410,
+    "directNonIndexedCalls": 72785,
+    "instancedIndexedIndirectCalls": 3903,
+    "nonIndexedIndirectCommands": 0
+  },
+  "terrainIndirectObserved": true,
+  "cullingStatistics": {
+    "rasterizedFaceBudget": 256,
+    "frames": 1317,
+    "tested": 4309,
+    "shaderEligibility": "pinned terrain shaders and known mods",
+    "precisionRejectedBounds": 7735,
+    "faceAttemptBudget": 8192,
+    "eligibilityReason": "pinned terrain shaders and known mods",
+    "eligible": true,
+    "budgetExhaustedFrames": 0,
+    "lastTested": 7,
+    "precisionRejectedFaces": 8756,
+    "depthWidth": 160,
+    "lastFaceAttempts": 47,
+    "maxCulled": 4,
+    "resourceGeneration": 1,
+    "culled": 814,
+    "rasterized": 11203,
+    "restored": 8,
+    "lastCulled": 0,
+    "lastRasterized": 11,
+    "depthHeight": 90
+  },
+  "compilers": [
+    99,
+    143
+  ],
+  "activePagesAtDisconnect": 0,
+  "retiredPagesAtDisconnect": 0,
+  "compilerClosedBeforeGpuShutdown": true,
+  "shaderEligibility": "Pinned vanilla terrain resources and small known-mod set; unknown semantics render without software occlusion",
+  "counterMeaning": "Cumulative accepted API execution and frame decisions, including startup/reload/teardown; not unique sections or blocked time",
+  "validationLayers": false,
+  "performanceCompared": false,
+  "openAcceptance": [
+    "Broader effects/worlds/dimensions/GPU/mod parity",
+    "Frame allocation reduction and controlled benchmarks",
+    "Every remaining renderer/version/loader",
+    "Complete shader packs/render graph",
+    "Generation/loading/lighting/server tick/entity/pathfinding integration"
+  ],
+  "artifacts": [
+    {
+      "file": "core-common/build/libs/core-common-0.1.0-SNAPSHOT.jar",
+      "sha256": "b282c505a465af7b4daeaf50309075fc74916fcfa71901a77f7e769339a6cf6f"
+    },
+    {
+      "file": "platform-adapters/build/libs/platform-adapters-0.1.0-SNAPSHOT.jar",
+      "sha256": "11f1aa6e2fc45278673985e3b5682ffa0ed4698ea4eacc15e25d995eeef02c9b"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "728654fd27744cc0398150b36ec0961be9d4c494e314149f7229e14eab3dd09b"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-26.3-backend/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "b53c3daca74097e26d5316ff58555f8bf35537487eb657b121cbae7c77df6dc1"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-occlusion-camera-2026-11-03.png",
+      "sha256": "0d4df2677f1d8d2a43e89899232acea1cd27cfa8174e6f8353077aba107c113b"
+    },
+    {
+      "file": "backend-occlusion-closed-2026-11-03.png",
+      "sha256": "af3f8f4c8223a230c9068f54e22c0e538cabaa09632686789986e527dbff49a4"
+    },
+    {
+      "file": "backend-occlusion-fixture-2026-11-03.json",
+      "sha256": "2ccd85248158986a5e542c37589e090fbb53b817624a62c06fe2bb665a1812b9"
+    },
+    {
+      "file": "backend-occlusion-open-2026-11-03.png",
+      "sha256": "6f0531a89f8ccf2b2f007b733f10a106394cdb0b552cd09065deac2818ebec86"
+    },
+    {
+      "file": "backend-occlusion-scenarios-2026-11-03.json",
+      "sha256": "f57d0a64301ae3410a4e7fa014932325aeb72f4ecc479735898c76f23ec502e2"
+    },
+    {
+      "file": "backend-occlusion-shutdown-2026-11-03.json",
+      "sha256": "abd2bbdea63bc72cecb7ae60657c9a8c51b2e46535bd89e24ca628509d5d8b43"
+    },
+    {
+      "file": "backend-occlusion-terrain-2026-11-03.json",
+      "sha256": "94a231f2af8ada9dbef6beb9f5bcf13189f28865da0210166f28e8bc7beb4781"
+    },
+    {
+      "file": "backend-occlusion-tests-2026-11-03.json",
+      "sha256": "fc196d9cda6756e67450c754979176e1bd8147db15e7c4609fe78dce1ed5b951"
+    },
+    {
+      "file": "backend-occlusion-wall-2026-11-03.png",
+      "sha256": "5b870ed23db8f0d40e90554a09ec520b3942e931919d11df335d1bf1ed88fe42"
+    },
+    {
+      "file": "loader-targets-occlusion-2026-11-03.json",
+      "sha256": "b84a7b05e0b9e199b822a594515ddc7f1fc6c73a1882c45da2c751ea484ee1a9"
+    }
+  ]
+}

@@ -8,19 +8,20 @@ The worktree began empty; no existing launcher instance or save was modified.
 The engine command below passed; the table also includes separately run backend checks:
 
 ```powershell
-.\gradlew.bat build :integration-tests:nativeTest :vulkan-backend:vulkanSmoke --args="--present --output build/verification/triangle.ppm"
+.\gradlew.bat build :integration-tests:nativeTest --console=plain
 ```
 
 | Suite | Tests | Failures | Skipped |
 | --- | ---: | ---: | ---: |
-| core-common | 25 | 0 | 0 |
+| core-common | 48 | 0 | 0 |
 | shader-pipeline | 16 | 0 | 0 |
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
 | native integration | 17 | 0 | 0 |
-| experimental Fabric 26.3 backend GPU | 27 | 0 | 0 |
+| experimental Fabric 26.3 backend GPU | 29 | 0 | 0 |
 | backend read-range unit | 2 | 0 | 0 |
 | terrain encoding parity (native memory) | 3 | 0 | 0 |
+| emitted terrain geometry capture (native memory) | 1 | 0 | 0 |
 | terrain worker concurrency | 4 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
@@ -62,7 +63,7 @@ The serial runner passed all 11 pinned targets with 22 tests, without source dri
 | Forge | 1.12.2, 1.16.5, 1.20.1, 1.21.1, 26.3 |
 | NeoForge | 1.21.1, 26.3 |
 
-The [retained receipts](evidence/loader-targets-2026-11-03.json) contain per-jar
+The [current retained receipts](evidence/loader-targets-occlusion-2026-11-03.json) contain per-jar
 SHA-256 values and a shared raw-source digest. `verify-targets.ps1 -CheckReceipts`
 subsequently confirmed those sources and every existing jar still match. These
 pins represent the requested eras; they do not cover every intervening release.
@@ -307,6 +308,67 @@ The driver uses the full `levelExtractor.allChanged()` invalidation facade after
 resource reload. The actual compiler still uses shared game tessellation and
 worker-region light/tint queries. Fully frozen inputs, independent lighting,
 larger worlds, dimensions and full terrain/mod parity remain open.
+
+## Ordinary terrain occlusion and native multidraw
+
+The current opt-in Fabric 26.3 run passes the existing boundary/fluid/chest/reload
+scenarios plus four actual draw-filter transitions. The watched diamond-block
+section stays in vanilla's visible list; rejection happens in Overhaul's ordinary
+draw-group extraction. Each observation matches the current filter frame and the
+exact installed mesh, whose compile start follows a fresh final-client-state
+barrier.
+
+| Scene | Watched section culled | Filter frame | GPU surface source |
+| --- | --- | ---: | --- |
+| Wall in front | yes | 987 | [frame](evidence/backend-occlusion-wall-2026-11-03.png) |
+| Hole opened | no | 1096 | [frame](evidence/backend-occlusion-open-2026-11-03.png) |
+| Hole closed | yes | 1208 | [frame](evidence/backend-occlusion-closed-2026-11-03.png) |
+| Camera moved around the wall | no | 1317 | [frame](evidence/backend-occlusion-camera-2026-11-03.png) |
+
+All four readbacks were visually inspected: the target appears through the hole
+and beside the wall after camera movement. The retained section diagnostics also
+show both wall meshes remaining visible and the opened wall's certified face
+rectangles changing from 5 to 15, preserving the hole.
+
+The [scenario receipt](evidence/backend-occlusion-scenarios-2026-11-03.json),
+[compiler receipt](evidence/backend-occlusion-terrain-2026-11-03.json) and
+[shutdown receipt](evidence/backend-occlusion-shutdown-2026-11-03.json) retain the
+observations. The run completed 99/143 compiles across its two compiler
+generations, exclusively on owned workers, with no failures or remaining page
+leases. The current compiler closes before GPU shutdown.
+
+The accepted native counters report 3,903 indexed-indirect calls containing
+25,341 records; 2,410 calls contain multiple records, with a maximum batch of 21.
+All 3,903 calls bind a per-instance vertex stream. The ordinary renderer reports
+that its indirect terrain path was selected. A separate native pixel test also
+checks two records with different nonzero first instances in one actual call,
+and excludes rejected recordings from both counters and pixels. Correct unsigned
+conversion of Vulkan's draw-count limit enables this path on the tested device.
+
+The final culling counters report at most four rejected sections per frame and
+eight restorations across the run. Near crossings and excessive float uncertainty
+are explicitly rejected; tests reproduce the grazing 16-block narrow-FOV
+counterexample and exercise both shader matrix-association orders. The hierarchy
+uses whole-cell coverage and outward depth/rectangle margins. See
+[the integration contract](OCCLUSION_INTEGRATION.md).
+
+Current commands passed:
+
+```powershell
+.\gradlew.bat build :integration-tests:nativeTest --console=plain
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache
+.\platform-adapters\minecraft\verify-targets.ps1
+.\platform-adapters\minecraft\verify-targets.ps1 -CheckReceipts
+```
+
+The [manifest](evidence/backend-occlusion-2026-11-03.json) binds the source commit,
+test totals, loader input digest and artifact/evidence hashes. The totals cover
+152 checks: 74 engine unit, 17 portable native, 29 adapter GPU, 3 native vertex
+parity, 1 native geometry capture, 2 backend range, 4 worker and 22 normal loader
+checks, with no failures or skips. This remains local execution on one RTX 5070
+without validation layers. Counters include startup, edits, reload and teardown;
+they are not unique section counts, blocked durations or an FPS comparison.
 
 ## Remaining evidence
 

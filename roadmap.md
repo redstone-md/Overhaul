@@ -263,3 +263,23 @@ rejection and restoration after opening geometry/moving the camera in the actual
 world. Record accepted native indirect/instancing counters to prove the already
 selected terrain path; do not substitute unused CPU multidraw changes or infer FPS
 gains. Preserve the full version/shader/world/server/performance acceptance scope.
+
+## Ordinary terrain occlusion checkpoint: 2026-11-03
+
+- Immutable emitted bounds and merged certified SOLID faces travel with each
+  compiled mesh. Normal draw extraction consumes coherent snapshots under the
+  existing copy lock; entity and block-entity visibility lists remain intact.
+- Final projection/view capture handles reversed depth and the effective eye.
+  Full-cell coverage, original-corner far depth, candidate expansion and bounded
+  float-error guards keep near-crossing/ill-conditioned geometry visible.
+- Actual wall, opened hole, closed hole and moved-camera stages pass after fresh
+  client-state rebuild barriers, with native GPU readbacks for every stage.
+- Unsigned device-limit conversion is corrected. Accepted native terrain batches
+  contain multiple indirect records with per-instance section data; no throughput
+  comparison is implied by those counters.
+- Eligibility is restricted to pinned terrain shaders and known mods. Unknown
+  semantics bypass occlusion. Per-frame work is bounded; allocation profiling,
+  broader worlds/effects/devices and shader/mod coexistence remain open.
+- The requested complete renderer, cross-version runtime coverage, shader packs,
+  lighting/generation/loading, server systems and controlled benchmarks remain
+  acceptance work. This checkpoint does not close the full overhaul objective.

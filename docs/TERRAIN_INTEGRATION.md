@@ -77,3 +77,8 @@ snapshot isolation and broader world parity remain open. Intermediate packet
 writes may coalesce; deterministic concurrency tests separately cover active-task
 cancellation and generation-retirement races. Benchmark against the game's
 existing async compiler before claiming a speedup.
+
+The same emission pass now attaches actual bounds and certified SOLID faces to
+each compiled mesh. Ordinary draw extraction consumes this metadata through the
+[bounded occlusion integration](OCCLUSION_INTEGRATION.md), with coherent mesh
+snapshots and conservative shader/projection eligibility.
