@@ -6,4 +6,6 @@ apply from: 'gradle/common.gradle'
 neoForge {
     version = target.loaderVersion
     mods { overhaul { sourceSet sourceSets.main } }
+    // Query oracles import the real game classes; keep them outside the transformed JUnit bootstrap.
+    if (target.minecraft == '26.3') addModdingDependenciesTo sourceSets.test
 }

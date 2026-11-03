@@ -67,6 +67,17 @@ if (modelSmoke) {
     }
 }
 if (target.tier != 'legacy') sourceSets.test.java.srcDirs = ['src/test/java']
+if (target.minecraft == '26.3') sourceSets.test.java.srcDir 'src/worldQueryTest/java'
+if (target.minecraft == '26.3') {
+    tasks.register('queryBenchmark', JavaExec) {
+        group = 'verification'
+        description = 'Measures interleaved untouched-game and owned section traversals; not an FPS benchmark.'
+        dependsOn 'testClasses'
+        classpath = files(providers.provider { tasks.named('test').get().classpath })
+        mainClass = 'dev.overhaul.minecraft.world.SectionQueryBenchmark'
+        args layout.buildDirectory.file('verification/entity-query-benchmark.json').get().asFile.absolutePath
+    }
+}
 if (overhaulBackend) apply from: 'gradle/render-backend.gradle'
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
@@ -123,6 +134,12 @@ tasks.named('processResources') {
             filter { line -> line.contains('"refmap"') ? null : line }
         }
     }
+    if (target.minecraft == '26.3') doLast {
+        def config = new File(destinationDir, 'overhaul.mixins.json')
+        def json = new groovy.json.JsonSlurper().parse(config)
+        json.mixins += 'EntitySectionStorageMixin'
+        config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+    }
     if (modelSmoke) doLast {
         def metadata = new File(destinationDir, 'fabric.mod.json')
         def json = new groovy.json.JsonSlurper().parse(metadata)
@@ -140,6 +157,8 @@ tasks.named('jar') {
     }
     if (!overhaulBackend) exclude 'dev/overhaul/minecraft/backend/**', 'dev/overhaul/minecraft/backendmixin/**',
             'overhaul.backend.mixins.json'
+    if (target.minecraft != '26.3') exclude 'dev/overhaul/minecraft/world/**',
+            'dev/overhaul/minecraft/mixin/EntitySectionStorageMixin.class'
     manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)
     if (target.loader == 'forge' && target.tier != 'legacy') {
         manifest.attributes('MixinConfigs': 'overhaul.mixins.json')
@@ -172,6 +191,11 @@ afterEvaluate {
                         mixins = new groovy.json.JsonSlurper().parse(stream)
                     }
                     def prefix = mixins.package.replace('.', '/') + '/'
+                    def queryHook = (mixins.mixins ?: []).contains('EntitySectionStorageMixin')
+                    def queryClass = jar.getEntry('dev/overhaul/minecraft/world/SectionQueryTraversal.class') != null
+                    if (queryHook != (target.minecraft == '26.3') || queryClass != queryHook) {
+                        throw new GradleException('Entity section-query implementation is absent or escaped its 26.3 target')
+                    }
                     def allowed = ((mixins.mixins ?: []) + (mixins.client ?: []) + (mixins.server ?: []))
                             .collect { prefix + it.replace('.', '/') }
                     def invalid = entries.find { entry -> entry.name.startsWith(prefix) && entry.name.endsWith('.class') &&
