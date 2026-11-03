@@ -1,0 +1,5 @@
+#ifndef OVERHAUL_FIXTURE_OPTIONS
+#define OVERHAUL_FIXTURE_OPTIONS
+#define LEGACY_LIGHTING 1
+#define BEND(x) ((x)*2.0)
+#endif

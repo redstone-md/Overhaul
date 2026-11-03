@@ -1,0 +1,92 @@
+package dev.overhaul.shader.compat;
+
+import java.util.Map;
+import java.util.regex.Pattern;
+
+/**
+ * Legacy attributes are unnormalized float values with the listed component count.
+ * Color must already include Minecraft's vertex tint; light UV preserves the pack's
+ * original lightmap coordinates. Matrices are column-major OPENGL matrices, not
+ * Vulkan-adjusted matrices. Dynamic texture-matrix indices are unsupported.
+ */
+public final class LegacyShaderContract {
+    public static final Map<String,String> ATTRIBUTE_TYPES = Map.of(
+            "overhaulLegacyVertex","vec4", "overhaulLegacyColor","vec4",
+            "overhaulLegacyNormal","vec3", "overhaulLegacyTexCoord0","vec4",
+            "overhaulLegacyTexCoord1","vec4");
+    public static final Map<String,String> UNIFORM_TYPES = Map.ofEntries(
+            Map.entry("overhaulModelViewProjection","mat4"), Map.entry("overhaulModelView","mat4"),
+            Map.entry("overhaulModelViewInverse","mat4"), Map.entry("overhaulProjection","mat4"),
+            Map.entry("overhaulProjectionInverse","mat4"), Map.entry("overhaulNormalMatrix","mat3"),
+            Map.entry("overhaulTextureMatrix0","mat4"), Map.entry("overhaulTextureMatrix1","mat4"),
+            Map.entry("overhaulViewportHeight","float"), Map.entry("overhaulFogColor","vec4"),
+            Map.entry("overhaulFogStart","float"), Map.entry("overhaulFogEnd","float"),
+            Map.entry("overhaulFogDensity","float"), Map.entry("overhaulFogScale","float"));
+    private static final Map<String,String> FOG = Map.of("color","overhaulFogColor","start","overhaulFogStart",
+            "end","overhaulFogEnd","density","overhaulFogDensity","scale","overhaulFogScale");
+    private static final Map<String,String> ATTRIBUTES = Map.of("gl_Vertex","overhaulLegacyVertex",
+            "gl_Color","overhaulLegacyColor","gl_Normal","overhaulLegacyNormal",
+            "gl_MultiTexCoord0","overhaulLegacyTexCoord0","gl_MultiTexCoord1","overhaulLegacyTexCoord1");
+    private static final Map<String,String> MATRICES = Map.of("gl_ModelViewProjectionMatrix","overhaulModelViewProjection",
+            "gl_ModelViewMatrix","overhaulModelView","gl_ModelViewMatrixInverse","overhaulModelViewInverse",
+            "gl_ProjectionMatrix","overhaulProjection","gl_ProjectionMatrixInverse","overhaulProjectionInverse",
+            "gl_NormalMatrix","overhaulNormalMatrix");
+
+    private LegacyShaderContract() {}
+
+    static String lower(String source, boolean vertex) {
+        StringBuilder declarations = new StringBuilder();
+        if (Pattern.compile("\\boverhaul\\w*").matcher(source).find()) {
+            throw new UnsupportedShaderException("Shader uses reserved legacy compatibility identifiers");
+        }
+        if (Pattern.compile("\\bftransform\\s*\\(").matcher(source).find()) {
+            if (!vertex) throw new UnsupportedShaderException("ftransform is vertex-only");
+            source = source.replaceAll("\\bftransform\\s*\\(\\s*\\)","(gl_ModelViewProjectionMatrix * gl_Vertex)");
+        }
+        for (var attribute : ATTRIBUTES.entrySet()) if (contains(source,attribute.getKey())) {
+            if (!vertex) throw new UnsupportedShaderException("Legacy fragment builtin needs an explicit varying: "+attribute.getKey());
+            source = replace(source,attribute.getKey(),attribute.getValue());
+            declarations.append("attribute ").append(ATTRIBUTE_TYPES.get(attribute.getValue())).append(' ').append(attribute.getValue()).append(";\n");
+        }
+        for (var matrix : MATRICES.entrySet()) if (contains(source,matrix.getKey())) {
+            source = replace(source,matrix.getKey(),matrix.getValue());
+            declarations.append("uniform ").append(UNIFORM_TYPES.get(matrix.getValue())).append(' ').append(matrix.getValue()).append(";\n");
+        }
+        if (contains(source,"gl_FogFragCoord")) {
+            source = replace(source,"gl_FogFragCoord","overhaulFogFragCoord");
+            declarations.append("varying float overhaulFogFragCoord;\n");
+        }
+        for (var fog : FOG.entrySet()) {
+            Pattern property = Pattern.compile("\\bgl_Fog\\s*\\.\\s*"+fog.getKey()+"\\b");
+            if (property.matcher(source).find()) {
+                source = property.matcher(source).replaceAll(fog.getValue());
+                declarations.append("uniform ").append(UNIFORM_TYPES.get(fog.getValue())).append(' ').append(fog.getValue()).append(";\n");
+            }
+        }
+        for (int index=0;index<2;index++) {
+            Pattern expression = Pattern.compile("\\bgl_TextureMatrix\\s*\\[\\s*"+index+"\\s*]");
+            if (expression.matcher(source).find()) {
+                source = expression.matcher(source).replaceAll("overhaulTextureMatrix"+index);
+                declarations.append("uniform mat4 overhaulTextureMatrix").append(index).append(";\n");
+            }
+        }
+        if (contains(source,"gl_TextureMatrix")) throw new UnsupportedShaderException("Only constant texture-matrix indices 0 and 1 are supported");
+        if (!vertex && contains(source,"gl_FragCoord")) {
+            source = replace(source,"gl_FragCoord","vec4(gl_FragCoord.x, overhaulViewportHeight-gl_FragCoord.y, gl_FragCoord.zw)");
+            declarations.append("uniform float overhaulViewportHeight;\n");
+        }
+        if (vertex) {
+            Pattern main = Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void)?\\s*\\)");
+            var match = main.matcher(source);
+            if (!match.find()) throw new UnsupportedShaderException("Vertex shader has no canonical main entry point");
+            source = match.replaceFirst("void overhaulPackMain()");
+            source += "\nvoid main(){ overhaulPackMain(); gl_Position.y = -gl_Position.y; gl_Position.z = 0.5*(gl_Position.z+gl_Position.w); }\n";
+        }
+        return declarations+source;
+    }
+
+    private static boolean contains(String source, String token) { return Pattern.compile("\\b"+token+"\\b").matcher(source).find(); }
+    private static String replace(String source, String token, String replacement) {
+        return source.replaceAll("\\b"+token+"\\b",java.util.regex.Matcher.quoteReplacement(replacement));
+    }
+}

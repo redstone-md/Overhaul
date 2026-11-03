@@ -27,7 +27,16 @@ public final class PackProgramTranslator {
             Map.entry("mat2",32), Map.entry("mat3",48), Map.entry("mat4",64));
 
     public TranslatedProgram translate(String vertex, String fragment) {
+        return translate(vertex,fragment,CoordinateConvention.NATIVE_VULKAN);
+    }
+
+    public TranslatedProgram translate(String vertex, String fragment, CoordinateConvention coordinates) {
         String vs = stripComments(vertex), fs = stripComments(fragment);
+        if (coordinates == null) throw new NullPointerException("coordinates");
+        rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
+        if (coordinates == CoordinateConvention.OPENGL_LEGACY) {
+            vs = LegacyShaderContract.lower(vs,true); fs = LegacyShaderContract.lower(fs,false);
+        }
         validateBuiltins(vs); validateBuiltins(fs);
         Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>();
         Map<String,String> attributes = new TreeMap<>(), vertexVaryings = new TreeMap<>(), fragmentVaryings = new TreeMap<>();
@@ -52,7 +61,13 @@ public final class PackProgramTranslator {
         }
         ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations);
         return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings),
-                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings),bindings);
+                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings),bindings,coordinates);
+    }
+
+    private static void rejectUnprocessedDirectives(String source) {
+        if (Pattern.compile("(?m)^\\s*#(?:if|ifdef|ifndef|elif|else|endif|define|undef|include)\\b").matcher(source).find()) {
+            throw unsupported("Preprocess conditional and macro directives before compatibility translation");
+        }
     }
 
     private static String stripComments(String source) {
@@ -157,5 +172,5 @@ public final class PackProgramTranslator {
     }
 
     private static UnsupportedShaderException unsupported(String message) { return new UnsupportedShaderException(message); }
-    public record TranslatedProgram(String vertex, String fragment, ProgramBindings bindings) {}
+    public record TranslatedProgram(String vertex, String fragment, ProgramBindings bindings, CoordinateConvention coordinates) {}
 }

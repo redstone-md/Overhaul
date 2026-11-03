@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.List;
+import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -52,6 +54,41 @@ public final class ShaderPackSource implements AutoCloseable {
         Path source = shaderRoot.resolve(normalized).toRealPath();
         if (!source.startsWith(shaderRoot)) throw new IOException("Shader escapes pack: " + shaderPath);
         try (InputStream input = Files.newInputStream(source)) { return readLimited(input, normalized); }
+    }
+
+    /** Sorted paths relative to shaders/, preserving directories with a trailing slash. */
+    public synchronized List<String> paths() throws IOException {
+        if (closed) throw new IOException("Shader pack is closed");
+        Set<String> paths = new TreeSet<>();
+        if (archive != null) {
+            var entries = archive.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (!entry.getName().startsWith("shaders/")) continue;
+                String path = entry.getName().substring(8);
+                if (path.isEmpty()) continue;
+                boolean directory = entry.isDirectory();
+                String canonical = normalize(path);
+                if (!path.equals(canonical+(directory ? "/" : ""))) throw new IOException("Noncanonical ZIP shader path: "+path);
+                paths.add(path);
+                for (int slash=path.indexOf('/');slash>=0;slash=path.indexOf('/',slash+1)) paths.add(path.substring(0,slash+1));
+                if (paths.size() > 65536) throw new IOException("Too many shader entries");
+            }
+        } else {
+            Path root = directory.resolve("shaders").toRealPath();
+            if (!root.startsWith(directory)) throw new IOException("Shader root escapes pack");
+            try (var stream = Files.walk(root)) {
+                var iterator = stream.iterator();
+                while (iterator.hasNext()) {
+                    Path path = iterator.next();
+                    if (path.equals(root)) continue;
+                    if (Files.isSymbolicLink(path)) throw new IOException("Symlink in shader pack: "+path);
+                    paths.add(root.relativize(path).toString().replace('\\','/')+(Files.isDirectory(path) ? "/" : ""));
+                    if (paths.size() > 65536) throw new IOException("Too many shader entries");
+                }
+            }
+        }
+        return List.copyOf(paths);
     }
 
     private static String readLimited(InputStream input, String name) throws IOException {
