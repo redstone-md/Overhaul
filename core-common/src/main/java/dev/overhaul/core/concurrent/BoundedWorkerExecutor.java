@@ -58,7 +58,8 @@ public final class BoundedWorkerExecutor implements Executor, AutoCloseable {
         return Collections.unmodifiableMap(result);
     }
 
-    private void requireOutsideTask() {
+    /** Check before acquiring a producer's shutdown monitor or closing its serial strand. */
+    public void requireOutsideTask() {
         if (executing.get() != null) throw new IllegalStateException("worker command cannot join its own executor");
     }
 
