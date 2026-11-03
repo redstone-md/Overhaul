@@ -213,3 +213,18 @@ counters rather than inferring performance gains from fewer object creations.
   preserving the existing upload/draw seam and complete scene semantics. See
   `docs/TERRAIN_INTEGRATION.md`. Full shader-pack, world/tick, loader/version,
   session/mod parity and controlled performance requirements remain open.
+
+## Active continuous terrain increment
+
+Replace the opt-in 26.3 section compiler at its normal compile boundary, emitting
+all model layers and fluids once into pooled worker-owned geometry. Preserve AO,
+tint/emission, visibility, block entities, leaf policy and translucent sorting;
+feed normal MeshData into the existing UberGpuBuffer upload and draw path. Keep
+portable packing/storage contracts in core-common and Minecraft translation in
+the adapter, with fewer than 500 lines per file. Integrate the bounded lock-free
+worker scheduler where the dispatch/lifecycle contract permits without blocking
+the owner thread. Verify byte parity against the pinned game builder, concurrent
+lease ownership, failures, live edits/boundaries and orderly unload. Do not run a
+second tessellator or count offscreen diagnostic output as ordinary terrain.
+Minecraft's worker-region light/tint queries remain an explicit compatibility
+boundary until frozen inputs replace them. Full scope and performance gates remain.
