@@ -28,11 +28,16 @@ final class ShaderPackShadowUniforms {
         float interval=settings.interval();
         if(interval!=0){float half=interval/2;matrix.translate((float)camera.pos.x%interval-half,(float)camera.pos.y%interval-half,(float)camera.pos.z%interval-half);}
         matrix.get(view);matrix.invert().get(viewInverse);
-        if(settings.fov()!=null)throw new UnsupportedShaderException("Legacy shadowMapFov requires an unambiguous perspective camera contract; orthographic shadows are bound");
-        float distance=minecraft.options.getEffectiveRenderDistance()*16f;
-        float near=settings.near()==-1?-distance:settings.near(),far=settings.far()==-1?distance:settings.far();
-        if(!(far>near))throw new UnsupportedShaderException("Resolved shadow clip range must have far > near");
-        matrix.setOrthoSymmetric(settings.distance()*2,settings.distance()*2,near,far,false).get(projection);
+        if(settings.fov()!=null){
+            // Preserve the production Iris 1.20/1.21/26.1 legacy matrix, including its unusual m33=1.
+            float near=-100.05f,far=156f,y=(float)(1.0f/Math.tan(Math.toRadians(settings.fov())*0.5f));
+            matrix.set(y,0,0,0,0,y,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),1).get(projection);
+        }else{
+            float distance=minecraft.options.getEffectiveRenderDistance()*16f;
+            float near=settings.near()==-1?-distance:settings.near(),far=settings.far()==-1?distance:settings.far();
+            if(!(far>near))throw new UnsupportedShaderException("Resolved shadow clip range must have far > near");
+            matrix.setOrthoSymmetric(settings.distance()*2,settings.distance()*2,near,far,false).get(projection);
+        }
         matrix.invert().get(projectionInverse);
         finite(view);finite(viewInverse);finite(projection);finite(projectionInverse);
         celestial(camera.viewRotationMatrix,settings.sunPathRotation(),sunDegrees,sun);
