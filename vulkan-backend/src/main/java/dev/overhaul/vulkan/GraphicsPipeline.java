@@ -24,6 +24,12 @@ final class GraphicsPipeline implements AutoCloseable {
     GraphicsPipeline(VulkanContext context,long renderPass,long descriptorLayout,int width,int height,
                      SpirvBinary vertexBinary,SpirvBinary fragmentBinary,List<Binding> bindings,
                      List<Attribute> attributes,Blend blend) {
+        this(context,renderPass,descriptorLayout,width,height,vertexBinary,fragmentBinary,bindings,attributes,blend,true);
+    }
+
+    GraphicsPipeline(VulkanContext context,long renderPass,long descriptorLayout,int width,int height,
+                     SpirvBinary vertexBinary,SpirvBinary fragmentBinary,List<Binding> bindings,
+                     List<Attribute> attributes,Blend blend,boolean depthWrite) {
         this.context = context;
         context.requireOwner();
         long vertex=0,fragment=0;
@@ -58,7 +64,7 @@ final class GraphicsPipeline implements AutoCloseable {
                     .polygonMode(VK_POLYGON_MODE_FILL).cullMode(VK_CULL_MODE_NONE).frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE).lineWidth(1);
             VkPipelineMultisampleStateCreateInfo samples=VkPipelineMultisampleStateCreateInfo.calloc(stack).sType$Default().rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
             VkPipelineDepthStencilStateCreateInfo depth=VkPipelineDepthStencilStateCreateInfo.calloc(stack).sType$Default()
-                    .depthTestEnable(true).depthWriteEnable(true).depthCompareOp(VK_COMPARE_OP_LESS);
+                    .depthTestEnable(true).depthWriteEnable(depthWrite).depthCompareOp(VK_COMPARE_OP_LESS);
             VkPipelineColorBlendAttachmentState.Buffer color=VkPipelineColorBlendAttachmentState.calloc(1,stack)
                     .colorWriteMask(VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT)
                     .blendEnable(blend.enabled()).srcColorBlendFactor(blend.sourceRgb()).dstColorBlendFactor(blend.destinationRgb())
