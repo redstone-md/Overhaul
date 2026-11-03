@@ -59,7 +59,7 @@ public final class PackGraphRuntime implements AutoCloseable {
             throw new UnsupportedShaderException("Shadow sampling requires bound light-camera geometry: "+program.name());
         try{
             images=new PackGraphImages(allocator,pack.targets(),width,height);
-            if(hasShadows)shadows=new PackShadowImages(context,allocator,pack.shadow());
+            if(hasShadows)shadows=new PackShadowImages(context,allocator,pack.shadow(),compiler);
             sampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
                     SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,0,1,SamplerSettings.Compare.NONE));
             depthSampler=allocator.createSampler(SamplerSettings.nearest());
@@ -140,10 +140,17 @@ public final class PackGraphRuntime implements AutoCloseable {
             uniforms.fill(program,entry.getValue().values);entry.getValue().upload();boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE;
             var routing=shadow?null:swaps.route(program);
             for(int index:new java.util.TreeSet<>(program.mipmaps()))mipmaps.generate(plan,images.levels.get(swaps.current(index)));
+            // Shadow composite can overwrite/flip a color between readers. Rebuild the selected side,
+            // without persistent dirty state that could survive a failed graph transaction.
+            var sampledShadowColors=new java.util.TreeSet<Integer>();
+            for(String name:program.code().descriptors().samplers().keySet()){
+                int index=PackShadowSettings.colorIndex(name);if(index>=0)sampledShadowColors.add(index);
+            }
+            for(int index:sampledShadowColors)shadows.generateColor(plan,index,mipmaps);
             Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();Map<String,Long> sampleModes=new LinkedHashMap<>();
             for(String samplerName:program.code().descriptors().samplers().keySet()){
                 int colorIndex=PackRenderTargets.colorIndex(samplerName);var color=colorIndex<0?null:swaps.current(colorIndex);int depth=PackRenderTargets.depthIndex(samplerName);
-                int shadowDepth=PackShadowSettings.depthIndex(samplerName),shadowColor=PackShadowSettings.colorIndex(samplerName);
+                int shadowDepth=PackShadowSettings.depthIndex(samplerName,program.code().descriptors().samplers().keySet()),shadowColor=PackShadowSettings.colorIndex(samplerName);
                 boolean comparison=program.code().descriptors().comparisonSampler(samplerName);
                 GpuImageView image=shadowDepth>=0?shadowDepthSample(shadowDepth,comparison):shadowColor>=0?shadowColor(shadowColor):color!=null?(program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color)):
                         depth==1?images.opaqueDepth:depth>=0?images.depth:textures.get(samplerName);
@@ -178,12 +185,18 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     public void snapshotOpaqueShadow(ImmediateCommands lane){
         requireShadows();if(!shadowsPrepared||shadowsComplete||shadowOpaque)throw new IllegalStateException("Opaque shadow boundary is not active");
-        PackFrameGraph plan=new PackFrameGraph();shadows.snapshotOpaque(plan);execute(plan,lane);shadowOpaque=true;
+        PackFrameGraph plan=new PackFrameGraph();shadows.snapshotOpaque(plan);shadows.generateDepth(plan,1);
+        shadows.generateColors(plan,mipmaps);execute(plan,lane);shadowOpaque=true;
     }
     public void finishShadows(ImmediateCommands lane,Frame frame,Uniforms uniforms){
         requireShadows();validateFrame(frame);if(!shadowsPrepared||!shadowOpaque||shadowsComplete)throw new IllegalStateException("Finish opaque and translucent light-camera geometry before shadow completion");
         int[] prior=shadows.snapshot(),colors=swaps.snapshot();PackFrameGraph plan=new PackFrameGraph();
-        try{recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.SHADOWCOMPOSITE,CompiledShaderPack.Stage.PREPARE),frame.textures());execute(plan,lane);shadowsComplete=true;}
+        try{
+            shadows.generateDepth(plan,0);shadows.generateDepth(plan,1);
+            recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.SHADOWCOMPOSITE,CompiledShaderPack.Stage.PREPARE),frame.textures());
+            // Geometry samplers see the final current shadowcolor side, including the last flip.
+            shadows.generateColors(plan,mipmaps);execute(plan,lane);shadowsComplete=true;
+        }
         catch(RuntimeException|Error failure){shadows.restore(prior);swaps.restore(colors);throw failure;}
     }
     private void requireShadows(){requireOpen();if(shadows==null)throw new IllegalStateException("No bound light-camera generation");}

@@ -7,11 +7,11 @@ import java.util.regex.Pattern;
 
 /** Active shadow camera and image directives, isolated from the main colortex namespace. */
 public final class PackShadowSettings {
-    private static final Pattern DIRECTIVE=Pattern.compile("\\bconst\\s+(int|float|bool)\\s+(shadowMapResolution|shadowDistance|shadowDistanceRenderMul|shadowIntervalSize|shadowMapFov|shadowNearPlane|shadowFarPlane|sunPathRotation|shadowHardwareFiltering[01]?|shadowtex[01](?:Nearest|Mipmap)|shadowcolor[01](?:Nearest|Mipmap))\\s*=\\s*([^;]+);");
+    private static final Pattern DIRECTIVE=Pattern.compile("\\bconst\\s+(int|float|bool)\\s+(shadowMapResolution|shadowDistance|shadowDistanceRenderMul|shadowIntervalSize|shadowMapFov|shadowNearPlane|shadowFarPlane|sunPathRotation|shadowHardwareFiltering[01]?|generateShadow(?:Color)?Mipmap|shadowtex[01]?(?:Nearest|Mipmap)|shadow[01]MinMagNearest|shadow(?:color|Color)[01](?:Nearest|Mipmap(?:Enabled)?|MinMagNearest))\\s*=\\s*([^;]+);");
     private final int resolution;
     private final float distance,renderMultiplier,interval,near,far,sunPathRotation;
     private final Float fov;
-    private final boolean[] nearestDepth,nearestColor;
+    private final boolean[] nearestDepth,nearestColor,mipmappedDepth,mipmappedColor;
     private final PackRenderTargets colors;
     private PackShadowSettings(Builder builder){
         resolution=builder.integer("shadowMapResolution",1024,1,16384);
@@ -21,15 +21,9 @@ public final class PackShadowSettings {
         fov=builder.directives.containsKey("shadowMapFov")?builder.number("shadowMapFov",90):null;
         if(distance<=0||interval<0||fov!=null&&(fov<=0||fov>=180)||near!=-1&&far!=-1&&far<=near)
             throw invalid("Invalid shadow camera extent, snapping interval or clip range");
-        nearestDepth=new boolean[2];nearestColor=new boolean[2];
-        for(int index=0;index<2;index++){
-            nearestDepth[index]=builder.bool("shadowtex"+index+"Nearest",false);
-            nearestColor[index]=builder.bool("shadowcolor"+index+"Nearest",false);
-            if(builder.bool("shadowtex"+index+"Mipmap",false)||builder.bool("shadowcolor"+index+"Mipmap",false))
-                throw invalid("Shadow mipmap generation is not bound to the shadow completion boundary");
-        }
+        nearestDepth=builder.nearestDepth.clone();nearestColor=builder.nearestColor.clone();
+        mipmappedDepth=builder.mipmappedDepth.clone();mipmappedColor=builder.mipmappedColor.clone();
         colors=builder.colors.build();
-        if(colors.targets().values().stream().anyMatch(PackRenderTargets.Target::mipmapped))throw invalid("Shadow color mipmap generation is not bound to the shadow completion boundary");
     }
     public int resolution(){return resolution;}
     public float distance(){return distance;}
@@ -42,16 +36,20 @@ public final class PackShadowSettings {
     public PackRenderTargets colors(){return colors;}
     public boolean nearestDepth(int index){return nearestDepth[index];}
     public boolean nearestColor(int index){return nearestColor[index];}
-    public static int depthIndex(String name){return switch(name){case "shadow","shadowtex0"->0;case "watershadow","shadowtex1"->1;default->-1;};}
+    public boolean mipmappedDepth(int index){return mipmappedDepth[index];}
+    public boolean mipmappedColor(int index){return mipmappedColor[index];}
+    public static int depthIndex(String name){return switch(name){case "shadow","watershadow","shadowtex0","shadowtex0HW"->0;case "shadowtex1","shadowtex1HW"->1;default->-1;};}
+    public static int depthIndex(String name,java.util.Set<String> samplers){return name.equals("shadow")&&samplers.contains("watershadow")?1:depthIndex(name);}
     public static int colorIndex(String name){return switch(name){case "shadowcolor","shadowcolor0"->0;case "shadowcolor1"->1;default->-1;};}
     public static String stripDirectives(String source){
         // Camera constants remain executable GLSL: packs commonly use their resolution and distance in expressions.
         return PackRenderTargets.stripDirectives(remapColors(source));
     }
     static boolean hasDirective(String source){return DIRECTIVE.matcher(source).find()||PackRenderTargets.hasDirective(remapColors(source));}
-    private static String remapColors(String source){return source.replaceAll("\\bshadowcolor([01])(?=Format|ClearColor|Clear|MipmapEnabled)","colortex$1");}
+    private static String remapColors(String source){return source.replaceAll("\\bshadow(?:color|Color)([01])(?=Format|ClearColor|Clear|MipmapEnabled)","colortex$1");}
     public static final class Builder {
         private final Map<String,String> directives=new LinkedHashMap<>();
+        private final boolean[] nearestDepth=new boolean[2],nearestColor=new boolean[2],mipmappedDepth=new boolean[2],mipmappedColor=new boolean[2];
         private final PackRenderTargets.Builder colors;
         private final java.util.Set<Integer> explicitClearColors=new java.util.HashSet<>();
         public Builder(ShaderPackProperties properties){colors=new PackRenderTargets.Builder(properties);}
@@ -59,17 +57,27 @@ public final class PackShadowSettings {
             String text=source.replaceAll("(?m)//.*$","");var matcher=DIRECTIVE.matcher(text);
             while(matcher.find()){
                 String name=matcher.group(2),value=matcher.group(3).trim();String expected=name.equals("shadowMapResolution")?"int":
-                        name.contains("Filtering")||name.endsWith("Nearest")||name.endsWith("Mipmap")?"bool":"float";
+                        name.contains("Filtering")||name.endsWith("Nearest")||name.contains("Mipmap")?"bool":"float";
                 if(!matcher.group(1).equals(expected))throw invalid("Invalid shadow directive type: "+name);
                 if(expected.equals("bool")&&!value.equals("true")&&!value.equals("false"))throw invalid("Expected literal shadow boolean: "+name);
                 String prior=directives.putIfAbsent(name,value);if(prior!=null&&!prior.equals(value))throw invalid("Conflicting shadow directive: "+name);
+                if(expected.equals("bool"))sampling(name,Boolean.parseBoolean(value));
             }
             // Keep only shadowcolor metadata. Main colortex declarations may coexist in the same source.
-            var declarations=Pattern.compile("\\bconst\\s+(?:int|bool|vec4)\\s+shadowcolor[01](?:Format|ClearColor|Clear|MipmapEnabled)\\s*=\\s*[^;]+;").matcher(text);
+            var declarations=Pattern.compile("\\bconst\\s+(?:int|bool|vec4)\\s+shadow(?:color|Color)[01](?:Format|ClearColor|Clear|MipmapEnabled)\\s*=\\s*[^;]+;").matcher(text);
             while(declarations.find()){
                 String declaration=declarations.group();colors.scan(remapColors(declaration));
-                for(int index=0;index<2;index++)if(declaration.contains("shadowcolor"+index+"ClearColor"))explicitClearColors.add(index);
+                for(int index=0;index<2;index++)if(remapColors(declaration).contains("colortex"+index+"ClearColor"))explicitClearColors.add(index);
             }
+        }
+        private void sampling(String name,boolean value){
+            // Iris dispatches directives in source order; aliases are assignments, never boolean ORs.
+            if(name.equals("generateShadowMipmap")){java.util.Arrays.fill(mipmappedDepth,value);return;}
+            if(name.equals("generateShadowColorMipmap")){java.util.Arrays.fill(mipmappedColor,value);return;}
+            if(name.startsWith("shadowHardwareFiltering"))return; // Actual GLSL sampler type selects comparison.
+            boolean color=name.startsWith("shadowcolor")||name.startsWith("shadowColor");
+            int index=name.indexOf('1')>=0?1:0;
+            (name.contains("Mipmap")?(color?mipmappedColor:mipmappedDepth):(color?nearestColor:nearestDepth))[index]=value;
         }
         public void use(ShaderPackProgram code,boolean writesShadowColors){
             if(writesShadowColors)for(int index:code.framebuffer().colorTargets())if(index>=0){if(index>1)throw invalid("Shadow output exceeds shadowcolor[0,1]");colors.requireTarget(index);}
@@ -87,7 +95,6 @@ public final class PackShadowSettings {
             try{String raw=directives.getOrDefault(name,Float.toString(fallback));float value=Float.parseFloat(raw);if(!Float.isFinite(value))throw invalid("Nonfinite shadow directive: "+name);return value;}
             catch(NumberFormatException failure){throw invalid("Expected literal shadow float: "+name);}
         }
-        private boolean bool(String name,boolean fallback){String value=directives.getOrDefault(name,Boolean.toString(fallback));if(!value.equals("true")&&!value.equals("false"))throw invalid("Expected literal shadow boolean: "+name);return Boolean.parseBoolean(value);}
     }
     private static UnsupportedShaderException invalid(String message){return new UnsupportedShaderException(message);}
 }
