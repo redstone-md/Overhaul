@@ -22,7 +22,7 @@ final class PackPipelineState {
     static GraphicsPipeline.Blend validate(ShaderPackProgram program,ShaderPackProperties.ProgramState state) {
         if (!state.enabled()) throw unsupported("Program is disabled by shader options");
         if (!program.framebuffer().colorTargets().equals(List.of(0))) throw unsupported("Pack diagnostic renderer currently requires one colortex0 output");
-        if (state.alphaTest().isPresent() && state.alphaTest().get().enabled()) throw unsupported("Pack alpha-test state requires fragment-discard lowering");
+        program.requireAlphaTest(state.alphaTest().orElse(null));
         if (!state.flips().isEmpty()) throw unsupported("Pack buffer flips require ping-pong render-graph execution");
         for (String target:state.blends().keySet()) if (!target.equals("*") && !target.equals("colortex0")) throw unsupported("Blend target is absent from this render pass: "+target);
         var blend=state.blends().getOrDefault("colortex0",state.blends().get("*"));

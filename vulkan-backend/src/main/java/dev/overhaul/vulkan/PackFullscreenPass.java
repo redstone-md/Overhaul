@@ -33,7 +33,7 @@ final class PackFullscreenPass implements AutoCloseable {
         this.context=context;this.program=program;this.formats=List.copyOf(formats);this.width=width;this.height=height;
         values=new UniformBlock(program.code().descriptors());
         upload=ByteBuffer.allocateDirect(program.code().descriptors().uniformBytes()).order(ByteOrder.nativeOrder());
-        if(program.state().alphaTest().filter(value->value.enabled()).isPresent())throw new UnsupportedShaderException("Fullscreen alpha-test state requires fragment discard lowering: "+program.name());
+        program.code().requireAlphaTest(program.state().alphaTest().orElse(null));
         try{
             renderPass=createRenderPass();descriptors(allocator);
             PackVertexLayout layout=program.code().descriptors().attributes().isEmpty()?null:new PackVertexLayout(program.code().descriptors());

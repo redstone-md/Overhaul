@@ -41,7 +41,8 @@ public final class CompiledShaderPack {
             sourceCharacters+=(long)vertex.length()+fragment.length();if(sourceCharacters>67_108_864)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),new Sources(vertex,fragment));
             targets.scan(fragment);
-            ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET);
+            ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
+                    discovered.state().alphaTest().orElse(null));
             targets.use(code);
             programs.add(new Program(discovered.name(),stage,ordinal(name),code,discovered.state()));
         }
