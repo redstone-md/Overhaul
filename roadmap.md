@@ -181,3 +181,15 @@ performance gates remain intact; batching counters alone are not an FPS claim.
   unit cases and the prior 48 engine unit cases pass. Remaining global acceptance
   gates are unchanged; host-visible static allocations and per-pass native-object
   creation still need profiling/optimization.
+
+## Active native allocation reuse increment
+
+Reuse descriptor pools and attachment objects only after their last owning fence,
+with bounded device-owned caches and explicit lease teardown. Cache keys must
+preserve load/clear semantics, attachment order, formats, layers and dimensions;
+closed textures/pipelines must not leave unbounded retained resources. Move buffers
+without CPU-map usage to device-preferred allocations and stage their initial
+contents through the existing ordered queue. Preserve mapped-buffer behavior and
+copy/update order. Verify native readback, overlapping in-flight leases, rollback,
+reuse and destruction before repeating the isolated game world. Record allocation
+counters rather than inferring performance gains from fewer object creations.

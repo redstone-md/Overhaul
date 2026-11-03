@@ -11,6 +11,18 @@ final class BufferCopyOperation implements OverhaulGpuOperation {
     private final OverhaulBuffer source,target;
     private final long sourceOffset,targetOffset,length;
     private final BackendPins pins;
+    private long stagingBytes;
+
+    /** Snapshots constructor input now; the queue owns its private staging allocation thereafter. */
+    static BufferCopyOperation initialUpload(OverhaulDeviceBackend owner,OverhaulBuffer target,java.nio.ByteBuffer data) {
+        try (var staging=new OverhaulBuffer(owner,
+                com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_MAP_WRITE|com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_COPY_SRC,
+                data.remaining(),data)) {
+            var operation=new BufferCopyOperation(owner,staging.slice(),target.slice(0,data.remaining()));
+            operation.stagingBytes=data.remaining();
+            return operation;
+        }
+    }
 
     BufferCopyOperation(OverhaulDeviceBackend owner,GpuBufferSlice source,GpuBufferSlice target) {
         this.owner=owner;
@@ -40,6 +52,7 @@ final class BufferCopyOperation implements OverhaulGpuOperation {
         return buffer==source&&overlap(sourceOffset,length,offset,size)||buffer==target&&overlap(targetOffset,length,offset,size);
     }
     @Override public boolean usesResource(BackendResource resource) { return resource==source||resource==target; }
+    @Override public long stagingBytes() { return stagingBytes; }
     static boolean overlap(long first,long length,long second,long size) { return length>0&&size>0&&first<second+size&&second<first+length; }
     @Override public void close() { pins.close(); }
 }

@@ -192,7 +192,8 @@ class PipelineDrawNativeTest {
                 var second=encoder.createRenderPass(RenderPassDescriptor.builder(()->"new uniform draw").withColorAttachment(view,Optional.empty()).build());
                 second.setPipeline(pipeline);second.setUniform(0,uniform.slice());second.enableScissor(SIZE/2,0,SIZE/2,SIZE);second.draw(3,1,0,0);encoder.submitRenderPass();
                 assertEquals(0,owner.queue().submissions(),"Capturing two passes and an upload must not submit or wait");
-                assertEquals(0,owner.queue().hostWaits());assertEquals(3,owner.queue().pendingOperations());
+                assertEquals(0,owner.queue().hostWaits());
+                assertEquals(4,owner.queue().pendingOperations(),"Initial buffer upload, two passes and the later update share the batch");
                 uniform.close();pipeline.close();
                 try(var fence=encoder.createFence()){assertTrue(fence.awaitCompletion(-1L));}
                 assertEquals(1,owner.queue().submissions());

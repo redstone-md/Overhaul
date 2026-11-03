@@ -9,12 +9,14 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class OverhaulBuffer extends BackendResource implements GpuBuffer {
     private final int usage;
     private final long size;
+    private final boolean hostAccessible;
     private dev.overhaul.vulkan.GpuBuffer storage;
 
     OverhaulBuffer(OverhaulDeviceBackend owner,int usage,long size,ByteBuffer initial) {
         super(owner);
         if (size<0 || size>Integer.MAX_VALUE) { close(); throw new IllegalArgumentException("Buffer size exceeds the backend allocation limit"); }
         this.usage=usage; this.size=size;
+        hostAccessible=(usage&(USAGE_MAP_READ|USAGE_MAP_WRITE))!=0;
         try {
             int nativeUsage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             if ((usage&USAGE_VERTEX)!=0) nativeUsage|=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -22,8 +24,13 @@ public final class OverhaulBuffer extends BackendResource implements GpuBuffer {
             if ((usage&USAGE_UNIFORM)!=0) nativeUsage|=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
             if ((usage&USAGE_UNIFORM_TEXEL_BUFFER)!=0) nativeUsage|=VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
             if ((usage&USAGE_INDIRECT_PARAMETERS)!=0) nativeUsage|=VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-            storage=owner.allocator().hostBuffer(Math.max(1,size),nativeUsage);
-            if (initial!=null) storage.write(initial);
+            storage=hostAccessible?owner.allocator().hostBuffer(Math.max(1,size),nativeUsage)
+                    :owner.allocator().deviceBuffer(Math.max(1,size),nativeUsage);
+            owner.bufferStorage().allocated(hostAccessible,storage.size());
+            if (initial!=null&&initial.hasRemaining()) {
+                if (hostAccessible) storage.write(initial);
+                else owner.queue().enqueue(BufferCopyOperation.initialUpload(owner,this,initial));
+            }
         } catch (RuntimeException|Error failure) { close(); throw failure; }
     }
 
@@ -56,5 +63,11 @@ public final class OverhaulBuffer extends BackendResource implements GpuBuffer {
         catch (Exception error) { throw new IllegalStateException("Cannot release buffer mapping",error); }
     }
 
-    @Override protected void destroyNative() { if (storage!=null) storage.close(); }
+    @Override protected void destroyNative() {
+        if (storage!=null) {
+            storage.close();
+            owner().bufferStorage().released(hostAccessible,storage.size());
+            storage=null;
+        }
+    }
 }

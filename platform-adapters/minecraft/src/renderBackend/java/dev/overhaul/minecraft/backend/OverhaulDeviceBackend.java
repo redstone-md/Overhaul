@@ -24,6 +24,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     private final OverhaulCommandQueue queue;
     private final DeviceInfo info;
     private final BackendSmokeProbe smoke;
+    private final BufferStorageStatistics bufferStorage=new BufferStorageStatistics();
     private final Set<BackendResource> resources=new LinkedHashSet<>();
     private final List<OverhaulCommandEncoder> encoders=new ArrayList<>();
     private final List<OverhaulSurface> surfaces=new ArrayList<>();
@@ -63,6 +64,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     public GpuAllocator allocator() { requireOwner(); return allocator; }
     public ImmediateCommands commands() { requireOwner(); if (queue!=null) queue.flush(); return commands; }
     OverhaulCommandQueue queue() { requireOwner(); return queue; }
+    BufferStorageStatistics bufferStorage() { requireOwner(); return bufferStorage; }
     void rendered(int draws) { smoke.rendered(draws); }
     void presented(GpuTextureView source) { smoke.presented(source); }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() { requireOpen(); return smoke.awaitWorldCapture(); }
