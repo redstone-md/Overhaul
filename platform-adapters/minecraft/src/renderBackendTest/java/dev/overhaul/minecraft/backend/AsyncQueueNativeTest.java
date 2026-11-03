@@ -20,12 +20,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("backend-native")
 class AsyncQueueNativeTest {
+    @Test void manyFenceMarkersShareOneExplicitSubmissionAndKeepTheirCompletionPoint() {
+        var owner=device(); var fences=new ArrayList<com.mojang.renderpearl.api.commands.GpuFence>();
+        try {
+            var retired=new ArrayList<Integer>(); var encoder=owner.createCommandEncoder();
+            owner.queue().enqueue(retirement(retired,1));
+            for (int i=0;i<24;i++) fences.add(encoder.createFence());
+            for (var fence:fences) assertFalse(fence.awaitCompletion(0));
+            assertEquals(0,owner.queue().submissions());
+            encoder.submit();
+            assertEquals(1,owner.queue().submissions());
+            for (var fence:fences) assertTrue(fence.awaitCompletion(-1));
+            assertEquals(List.of(1),retired);
+        } finally {
+            for (var fence:fences) fence.close();
+            owner.close();
+        }
+    }
     @Test void anOlderFenceStillRetiresItsResourcesAfterANewerReceiptCompletes() {
         var owner=device();
         try {
             var retired=new ArrayList<Integer>(); var encoder=owner.createCommandEncoder();
             owner.queue().enqueue(retirement(retired,1));
             try (var first=encoder.createFence()) {
+                owner.queue().flush();
                 owner.queue().enqueue(retirement(retired,2));
                 owner.queue().flush().await();
                 assertEquals(List.of(2),retired);
@@ -55,6 +73,10 @@ class AsyncQueueNativeTest {
             });
             try (var fence=owner.createCommandEncoder().createFence()) {
                 try {
+                    assertEquals(0,owner.queue().submissions(),"Fence capture does not split the pending batch");
+                    assertFalse(fence.awaitCompletion(0));
+                    assertEquals(0,owner.queue().submissions(),"Polling an unsubmitted marker must remain nonblocking");
+                    owner.queue().flush();
                     assertEquals(1,owner.queue().submissions());
                     assertFalse(fence.awaitCompletion(0));
                     assertEquals(0,retired.get());
@@ -136,7 +158,10 @@ class AsyncQueueNativeTest {
                     @Override public void record(VkCommandBuffer command) { throw new IllegalStateException("reject this batch"); }
                     @Override public void close() { retired.incrementAndGet(); }
                 });
-                assertThrows(IllegalStateException.class,owner.queue()::flush);
+                try (var rejected=encoder.createFence()) {
+                    assertThrows(IllegalStateException.class,owner.queue()::flush);
+                    assertThrows(IllegalStateException.class,()->rejected.awaitCompletion(0));
+                }
                 assertEquals(VK_IMAGE_LAYOUT_UNDEFINED,owner.image(image).layout(0,0));
                 assertEquals(0,callbacks.get()); assertEquals(1,retired.get());
                 assertEquals(0,owner.queue().submissions());

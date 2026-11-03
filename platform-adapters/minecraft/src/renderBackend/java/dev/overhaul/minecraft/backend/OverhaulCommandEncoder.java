@@ -105,7 +105,7 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
 
     @Override public GpuFence createFence() {
         requireNoPass();
-        return new SubmissionGpuFence(owner,owner.queue().flush());
+        return SubmissionGpuFence.capture(owner);
     }
     @Override public void writeTimestamp(GpuQueryPool pool,int index) {
         requireNoPass();
