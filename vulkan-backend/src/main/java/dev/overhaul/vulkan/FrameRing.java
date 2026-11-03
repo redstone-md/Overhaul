@@ -19,6 +19,7 @@ public final class FrameRing implements AutoCloseable {
     private final Slot[] slots;
     private long submitted;
     private long completed;
+    private long blockingWaitCalls;
     private boolean recording;
     private boolean retiring;
     private boolean closed;
@@ -90,11 +91,19 @@ public final class FrameRing implements AutoCloseable {
     }
 
     public int capacity() { return slots.length; }
+    /** Native vkWaitForFences calls with nonzero timeout; this does not measure CPU blocked time. */
+    public long blockingWaitCalls(){context.requireOwner();return blockingWaitCalls;}
 
     private void awaitSlot(Slot slot) {
-        if (!slot.pending) return;
-        check(vkWaitForFences(context.device(), slot.fence, true, -1L), "frame fence wait");
-        complete(slot);
+        if(!awaitSlot(slot,-1L))throw new IllegalStateException("infinite frame fence wait timed out");
+    }
+
+    private boolean awaitSlot(Slot slot,long timeoutNanos) {
+        if (!slot.pending) return true;
+        if(timeoutNanos!=0)blockingWaitCalls++;
+        int result=vkWaitForFences(context.device(),slot.fence,true,timeoutNanos);
+        if(result==VK_TIMEOUT)return false;
+        check(result,"frame fence wait");complete(slot);return true;
     }
 
     private void complete(Slot slot) {
@@ -187,14 +196,19 @@ public final class FrameRing implements AutoCloseable {
         public long sequence() { return sequence; }
         public int slot() { return slot; }
         VulkanContext owningContext(){return context;}
-        public void await() {
+        public void await() { if(!await(-1L))throw new IllegalStateException("infinite frame fence wait timed out"); }
+
+        /** Waits in nanoseconds; zero polls, -1 waits indefinitely. Timeout never retires pending resources. */
+        public boolean await(long timeoutNanos) {
+            if(timeoutNanos<0&&timeoutNanos!=-1L)throw new IllegalArgumentException("negative fence timeout");
             context.requireOwner();
             if (closed) {
-                if (sequence <= completed) return;
+                if (sequence <= completed) return true;
                 throw new IllegalStateException("closed frame ring has incomplete work");
             }
-            if (sequence > completed) awaitSlot(slots[slot]);
-            else if (slots[slot].sequence == sequence) awaitSlot(slots[slot]);
+            if(slots[slot].sequence==sequence)return awaitSlot(slots[slot],timeoutNanos);
+            if(sequence<=completed)return true;
+            throw new IllegalStateException("submission no longer owns its frame slot");
         }
         public boolean isComplete() {
             context.requireOwner();

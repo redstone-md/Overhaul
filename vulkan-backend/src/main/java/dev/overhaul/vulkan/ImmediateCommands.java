@@ -18,6 +18,8 @@ public final class ImmediateCommands implements AutoCloseable {
     private long fence;
     private final ImageTransfers images;
     private boolean recording;
+    private long submissionCount;
+    private long fenceWaitCalls;
 
     public ImmediateCommands(VulkanContext context) {
         this.context = context;
@@ -65,9 +67,16 @@ public final class ImmediateCommands implements AutoCloseable {
             check(vkResetFences(context.device(), fence), "vkResetFences");
             VkSubmitInfo info = VkSubmitInfo.calloc(stack).sType$Default().pCommandBuffers(stack.pointers(command));
             check(vkQueueSubmit(context.queue(), info, fence), "vkQueueSubmit");
+            submissionCount++;
+            fenceWaitCalls++;
             check(vkWaitForFences(context.device(), fence, true, -1L), "vkWaitForFences");
         } finally { this.recording=false; }
     }
+
+    /** Successful native queue submissions, including submissions whose later fence wait fails. */
+    public long submissionCount(){context.requireOwner();return submissionCount;}
+    /** Native fence-wait invocations on this synchronous lane; not measured CPU blocked time. */
+    public long fenceWaitCalls(){context.requireOwner();return fenceWaitCalls;}
 
     public void copy(GpuBuffer source, GpuBuffer target, long size) {
         if (size < 1 || size > source.size() || size > target.size()) throw new IllegalArgumentException("copy out of bounds");

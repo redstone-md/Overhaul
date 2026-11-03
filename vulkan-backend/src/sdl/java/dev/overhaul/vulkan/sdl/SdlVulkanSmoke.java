@@ -40,6 +40,7 @@ public final class SdlVulkanSmoke {
             try (SwapchainPresenter presenter = new SwapchainPresenter(context, 128, 128)) {
                 SdlSurfaceImageSmoke.verify(context,presenter);
                 verifyDraws(context, presenter, window);
+                SdlSurfaceImageSmoke.verifyAsyncAndClose(context,presenter,window);
                 System.out.println("SDL3 Vulkan device: " + context.deviceName() + "; LWJGL=" + Version.getVersion());
             }
             }

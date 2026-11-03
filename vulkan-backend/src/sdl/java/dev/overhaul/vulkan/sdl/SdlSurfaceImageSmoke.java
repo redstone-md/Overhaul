@@ -35,4 +35,46 @@ final class SdlSurfaceImageSmoke {
     private static void expectState(Runnable action){
         try{action.run();throw new IllegalArgumentException("invalid surface state accepted");}catch(IllegalStateException expected){ }
     }
+
+    /** Runs last: closes the presenter while the final asynchronous blit is still owned by its frame ring. */
+    static void verifyAsyncAndClose(VulkanContext context,SwapchainPresenter presenter,long window){
+        int usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        java.util.List<FrameRing.Submission> receipts=new java.util.ArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger retired=new java.util.concurrent.atomic.AtomicInteger();
+        try(GpuAllocator allocator=new GpuAllocator(context);ImmediateCommands commands=new ImmediateCommands(context);
+            GpuImage image=allocator.createImage(ImageFormat.RGBA8_UNORM,16,16,1,1,usage);
+            GpuImageView view=image.view(0,1,0,1)){
+            commands.clearColor(image,0,0,1,.5f,.25f,1);
+            for(int i=0;i<24;i++){
+                org.lwjgl.sdl.SDLEvents.SDL_PumpEvents();
+                if(!presenter.acquireNextTexture())throw new IllegalStateException("async surface acquire failed");
+                FrameRing.Submission completion=presenter.blitAcquiredImageAsync(view,(i&1)!=0);
+                completion.retireAfterFence(retired::incrementAndGet);receipts.add(completion);
+                if(!presenter.presentAcquired())throw new IllegalStateException("async surface present failed");
+            }
+            for(FrameRing.Submission receipt:receipts)if(!receipt.await(1_000_000_000L))throw new IllegalStateException("async surface fence did not complete");
+            if(retired.get()!=24||!receipts.get(0).await(0))throw new IllegalStateException("ring-wrap retirement differs");
+            if(!presenter.acquireNextTexture())throw new IllegalStateException("source lifetime acquire failed");
+            FrameRing.Submission pinned=presenter.blitAcquiredImageAsync(view);
+            image.close(); // Must wait for the queued blit before destroying its native storage and child view.
+            if(!pinned.await(0)||!presenter.presentAcquired())throw new IllegalStateException("source image was not safely fence-pinned");
+            try(GpuImage second=allocator.createImage(ImageFormat.RGBA8_UNORM,16,16,1,1,usage);
+                GpuImageView secondView=second.view(0,1,0,1)){
+                commands.clearColor(second,0,0,.25f,.5f,1,1);
+                if(!presenter.acquireNextTexture())throw new IllegalStateException("abandoned async acquire failed");
+                FrameRing.Submission abandoned=presenter.blitAcquiredImageAsync(secondView);
+                if(!org.lwjgl.sdl.SDLVideo.SDL_SetWindowSize(window,160,144))throw new IllegalStateException("async resize failed");
+                org.lwjgl.sdl.SDLEvents.SDL_PumpEvents();presenter.resize(160,144);
+                if(!abandoned.await(0))throw new IllegalStateException("resize left a blit pending");
+                if(!presenter.acquireNextTexture())throw new IllegalStateException("resize recovery acquire failed");
+                presenter.resize(160,144); // Also abandon an acquire whose semaphore has not been consumed yet.
+                if(!presenter.acquireNextTexture())throw new IllegalStateException("close fixture acquire failed");
+                FrameRing.Submission last=presenter.blitAcquiredImageAsync(secondView);
+                last.retireAfterFence(retired::incrementAndGet);
+                presenter.close();
+                if(!last.await(0)||retired.get()!=25)throw new IllegalStateException("presenter close did not drain final blit/retirement");
+            }
+        }
+        System.out.println("SDL asynchronous split: 24 frames/3 acquire semaphores, timed fences, image pinning, resize/abandon/close verified");
+    }
 }

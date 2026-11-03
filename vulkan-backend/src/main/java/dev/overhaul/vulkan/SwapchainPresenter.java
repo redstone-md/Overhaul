@@ -27,7 +27,9 @@ public final class SwapchainPresenter implements AutoCloseable {
     private boolean closed;
     private boolean needsResize;
     private boolean dirtyAcquire;
-    private final long[] manualAcquire=new long[1];
+    private final long[] manualAcquire=new long[3];
+    private final FrameRing.Submission[] manualConsumption=new FrameRing.Submission[manualAcquire.length];
+    private int manualCursor,manualSlot;
     private int manualIndex=-1;
     private boolean manualBlitted;
 
@@ -103,6 +105,7 @@ public final class SwapchainPresenter implements AutoCloseable {
                 destroySemaphores(acquired);
                 createSemaphores(acquired, stack);
                 destroySemaphores(manualAcquire);createSemaphores(manualAcquire,stack);
+                java.util.Arrays.fill(manualConsumption,null);
                 dirtyAcquire = false;
             }
             width = nextWidth;
@@ -182,23 +185,41 @@ public final class SwapchainPresenter implements AutoCloseable {
     public boolean acquireNextTexture(){
         requireOpen();if(manualIndex!=-1)throw new IllegalStateException("a surface image is already acquired");
         if(swapchain==0||suspended)return false;
+        manualSlot=manualCursor;
+        boolean available=false;
+        for(int i=0;i<manualAcquire.length;i++){
+            int candidate=(manualCursor+i)%manualAcquire.length;
+            if(manualConsumption[candidate]==null||manualConsumption[candidate].await(0)){
+                manualSlot=candidate;available=true;break;
+            }
+        }
+        if(!available)manualConsumption[manualSlot].await();
         try(MemoryStack stack=MemoryStack.stackPush()){
             IntBuffer index=stack.mallocInt(1);
-            int result=vkAcquireNextImageKHR(context.device(),swapchain,1_000_000_000L,manualAcquire[0],VK_NULL_HANDLE,index);
+            int result=vkAcquireNextImageKHR(context.device(),swapchain,1_000_000_000L,manualAcquire[manualSlot],VK_NULL_HANDLE,index);
             if(result==VK_ERROR_OUT_OF_DATE_KHR){needsResize=true;suspended=true;return false;}
             if(result==VK_TIMEOUT||result==VK_NOT_READY)return false;
             if(result!=VK_SUBOPTIMAL_KHR)check(result,"manual surface acquire");else needsResize=true;
-            manualIndex=index.get(0);manualBlitted=false;return true;
+            manualIndex=index.get(0);manualBlitted=false;manualCursor=(manualSlot+1)%manualAcquire.length;return true;
         }
     }
 
     /** Completes the GPU blit before returning, so an immediately created completed encoder fence is truthful. */
     public void blitAcquiredImage(GpuImageView source){
-        blitAcquiredImage(source,false);
+        blitAcquiredImageAsync(source).await();
+    }
+
+    /** Queues the acquired-image blit without a host wait. Native image/view close remains fence-pinned. */
+    public FrameRing.Submission blitAcquiredImageAsync(GpuImageView source){
+        return blitAcquiredImageAsync(source,false);
     }
 
     /** Render frontends with a bottom-left image origin request a vertical presentation flip. */
     public void blitAcquiredImage(GpuImageView source,boolean flipY){
+        blitAcquiredImageAsync(source,flipY).await();
+    }
+
+    public FrameRing.Submission blitAcquiredImageAsync(GpuImageView source,boolean flipY){
         requireOpen();if(manualIndex==-1||manualBlitted)throw new IllegalStateException("surface needs one acquired, unfilled image");
         GpuImage image=source.image();if(image.context()!=context)throw new IllegalArgumentException("source image owner differs");
         if(source.layerCount()!=1||image.format().aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT)throw new IllegalArgumentException("surface blit needs one color layer");
@@ -210,7 +231,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         }
         java.util.List<GpuImage.LayoutChange> changes=new java.util.ArrayList<>();
         try{
-            FrameRing.Submission completion=frames.submit(frame->writeAcquired(frame,manualIndex,manualAcquire[0],(command,destination)->{
+            FrameRing.Submission completion=frames.submit(frame->writeAcquired(frame,manualIndex,manualAcquire[manualSlot],(command,destination)->{
                 changes.add(image.recordTransition(command,mip,1,layer,1,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
                 try(MemoryStack stack=MemoryStack.stackPush()){
                     VkImageBlit.Buffer region=VkImageBlit.calloc(1,stack);
@@ -222,7 +243,8 @@ public final class SwapchainPresenter implements AutoCloseable {
                 }
                 changes.add(image.recordTransition(command,mip,1,layer,1,previous));
             }));
-            manualBlitted=true;for(GpuImage.LayoutChange change:changes)change.commit();image.retainUntil(completion);completion.await();
+            manualBlitted=true;manualConsumption[manualSlot]=completion;
+            for(GpuImage.LayoutChange change:changes)change.commit();image.retainUntil(completion);return completion;
         }catch(RuntimeException|Error failure){dirtyAcquire=true;needsResize=true;suspended=true;throw failure;}
         finally{for(int i=changes.size()-1;i>=0;i--)changes.get(i).close();}
     }
@@ -256,7 +278,10 @@ public final class SwapchainPresenter implements AutoCloseable {
     }
     private void abandonManualAcquire(){
         if(manualIndex==-1)return;
-        if(!manualBlitted)frames.submit(frame->frame.waitFor(manualAcquire[0],VK_PIPELINE_STAGE_TRANSFER_BIT)).await();
+        if(!manualBlitted){
+            manualConsumption[manualSlot]=frames.submit(frame->frame.waitFor(manualAcquire[manualSlot],VK_PIPELINE_STAGE_TRANSFER_BIT));
+            manualConsumption[manualSlot].await();
+        }
         manualIndex=-1;manualBlitted=false;
     }
 
@@ -297,6 +322,8 @@ public final class SwapchainPresenter implements AutoCloseable {
     public int width() { requireOpen(); return width; }
     public int height() { requireOpen(); return height; }
     public boolean needsResize() { requireOpen(); return needsResize; }
+    /** Nonzero-timeout native frame-fence wait invocations, not a duration or a count of actual stalls. */
+    public long blockingWaitCalls(){context.requireOwner();return frames.blockingWaitCalls();}
 
     @Override public void close() {
         if (closed) return;
