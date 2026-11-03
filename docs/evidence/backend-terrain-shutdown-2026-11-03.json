@@ -1,0 +1,80 @@
+{
+  "status": "PASS",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "scene": "world-reloaded",
+  "frames": 1017,
+  "passes": 6426,
+  "draws": 80628,
+  "screen": "none",
+  "overlay": "none",
+  "lastScreen": "net.minecraft.client.gui.screens.ProgressScreen",
+  "lastOverlay": "none",
+  "width": 854,
+  "height": 480,
+  "distinctPixelsAtLeast": 4096,
+  "captured": true,
+  "closed": true,
+  "capture": "GPU surface source with presentation Y flip applied",
+  "submissionStatistics": {
+    "immediateSubmissions": 4,
+    "surfaceFenceWaitCalls": 2,
+    "queueSubmissions": 1107,
+    "explicitHostWaits": 1,
+    "immediateFenceWaitCalls": 4,
+    "queuedOperations": 48478,
+    "queueFenceWaitCalls": 52
+  },
+  "bufferStorageStatistics": {
+    "liveHostAccessibleBytes": 0,
+    "liveDevicePreferredBytes": 0,
+    "hostAccessibleAllocations": 160,
+    "peakLiveBytes": 474683014,
+    "devicePreferredAllocations": 101
+  },
+  "descriptorPoolStatistics": {
+    "createdPools": 1165,
+    "reusedPools": 10084,
+    "resetPools": 11249,
+    "destroyedPools": 1165,
+    "evictedPools": 1149,
+    "idlePools": 0,
+    "activePools": 0,
+    "idleDescriptors": 0
+  },
+  "attachmentPoolStatistics": {
+    "attachmentRenderPassCreations": 61,
+    "attachmentReuses": 6365,
+    "attachmentEvictions": 53,
+    "attachmentActive": 0,
+    "attachmentFramebufferCreations": 61,
+    "attachmentIdle": 0,
+    "attachmentPrivateViewCreations": 75
+  },
+  "terrainCompilationStatistics": {
+    "lastFailure": "",
+    "completed": 66,
+    "overhaulWorkerCompiles": 66,
+    "vertexBytes": 892752,
+    "constructorThreadCompiles": 0,
+    "failed": 0,
+    "quads": 7971,
+    "started": 66,
+    "fluidBlocks": 6,
+    "modelBlocks": 178248,
+    "offConstructorThreadCompiles": 66,
+    "lastThread": "overhaul-terrain-2"
+  },
+  "terrainWorkerStatistics": {
+    "terrainActiveTasks": 0,
+    "terrainCanceledTasks": 0,
+    "terrainWorkerAdmissions": 298,
+    "terrainWorkerCount": 8,
+    "terrainCompletedTasks": 205,
+    "terrainWorkerPumps": 0,
+    "terrainWorkerSignals": 410,
+    "terrainWorkerPending": 0
+  },
+  "terrainActiveLeases": 0,
+  "terrainCompilerClosed": true
+}

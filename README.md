@@ -95,8 +95,8 @@ To verify the actual game backend:
 .\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --no-configuration-cache
 ```
 
-The [world frame](docs/evidence/backend-reuse-world-2026-11-03.png) includes terrain,
-clouds, the player hand, HUD and five server-placed block models. Its GPU source
+The [world frame](docs/evidence/backend-terrain-reloaded-2026-11-03.png) includes terrain,
+clouds, the player hand, HUD, edited boundary blocks, fluid basins and a chest. Its GPU source
 image is saved with the presentation Y flip applied. Overhaul owns the native
 device, resources, pipelines, commands and SDL swapchain; Minecraft's shared
 frontend supplies shader compilation and validation. No vanilla graphics backend
@@ -107,3 +107,10 @@ device-preferred allocations with staged initial data; mapped buffers retain hos
 access. Bounded caches reuse retired descriptors and framebuffers. FPS/frame-time
 improvements have not been measured. Run adapter builds and
 clients serially because Gradle can clean a previous variant's class output.
+
+The opt-in 26.3 build also replaces ordinary section compilation: owned workers
+stream all model layers and fluids through bounded vertex pages into the game's
+normal terrain upload/draw path. The live check verifies edits after received
+client states and resource reload. Shared game tessellation/light/tint queries
+remain a compatibility boundary; fully frozen inputs and broader parity remain
+open. See [terrain integration](docs/TERRAIN_INTEGRATION.md).

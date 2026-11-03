@@ -143,6 +143,22 @@ matching framebuffers immediately or discards their active leases on retirement.
 Clear values and render areas remain per-pass; load/clear semantics, attachment
 order/holes, formats and subresources belong to the cache key. Smoke receipts
 record pool allocation/reuse counters and live buffer bytes at teardown.
+
+Ordinary terrain compilation now uses a compiler-owned 4 MiB page pool and up to
+eight owned workers. Each active layer holds one 64 KiB page and flushes complete
+vertices into the game's existing mesh storage. Models, fluids, AO/tint/emission,
+leaf policy, block entities, visibility and translucent sorting use the normal
+result/upload boundary. Urgent builds also queue asynchronously. Worker admission
+uses the shared bounded MPMC scheduler; the game's priority queue still selects
+logical section tasks. Replacing a compiler retires its pages after tasks that
+could have captured it; disposal cancels active upload retries before joining.
+
+`-PworldSmoke` now captures initial, boundary, edited and reloaded frames. Its
+barriers require installed meshes to have started after final client packet
+states. Resource invalidation uses `levelExtractor.allChanged()` so the extraction
+tracker and renderer advance together. The current dispatcher remains client-owned
+in menus; final compiler closure is checked before GPU shutdown. Fully immutable
+light/tint/model snapshots and broad terrain/session parity remain open.
 Long sessions, every render domain, complete shader packs, reload/dimension/mod
 parity, other loader/version renderers and controlled performance remain open.
 Instance divisors above one are unavailable; DrawIndex-sensitive direct multi-draw

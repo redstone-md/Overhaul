@@ -16,12 +16,12 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Shader compilation | Native shaderc preprocessing and GLSL-to-SPIR-V compilation | Broader pack syntax, stages, custom uniforms and resources |
 | Iris/OptiFine compatibility | Unchanged pinned Iris basic/textured programs compile and draw with native uniforms/textures/blending; pixel checks pass | Full-pack semantics, unsupported states/stages and real scene visual parity |
 | Render graph | Dependency/lifetime plan plus native image allocation, barriers and callback execution | Actual depth/shadow/lighting/postprocessing shader passes and transient aliasing |
-| Chunk meshing | Palette/cube meshing plus pooled arbitrary baked quads; actual slab/stair/cutout/glass capture, atlas/lightmap draw and sorted translucency verified | Replace owner-thread tessellation, fluids, special block entities, dynamic updates and full scene ordering |
+| Chunk meshing | Opt-in 26.3 replaces ordinary model/fluid compilation on owned workers with bounded streaming pages; native upload, all three layers, block-entity metadata, live boundary edits and reload verified | Fully frozen worker inputs, broader models/fluids/worlds, every loader/version and full scene parity |
 | Lighting | Async emissive propagation over immutable snapshots | Vanilla skylight, light updates and cross-chunk engine parity |
 | Generation/loading | Async immutable generator callbacks and a checked pooled snapshot codec | Integration with Minecraft generation stages, region/NBT codecs and loading dependencies |
-| Memory churn | Reused slab storage, worker scratch, mapped GPU buffers and camera storage | Allocations remain in snapshots, futures and upload bookkeeping; no zero-allocation claim |
+| Memory churn | Reused slabs/worker scratch, fixed-budget streaming terrain pages, mapped GPU buffers and camera storage | Allocations remain in game tessellators, snapshots, futures and upload bookkeeping; no zero-allocation claim |
 | Tick/entity/path queries | Owner-thread spatial hash and cooperative tick budgets with correctness tests | Wire actual server/entity tracking and pathfinder behavior and measure improvement |
-| Renderer replacement | Opt-in Fabric 26.3 selects only Overhaul's native backend; actual GUI and disposable-world frames plus save/disconnect verified | Complete render-domain/session/mod parity, every remaining loader/version, packaging and throughput |
+| Renderer replacement | Opt-in Fabric 26.3 selects only Overhaul's native backend; actual GUI, continuous terrain edits, fluid/chest frames, resource reload and orderly teardown verified | Complete render-domain/session/mod parity, every remaining loader/version, packaging and throughput |
 | Ecosystem compatibility | Strict lifecycle hooks and explicit dependency boundaries | In-game tests with major mods, reloads, dimensions, unloads, disconnects and dedicated servers |
 | Performance | Geometry reduction and specific native execution paths verified | Controlled vanilla comparisons of FPS/frame times, memory, loading and tick costs |
 
@@ -63,6 +63,16 @@ and descriptor pools 3,664 times with 490 creations. All tracked buffer bytes an
 active pool leases returned to zero at shutdown. These are
 API-call counts, not blocked durations or a measured FPS gain. Full performance
 and allocation profiling remains required.
+
+Continuous terrain compilation now emits all model and fluid layers directly into
+the normal game upload path. The latest scenario spans both sides of x=16, checks
+installed compile timestamps after final client states, preserves a chest's
+block-entity metadata and captures four native frames across resource reload.
+The two compiler generations complete 98 and 66 calls exclusively on Overhaul
+workers, with zero failures, owner-thread compiles or outstanding page leases.
+The compiler still uses Minecraft's task-local tessellators and worker-region
+light/tint queries; this is not a fully frozen portable world snapshot or an
+independent replacement of the game's lighting algorithm.
 
 Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those

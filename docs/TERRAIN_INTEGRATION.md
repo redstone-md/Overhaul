@@ -1,9 +1,9 @@
 # Continuous terrain integration
 
-This is the next integration design, not a claim that Overhaul's worker mesh
-already replaces ordinary terrain compilation. The installed 26.3 backend executes
-Minecraft's terrain draws, while the separate model smoke only proves captured
-game assets can pass through Overhaul's portable mesher and native renderer.
+The opt-in Fabric 26.3 build now replaces ordinary section compilation and streams
+its geometry into the existing terrain upload/draw path. The separate model smoke
+remains diagnostic. Compilation uses Minecraft's task-local model/fluid
+tessellators for compatibility; fully frozen portable inputs remain future work.
 
 ## Verified 26.3 boundary
 
@@ -24,19 +24,26 @@ The relevant classes live in `net.minecraft.client.renderer.chunk`:
 | Invalidate | `RenderSection.reset()` cancels tasks and releases old geometry; `setSectionNode(long)` resets before section reuse |
 | Transparency | `ResortTransparencyTask` builds sorted indices from `MeshData.SortState` |
 
-## Implementation direction
+## Implemented path
 
-Add an instance-owned compiler adapter at the existing compile invocation. It must
-produce the game's normal `Results`, allowing worker-produced geometry to reach
-the existing staging/upload/draw path. Reusing this path avoids another renderer,
-Vulkan context, atlas readback or offscreen target.
+An instance-owned compiler adapter replaces the normal compile invocation and
+produces the game's `Results`. Worker-produced geometry reaches the existing
+staging/upload/draw path without another renderer, Vulkan context, atlas readback
+or offscreen target.
 
-Extract task-owned model inputs once, build portable worker geometry, and encode
-it against each `ChunkSectionLayer.vertexFormat()`. The portable 32-byte vertex
-format is not interchangeable with Minecraft's format. Preserve visibility,
-block-entity metadata and translucent sorting. A capability check must precede
-tessellation: incremental coverage must not tessellate with both compilers or
-silently omit unsupported geometry.
+`StreamingVertexWriter` uses one reusable page per active layer. The adapter
+encodes the exact 28-byte BLOCK layout and copies pages into normal game mesh
+storage; it does not reinterpret the earlier portable 32-byte diagnostic format.
+Models and fluids are tessellated once. Visibility, block entities, leaf policy
+and translucent sorting remain part of the returned result. Unsupported vertex
+formats fail explicitly instead of silently emitting incompatible data.
+
+Each compiler owns 64 pages of 64 KiB. Up to eight owned workers need at most three
+pages each; complexity flushes pages instead of accumulating them. A coalesced
+bounded MPMC scheduler admits worker wakeups; Minecraft's synchronized priority
+queue still orders logical tasks. Urgent builds queue asynchronously too.
+Generation retirement waits for tasks that could have captured the previous
+compiler. Disposal cancels active staging-upload retries before joining workers.
 
 `RenderSectionRegion` clones block palettes through `SectionCopy`, but still uses
 the live client level for tint and the live light engine. Fully portable work
@@ -44,16 +51,29 @@ therefore needs frozen neighbor states, light samples, tint/model inputs and a
 resource generation. Using the game's worker-region contract alone does not prove
 immutable snapshot isolation.
 
-Preserve AO, directional shading, emission, per-vertex light and leaf opacity.
+The adapter preserves AO, directional shading, emission, per-vertex light and leaf opacity.
 Fluids have a separate `FluidRenderer.tesselate(...)` path; waterlogged blocks need
-both model and fluid output. Full coverage also includes block entities and
-translucency. These remain part of the requested final state.
+both model and fluid output. The live check includes a chest and translucent
+geometry. Broad model/fluid/block-entity parity remains part of the final target.
 
 ## Acceptance evidence
 
-Verify continuous block edits, cross-section boundary edits, rapidly superseded
-rebuilds, section-coordinate reuse, resource reload and world unload. Revision
-checks must include world identity, coordinates and resource generation. CPU leases
-must survive staging copies, and GPU allocations must survive their last fence.
-Ordinary world frames must visibly use the new geometry. Benchmark against the
+The retained scenario captures initial fixtures, edits on both sides of x=16,
+distinct final block states after intermediate writes, water/lava basins and a
+chest, then resource reload and another edit. Installed mesh start times must be
+newer than a final client-packet barrier. Each edit requests a fresh neighbor
+rebuild after that barrier. Both compiler generations run exclusively on owned
+workers, complete without failures and return all page leases. Compiler closure
+is checked at the appropriate retirement/app-shutdown point.
+
+For 26.3, `levelExtractor.allChanged()` resets the section-update tracker and asks
+the renderer to invalidate geometry on the next extraction. Calling only
+`levelRenderer.invalidateCompiledGeometry(...)` leaves that upstream tracker
+stale. The dispatcher remains client-owned in menus: null-world frames skip
+extraction, and final renderer closure occurs before GPU shutdown.
+
+Long sessions, camera-driven section reuse, dimensions, mod coexistence, stronger
+snapshot isolation and broader world parity remain open. Intermediate packet
+writes may coalesce; deterministic concurrency tests separately cover active-task
+cancellation and generation-retirement races. Benchmark against the game's
 existing async compiler before claiming a speedup.

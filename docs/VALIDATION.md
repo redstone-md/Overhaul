@@ -13,13 +13,15 @@ The engine command below passed; the table also includes separately run backend 
 
 | Suite | Tests | Failures | Skipped |
 | --- | ---: | ---: | ---: |
-| core-common | 22 | 0 | 0 |
+| core-common | 25 | 0 | 0 |
 | shader-pipeline | 16 | 0 | 0 |
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
 | native integration | 17 | 0 | 0 |
-| experimental Fabric 26.3 backend native | 27 | 0 | 0 |
+| experimental Fabric 26.3 backend GPU | 27 | 0 | 0 |
 | backend read-range unit | 2 | 0 | 0 |
+| terrain encoding parity (native memory) | 3 | 0 | 0 |
+| terrain worker concurrency | 4 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
 
@@ -265,6 +267,46 @@ buffer usage requests it. Idle caches are bounded at 16 pools/8,192 descriptors 
 Validation layers, broad session/render-domain parity and controlled performance
 remain open. The continuous terrain integration boundary is recorded in
 [TERRAIN_INTEGRATION.md](TERRAIN_INTEGRATION.md).
+
+## Continuous ordinary terrain compilation
+
+The opt-in 26.3 compiler now replaces ordinary section output, including model
+layers and fluids, and feeds the existing mesh upload/draw path. Urgent rebuilds
+also run on owned workers. Each layer streams through one 64 KiB page under a
+compiler-owned 4 MiB budget. The three encoding checks compare actual bytes and
+translucent indices against Minecraft's builder; four concurrency checks cover
+coalesced admission, active cancellation, generation retirement and failures.
+
+The actual world command passes four captured stages:
+
+| Stage | Completed compiles in generation | Left/right observed completions | Evidence |
+| --- | ---: | ---: | --- |
+| Initial fixtures | 40 | 1 / 1 | [frame](evidence/backend-terrain-initial-2026-11-03.png) |
+| Boundary wool blocks, fluid basins and chest | 74 | 3 / 3 | [frame](evidence/backend-terrain-boundary-2026-11-03.png) |
+| Gold/emerald replacement | 98 | 4 / 4 | [frame](evidence/backend-terrain-edited-2026-11-03.png) |
+| Reload, new compiler, iron/diamond replacement | 66 | 2 / 2 | [frame](evidence/backend-terrain-reloaded-2026-11-03.png) |
+
+Every edited mesh's compile start is newer than its final received client-state
+barrier. The smoke explicitly requests fresh neighbor rebuilds after each barrier.
+It verifies both boundary sections, translucent geometry, water/lava client states
+and chest metadata. Intermediate server writes may coalesce; the live run is not
+proof that every cancellation interleaving occurred.
+
+The old/new generations finish 98/66 calls with zero failures or owner-thread
+compiles, exclusively on `overhaul-terrain-*` workers. At disconnect, tasks/pumps
+and page leases are zero and the old compiler is retired. Minecraft retains the
+current dispatcher in menus; [graphics shutdown](evidence/backend-terrain-shutdown-2026-11-03.json)
+confirms its final closure before the device closes. The app renders 1,017 frames,
+6,426 passes and 80,628 draws and saves/disconnects normally. Four synchronous
+verification submissions capture the GPU-source images. These are not FPS or
+blocked-time comparisons.
+
+The [scenario receipt](evidence/backend-terrain-scenarios-2026-11-03.json) and
+[manifest](evidence/backend-terrain-2026-11-03.json) retain the checks and hashes.
+The driver uses the full `levelExtractor.allChanged()` invalidation facade after
+resource reload. The actual compiler still uses shared game tessellation and
+worker-region light/tint queries. Fully frozen inputs, independent lighting,
+larger worlds, dimensions and full terrain/mod parity remain open.
 
 ## Remaining evidence
 

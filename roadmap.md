@@ -89,8 +89,9 @@ Performance claims require measurements, not implementation intent.
    command path and bounded allocation caches, verify device-preferred static
    allocation under longer sessions, and measure against a controlled reference.
 2. Connect the existing owned worker meshes/visibility path to continuous game
-   section updates. Verify entities, block entities, particles, weather, lighting
-   and scene ordering beyond the initial terrain/cloud/hand/HUD/fixture check.
+   section updates and replace remaining compatibility queries with frozen inputs.
+   Ordinary model/fluid compilation now streams on owned workers; expand entities,
+   particles, weather, lighting and full scene/occlusion integration.
    The verified 26.3 compile/upload seam and snapshot constraints are documented
    in `docs/TERRAIN_INTEGRATION.md`; vanilla section compilation is already async.
 3. Execute real depth/shadow/lighting/post passes and shader-pack render-state,
@@ -228,3 +229,21 @@ lease ownership, failures, live edits/boundaries and orderly unload. Do not run 
 second tessellator or count offscreen diagnostic output as ordinary terrain.
 Minecraft's worker-region light/tint queries remain an explicit compatibility
 boundary until frozen inputs replace them. Full scope and performance gates remain.
+
+## Continuous terrain checkpoint: 2026-11-03
+
+- Normal 26.3 terrain compilation now emits models/fluids once through bounded
+  streaming pages into the existing native upload/draw path, preserving metadata.
+  Up to eight owned workers also handle urgent builds. Admission uses shared MPMC
+  storage; the game's priority queue remains authoritative for section order.
+- Three new portable page tests, three exact game-builder encoding tests and four
+  scheduling/lifetime concurrency cases pass. Files remain below 500 lines.
+- Four actual world frames pass across boundary edits, water/lava, chest metadata,
+  resource reload and distinct post-reload edits. Installed mesh starts must follow
+  final client packet barriers. Two generations finish 98/66 compiles on owned
+  workers, with no failures, owner-thread compiles or outstanding leases.
+- The scenario verifies idle world disconnect and final compiler closure before
+  graphics shutdown. The dispatcher is intentionally client-owned while in menus.
+- Frozen inputs, independent lighting, broader scenes/worlds, continuous owned
+  occlusion/indirect integration, all other version/loader renderers, shader-pack
+  semantics, server systems and controlled benchmarks remain acceptance gates.
