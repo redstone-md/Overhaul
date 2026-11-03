@@ -60,7 +60,7 @@ public final class ModelGeometryCache {
     private final Thread owner=Thread.currentThread();
     private final Structure structure;
     private final int modelLimit,cubeLimit,quadLimit,partLimit;
-    private final IdentityHashMap<Model<?>,ModelSnapshot> models=new IdentityHashMap<>();
+    private final IdentityHashMap<ModelPart,ModelSnapshot> models=new IdentityHashMap<>();
     private final IdentityHashMap<ModelPart.Cube,CubeMesh> cubes=new IdentityHashMap<>();
     private int retainedQuads,retainedParts,retainedCubeReferences;
 
@@ -75,14 +75,14 @@ public final class ModelGeometryCache {
         this.modelLimit=modelLimit;this.cubeLimit=cubeLimit;this.quadLimit=quadLimit;this.partLimit=partLimit;
     }
     public Definition definition(Model<?> model){
-        requireOwner();ModelSnapshot snapshot=models.get(model);
+        requireOwner();ModelPart root=model.root();ModelSnapshot snapshot=models.get(root);
         if(snapshot!=null&&!snapshot.matches(structure)){clear();snapshot=null;}
         if(snapshot==null){
             if(models.size()>=modelLimit)return UNSUPPORTED_MODEL;
             List<PartSnapshot> parts=new ArrayList<>();List<ModelPart.Cube> ordered=new ArrayList<>();
             Set<ModelPart> path=Collections.newSetFromMap(new IdentityHashMap<>());
-            if(!snapshot(model.root(),parts,ordered,path,0))return UNSUPPORTED_MODEL;
-            snapshot=new ModelSnapshot(List.copyOf(parts),List.copyOf(ordered));models.put(model,snapshot);retainedParts+=parts.size();retainedCubeReferences+=ordered.size();
+            if(!snapshot(root,parts,ordered,path,0))return UNSUPPORTED_MODEL;
+            snapshot=new ModelSnapshot(List.copyOf(parts),List.copyOf(ordered));models.put(root,snapshot);retainedParts+=parts.size();retainedCubeReferences+=ordered.size();
         }
         int total=0;boolean compatible=true;
         for(ModelPart.Cube cube:snapshot.cubes()){

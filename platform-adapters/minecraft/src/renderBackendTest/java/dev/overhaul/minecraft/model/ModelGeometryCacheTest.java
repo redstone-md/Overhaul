@@ -60,6 +60,19 @@ class ModelGeometryCacheTest {
         a.cubes.getFirst().polygons[0]=saved;assertFalse(cache.definition(first).compatible());
         cache.clear();assertEquals(0,cache.models());assertEquals(0,cache.cubes());assertEquals(0,cache.retainedQuads());assertTrue(cache.definition(first).compatible());
     }
+    @Test void temporaryModelWrappersShareOneRootDefinitionWithoutConsumingAdmissionBudgetOrAnimating(){
+        Fixture fixture=new Fixture();Part root=fixture.part(cube());ModelGeometryCache cache=fixture.cache(1);
+        for(int frame=0;frame<4096;frame++){
+            CountingModel wrapper=new CountingModel(root.part);
+            assertEquals(new ModelGeometryCache.Definition(true,1),cache.definition(wrapper));
+            assertEquals(0,wrapper.animations);
+        }
+        assertEquals(1,cache.models(),"Definitions belong to root geometry, not temporary Model wrappers");
+        assertEquals(1,cache.cubes());assertEquals(1,cache.retainedQuads());
+        root.cubes.add(cube());assertFalse(cache.definition(new CountingModel(root.part)).compatible());
+        root.cubes.removeLast();assertEquals(new ModelGeometryCache.Definition(true,1),cache.definition(new CountingModel(root.part)));
+        assertEquals(1,cache.models());assertEquals(1,cache.cubes());assertEquals(1,cache.retainedQuads());
+    }
     private static ModelPart.Cube cube(){return new ModelPart.Cube(0,0,-8,-8,0,16,16,0,0,0,0,false,32,32,Set.of(Direction.SOUTH));}
     private static final class CountingModel extends Model<Object>{
         int animations;CountingModel(ModelPart root){super(root,id->null);}@Override public void setupAnim(Object state){animations++;}
