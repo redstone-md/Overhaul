@@ -18,11 +18,12 @@ import static dev.overhaul.vulkan.VulkanException.check;
 
 /** Original pack fullscreen programs, immutable descriptor ABI and bounded framebuffer reuse. */
 final class PackFullscreenPass implements AutoCloseable {
-    private record Sample(long view,long sampler){}
+    private record Sample(Object identity,long view,long sampler){}
+    private record Attachment(Object identity,long view){}
     private static final int MAX_DESCRIPTOR_SETS=32;
     private final VulkanContext context;
     private final CompiledShaderPack.Program program;
-    private final Map<List<Long>,Long> framebuffers=new LinkedHashMap<>();
+    private final Map<List<Attachment>,Long> framebuffers=new LinkedHashMap<>();
     private final int width,height;
     private final List<Integer> formats;
     private final Map<Map<String,Sample>,Long> descriptors=new LinkedHashMap<>();
@@ -92,11 +93,13 @@ final class PackFullscreenPass implements AutoCloseable {
     void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,Map<String,Long> samplers,long sampler){
         long set=descriptorSet(pass,samples,samplers,sampler);
         try(MemoryStack stack=MemoryStack.stackPush()){
-            List<Long> views=new ArrayList<>();for(String output:outputs)if(output!=null)views.add(pass.image(output).view());
+            List<Attachment> views=new ArrayList<>();for(String output:outputs)if(output!=null){
+                var image=pass.image(output);views.add(new Attachment(image.identity(),image.view()));
+            }
             Long framebuffer=framebuffers.get(views);
             if(framebuffer==null){
                 if(framebuffers.size()>=16)throw new IllegalStateException("Pack pass framebuffer cache exceeds bounded routing states");
-                LongBuffer handles=stack.mallocLong(views.size());for(long view:views)handles.put(view);handles.flip();LongBuffer pointer=stack.mallocLong(1);
+                LongBuffer handles=stack.mallocLong(views.size());for(Attachment view:views)handles.put(view.view());handles.flip();LongBuffer pointer=stack.mallocLong(1);
                 check(vkCreateFramebuffer(context.device(),VkFramebufferCreateInfo.calloc(stack).sType$Default().renderPass(renderPass).pAttachments(handles).width(width).height(height).layers(1),null,pointer),"pack graph framebuffer");
                 framebuffer=pointer.get(0);framebuffers.put(List.copyOf(views),framebuffer);
             }
@@ -108,7 +111,9 @@ final class PackFullscreenPass implements AutoCloseable {
         }
     }
     private long descriptorSet(VulkanRenderGraph.PassContext pass,Map<String,String> samples,Map<String,Long> samplers,long sampler){
-        Map<String,Sample> proposed=new LinkedHashMap<>();for(var sample:samples.entrySet())proposed.put(sample.getKey(),new Sample(pass.image(sample.getValue()).view(),samplers.getOrDefault(sample.getKey(),sampler)));
+        Map<String,Sample> proposed=new LinkedHashMap<>();for(var sample:samples.entrySet()){
+            var image=pass.image(sample.getValue());proposed.put(sample.getKey(),new Sample(image.identity(),image.view(),samplers.getOrDefault(sample.getKey(),sampler)));
+        }
         Long existing=descriptors.get(proposed);if(existing!=null)return existing;
         if(descriptors.size()>=MAX_DESCRIPTOR_SETS)throw new IllegalStateException("Pack pass descriptor routing exceeds bounded immutable states");
         try(MemoryStack stack=MemoryStack.stackPush()){

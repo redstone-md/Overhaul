@@ -47,7 +47,14 @@ public final class VulkanRenderGraph implements AutoCloseable {
         public int layout() { return layout; }
     }
 
-    public record Image(long handle, long view, int format, int aspect, int width, int height) {}
+    /** View lifetime identity survives graph wrappers and distinguishes reused native handles. */
+    public record Image(long handle, long view, int format, int aspect, int width, int height, Object identity) {
+        public Image { Objects.requireNonNull(identity,"identity"); }
+        /** Manual contexts have independent lifetime tokens unless an explicit identity is supplied. */
+        public Image(long handle,long view,int format,int aspect,int width,int height) {
+            this(handle,view,format,aspect,width,height,new Object());
+        }
+    }
     public record PassContext(VkCommandBuffer command, Map<String, Image> images) {
         public Image image(String name) {
             Image image=images.get(name);
@@ -122,7 +129,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
         if(image.format().vkFormat()!=format(resource.format())||image.width(view.baseMip())!=resource.width()
                 ||image.height(view.baseMip())!=resource.height())throw new IllegalArgumentException("Imported image does not match its graph declaration: "+resource.name());
         image.requireUsage(flags);bindings.put(resource.name(),view);
-        images.put(resource.name(),new Image(image.handle(),view.handle(),image.format().vkFormat(),image.format().aspectMask(),resource.width(),resource.height()));
+        images.put(resource.name(),new Image(image.handle(),view.handle(),image.format().vkFormat(),image.format().aspectMask(),resource.width(),resource.height(),view));
     }
     private void validatePhysicalFeedback(){
         for(RenderGraph.Pass pass:graph.passes()){
