@@ -13,7 +13,8 @@ import java.util.Set;
  * writes use a new name. Native execution must supply barriers from these usages.
  */
 public final class RenderGraph {
-    public enum Format { RGBA8, RGBA16F, R32F, DEPTH32F }
+    public enum Format { RGBA8,RGBA8_SRGB,BGRA8,BGRA8_SRGB,RGBA16F,RGBA32F,R32F,DEPTH16,DEPTH24_STENCIL8,DEPTH32F,DEPTH32F_STENCIL8 }
+    /** Imported storage can hold graph-written versions while remaining externally owned. */
     public record Resource(String name, Format format, int width, int height, boolean imported) {
         public Resource {
             checkName(name);
@@ -60,7 +61,6 @@ public final class RenderGraph {
             for (Pass pass : passes.values()) {
                 for (String name : pass.writes()) {
                     Resource resource = requireResource(name);
-                    if (resource.imported()) throw new IllegalArgumentException("Imported resource is read-only: " + name);
                     if (producers.putIfAbsent(name,pass.name()) != null) throw new IllegalArgumentException("Multiple writers for resource version: " + name);
                 }
             }

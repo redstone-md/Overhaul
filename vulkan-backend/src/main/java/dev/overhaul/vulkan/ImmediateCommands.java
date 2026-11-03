@@ -73,6 +73,10 @@ public final class ImmediateCommands implements AutoCloseable {
         } finally { this.recording=false; }
     }
 
+    public VulkanContext context(){
+        context.requireOwner();if(pool==0)throw new IllegalStateException("command lane closed");return context;
+    }
+
     /** Successful native queue submissions, including submissions whose later fence wait fails. */
     public long submissionCount(){context.requireOwner();return submissionCount;}
     /** Native fence-wait invocations on this synchronous lane; not measured CPU blocked time. */

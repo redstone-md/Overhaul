@@ -13,8 +13,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Executes a versioned graph with real owned images and explicit access barriers.
  * Callbacks record commands, not resource transitions. Render-pass attachments must
- * preserve the declared layout on exit. This synchronous executor is also useful
- * for validating passes before integrating them with a production frame ring.
+ * preserve the declared layout on exit. Imported versions borrow actual image
+ * views; physical subresources, rather than logical names, own layout history.
  */
 public final class VulkanRenderGraph implements AutoCloseable {
     public enum Usage {
@@ -29,6 +29,9 @@ public final class VulkanRenderGraph implements AutoCloseable {
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, false),
         FRAGMENT_SAMPLE(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                 VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_USAGE_SAMPLED_BIT, false),
+        GRAPHICS_SAMPLE(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_SHADER_READ_BIT,VK_IMAGE_USAGE_SAMPLED_BIT,false),
         COMPUTE_SAMPLE(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_USAGE_SAMPLED_BIT, false),
         TRANSFER_WRITE(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -59,33 +62,79 @@ public final class VulkanRenderGraph implements AutoCloseable {
     private final VulkanContext context;
     private final RenderGraph graph;
     private final Map<String,Operation> operations;
-    private final Map<String,AttachmentImage> owned = new LinkedHashMap<>();
+    private final Map<String,GpuImage> owned = new LinkedHashMap<>();
+    private final Map<String,GpuImageView> bindings = new LinkedHashMap<>();
     private final Map<String,Image> images = new LinkedHashMap<>();
-    private final Map<String,Usage> states = new HashMap<>();
+    private final boolean ownsCommands;
+    private GpuAllocator allocator;
     private ImmediateCommands commands;
     private boolean closed;
+    private boolean executing;
 
     public VulkanRenderGraph(VulkanContext context, RenderGraph graph, Map<String,Operation> operations) {
+        this(context,graph,operations,Map.of(),null);
+    }
+
+    /** Borrowed views and command lanes remain caller-owned, including when construction fails. */
+    public VulkanRenderGraph(VulkanContext context,RenderGraph graph,Map<String,Operation> operations,
+                             Map<String,GpuImageView> imports,ImmediateCommands borrowedCommands) {
         this.context=Objects.requireNonNull(context,"context");
         this.graph=Objects.requireNonNull(graph,"graph");
         this.operations=Map.copyOf(operations);
+        this.ownsCommands=borrowedCommands==null;
+        context.requireOwner();
+        if(borrowedCommands!=null&&borrowedCommands.context()!=context)throw new IllegalArgumentException("Foreign graph command lane");
+        imports=Map.copyOf(imports);
         validateOperations();
         try {
-            commands=new ImmediateCommands(context);
+            commands=ownsCommands?new ImmediateCommands(context):borrowedCommands;
+            Set<String> expectedImports=new HashSet<>();
             for (RenderGraph.Resource resource:graph.resources().values()) {
-                if (resource.imported()) throw new IllegalArgumentException("Borrowed images require an explicit ownership bridge: "+resource.name());
-                int format=format(resource.format()), aspect=resource.format()==RenderGraph.Format.DEPTH32F
-                        ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-                int flags=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-                for (Operation operation:this.operations.values()) {
-                    Usage usage=operation.uses().get(resource.name());
-                    if (usage!=null) flags|=usage.creationFlag;
+                GpuImageView view;
+                int flags=requiredUsage(resource.name());
+                if(resource.imported()){
+                    expectedImports.add(resource.name());view=imports.get(resource.name());
+                    if(view==null)throw new IllegalArgumentException("Missing imported graph view: "+resource.name());
+                }else{
+                    if(allocator==null)allocator=new GpuAllocator(context);
+                    GpuImage image=allocator.createImage(ImageFormat.fromVk(format(resource.format())),resource.width(),resource.height(),1,1,
+                            flags|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+                    owned.put(resource.name(),image);view=image.view(0,1,0,1);
                 }
-                AttachmentImage image=new AttachmentImage(context,resource.width(),resource.height(),format,flags,aspect);
-                owned.put(resource.name(),image);
-                images.put(resource.name(),new Image(image.image,image.view,format,aspect,resource.width(),resource.height()));
+                bind(resource,view,flags);
             }
+            if(!expectedImports.equals(imports.keySet()))throw new IllegalArgumentException("Unknown imported graph resource");
+            validatePhysicalFeedback();
         } catch (RuntimeException | Error failure) { close(); throw failure; }
+    }
+
+    private int requiredUsage(String name){
+        int flags=0;
+        for(Operation operation:operations.values()){
+            Usage usage=operation.uses().get(name);if(usage!=null)flags|=usage.creationFlag;
+        }
+        return flags;
+    }
+    private void bind(RenderGraph.Resource resource,GpuImageView view,int flags){
+        GpuImage image=view.image();
+        if(image.context()!=context)throw new IllegalArgumentException("Foreign graph image: "+resource.name());
+        if(view.mipCount()!=1||view.layerCount()!=1)throw new IllegalArgumentException("Graph attachments require one mip and layer: "+resource.name());
+        if(image.format().vkFormat()!=format(resource.format())||image.width(view.baseMip())!=resource.width()
+                ||image.height(view.baseMip())!=resource.height())throw new IllegalArgumentException("Imported image does not match its graph declaration: "+resource.name());
+        image.requireUsage(flags);bindings.put(resource.name(),view);
+        images.put(resource.name(),new Image(image.handle(),view.handle(),image.format().vkFormat(),image.format().aspectMask(),resource.width(),resource.height()));
+    }
+    private void validatePhysicalFeedback(){
+        for(RenderGraph.Pass pass:graph.passes()){
+            List<Map.Entry<String,Usage>> uses=new ArrayList<>(operations.get(pass.name()).uses().entrySet());
+            for(int first=0;first<uses.size();first++)for(int second=first+1;second<uses.size();second++){
+                var a=uses.get(first);var b=uses.get(second);
+                if(!a.getValue().writes&&!b.getValue().writes)continue;
+                GpuImageView left=bindings.get(a.getKey()),right=bindings.get(b.getKey());
+                if(left.image()==right.image()&&left.baseMip()==right.baseMip()&&left.baseLayer()==right.baseLayer())
+                    throw new IllegalArgumentException("Physical image feedback requires separate ping-pong targets in pass "+pass.name());
+            }
+        }
     }
 
     private void validateOperations() {
@@ -102,7 +151,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
                     throw new IllegalArgumentException("Selected queue does not support compute shader access");
                 }
                 if (usage.writes!=pass.writes().contains(use.getKey())) throw new IllegalArgumentException("Read/write usage mismatch: "+use.getKey());
-                boolean depth=graph.resources().get(use.getKey()).format()==RenderGraph.Format.DEPTH32F;
+                boolean depth=ImageFormat.fromVk(format(graph.resources().get(use.getKey()).format())).isDepth();
                 if ((usage==Usage.DEPTH_WRITE || usage==Usage.DEPTH_READ) && !depth
                         || usage==Usage.COLOR_WRITE && depth) throw new IllegalArgumentException("Attachment format mismatch: "+use.getKey());
             }
@@ -112,69 +161,80 @@ public final class VulkanRenderGraph implements AutoCloseable {
 
     public void execute() {
         requireOpen();
-        Map<String,Usage> next=new HashMap<>(states);
-        commands.submit(command->{
-            for (RenderGraph.Pass pass:graph.passes()) {
-                Operation operation=operations.get(pass.name());
-                Map<String,Image> scoped=new LinkedHashMap<>();
-                for (Map.Entry<String,Usage> use:operation.uses().entrySet()) {
-                    Image image=images.get(use.getKey());
-                    transition(command,image,next.get(use.getKey()),use.getValue());
-                    next.put(use.getKey(),use.getValue());
-                    scoped.put(use.getKey(),image);
+        if(executing)throw new IllegalStateException("Nested render graph execution");
+        executing=true;
+        List<GpuImage.LayoutChange> changes=new ArrayList<>();
+        try{
+            commands.submit(command->{
+                for (RenderGraph.Pass pass:graph.passes()) {
+                    Operation operation=operations.get(pass.name());
+                    Map<String,Image> scoped=new LinkedHashMap<>();
+                    for (Map.Entry<String,Usage> use:operation.uses().entrySet()) {
+                        transition(command,bindings.get(use.getKey()),use.getValue(),changes);
+                        scoped.put(use.getKey(),images.get(use.getKey()));
+                    }
+                    operation.record().accept(new PassContext(command,Map.copyOf(scoped)));
                 }
-                operation.record().accept(new PassContext(command,Map.copyOf(scoped)));
-            }
-        });
-        states.clear(); states.putAll(next);
+            });
+            for(GpuImage.LayoutChange change:changes)change.commit();
+        }finally{
+            try{for(int index=changes.size()-1;index>=0;index--)changes.get(index).close();}
+            finally{executing=false;}
+        }
     }
 
     /** Readback is a separate synchronized submission; returned bytes have Java ownership. */
     public byte[] readRgba8(String name) {
         requireOpen();
+        if(executing)throw new IllegalStateException("Readback during render graph execution");
         Image image=images.get(name);
-        if (image==null || image.format()!=VK_FORMAT_R8G8B8A8_UNORM || !states.containsKey(name)) {
+        GpuImageView view=bindings.get(name);
+        if (image==null || image.format()!=VK_FORMAT_R8G8B8A8_UNORM || view.image().layout(view.baseMip(),view.baseLayer())==VK_IMAGE_LAYOUT_UNDEFINED) {
             throw new IllegalArgumentException("Readback requires a defined RGBA8 resource");
         }
         int size=Math.multiplyExact(Math.multiplyExact(image.width(),image.height()),4);
         try (GpuAllocator allocator=new GpuAllocator(context);
              GpuBuffer buffer=allocator.hostBuffer(size,VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
-            commands.submit(command->{
-                transition(command,image,states.get(name),Usage.TRANSFER_READ);
+            List<GpuImage.LayoutChange> changes=new ArrayList<>();
+            try{
+              commands.submit(command->{
+                transition(command,view,Usage.TRANSFER_READ,changes);
                 try (MemoryStack stack=MemoryStack.stackPush()) {
                     VkBufferImageCopy.Buffer copy=VkBufferImageCopy.calloc(1,stack);
-                    copy.imageSubresource().aspectMask(image.aspect()).layerCount(1);
+                    copy.imageSubresource().aspectMask(image.aspect()).mipLevel(view.baseMip()).baseArrayLayer(view.baseLayer()).layerCount(1);
                     copy.imageExtent().set(image.width(),image.height(),1);
                     vkCmdCopyImageToBuffer(command,image.handle(),Usage.TRANSFER_READ.layout,buffer.handle(),copy);
                     VkMemoryBarrier.Buffer barrier=VkMemoryBarrier.calloc(1,stack).sType$Default()
                             .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_HOST_READ_BIT);
                     vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,barrier,null,null);
                 }
-            });
-            states.put(name,Usage.TRANSFER_READ);
+              });
+              for(GpuImage.LayoutChange change:changes)change.commit();
+            }finally{for(int index=changes.size()-1;index>=0;index--)changes.get(index).close();}
             byte[] bytes=new byte[size]; buffer.read().get(bytes); return bytes;
         }
     }
 
-    private static void transition(VkCommandBuffer command,Image image,Usage previous,Usage next) {
-        if (previous==next && !next.writes) return;
-        try (MemoryStack stack=MemoryStack.stackPush()) {
-            VkImageMemoryBarrier.Buffer barrier=VkImageMemoryBarrier.calloc(1,stack).sType$Default()
-                    .oldLayout(previous==null ? VK_IMAGE_LAYOUT_UNDEFINED : previous.layout).newLayout(next.layout)
-                    .srcAccessMask(previous==null ? 0 : previous.access).dstAccessMask(next.access)
-                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).image(image.handle());
-            barrier.subresourceRange().aspectMask(image.aspect()).levelCount(1).layerCount(1);
-            vkCmdPipelineBarrier(command,previous==null ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : previous.stage,
-                    next.stage,0,null,null,barrier);
-        }
+    private static void transition(VkCommandBuffer command,GpuImageView view,Usage next,List<GpuImage.LayoutChange> changes) {
+        GpuImage image=view.image();view.handle();
+        int previous=image.layout(view.baseMip(),view.baseLayer());
+        if(previous==VK_IMAGE_LAYOUT_UNDEFINED&&!next.writes)throw new IllegalStateException("Graph reads an uninitialized physical image");
+        if(previous!=next.layout||next.writes)changes.add(image.recordTransition(command,view.baseMip(),1,view.baseLayer(),1,next.layout));
     }
 
     private static int format(RenderGraph.Format format) {
         return switch (format) {
             case RGBA8 -> VK_FORMAT_R8G8B8A8_UNORM;
+            case RGBA8_SRGB -> VK_FORMAT_R8G8B8A8_SRGB;
+            case BGRA8 -> VK_FORMAT_B8G8R8A8_UNORM;
+            case BGRA8_SRGB -> VK_FORMAT_B8G8R8A8_SRGB;
             case RGBA16F -> VK_FORMAT_R16G16B16A16_SFLOAT;
+            case RGBA32F -> VK_FORMAT_R32G32B32A32_SFLOAT;
             case R32F -> VK_FORMAT_R32_SFLOAT;
+            case DEPTH16 -> VK_FORMAT_D16_UNORM;
+            case DEPTH24_STENCIL8 -> VK_FORMAT_D24_UNORM_S8_UINT;
             case DEPTH32F -> VK_FORMAT_D32_SFLOAT;
+            case DEPTH32F_STENCIL8 -> VK_FORMAT_D32_SFLOAT_S8_UINT;
         };
     }
 
@@ -185,11 +245,13 @@ public final class VulkanRenderGraph implements AutoCloseable {
 
     @Override public void close() {
         if (closed) return;
-        context.requireOwner(); context.waitIdle();
-        List<AttachmentImage> reverse=new ArrayList<>(owned.values()); Collections.reverse(reverse);
-        for (AttachmentImage image:reverse) image.close();
-        owned.clear(); images.clear(); states.clear();
-        if (commands!=null) commands.close();
+        context.requireOwner();
+        if(executing)throw new IllegalStateException("Cannot close an executing render graph");
+        List<GpuImage> reverse=new ArrayList<>(owned.values()); Collections.reverse(reverse);
+        for (GpuImage image:reverse) image.close();
+        owned.clear(); images.clear(); bindings.clear();
+        if(allocator!=null)allocator.close();
+        if (ownsCommands&&commands!=null) commands.close();
         closed=true;
     }
 }

@@ -16,7 +16,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /** Native Overhaul implementation behind RenderPearl's shared validation/shader frontend. */
-public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassResources {
+public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrameResources {
     private final Thread owner=Thread.currentThread();
     private final VulkanContext context;
     private final GpuAllocator allocator;
