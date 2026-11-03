@@ -1,0 +1,54 @@
+{
+  "status": "PASS",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "scene": "screen",
+  "frames": 528,
+  "passes": 4900,
+  "draws": 54363,
+  "screen": "net.minecraft.client.gui.screens.AccessibilityOnboardingScreen",
+  "overlay": "none",
+  "lastScreen": "net.minecraft.client.gui.screens.ProgressScreen",
+  "lastOverlay": "none",
+  "width": 854,
+  "height": 480,
+  "distinctPixelsAtLeast": 4096,
+  "captured": true,
+  "closed": true,
+  "capture": "GPU surface source with presentation Y flip applied",
+  "submissionStatistics": {
+    "immediateSubmissions": 1,
+    "queueFenceWaitCalls": 27,
+    "queuedOperations": 25254,
+    "immediateFenceWaitCalls": 1,
+    "explicitHostWaits": 0,
+    "queueSubmissions": 573,
+    "surfaceFenceWaitCalls": 1
+  },
+  "bufferStorageStatistics": {
+    "liveDevicePreferredBytes": 0,
+    "liveHostAccessibleBytes": 0,
+    "devicePreferredAllocations": 42,
+    "peakLiveBytes": 32874816,
+    "hostAccessibleAllocations": 68
+  },
+  "descriptorPoolStatistics": {
+    "createdPools": 838,
+    "reusedPools": 5598,
+    "resetPools": 6436,
+    "destroyedPools": 838,
+    "evictedPools": 822,
+    "idlePools": 0,
+    "activePools": 0,
+    "idleDescriptors": 0
+  },
+  "attachmentPoolStatistics": {
+    "attachmentReuses": 4869,
+    "attachmentRenderPassCreations": 31,
+    "attachmentPrivateViewCreations": 39,
+    "attachmentIdle": 0,
+    "attachmentFramebufferCreations": 31,
+    "attachmentActive": 0,
+    "attachmentEvictions": 23
+  }
+}

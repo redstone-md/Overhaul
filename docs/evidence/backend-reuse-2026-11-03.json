@@ -1,0 +1,144 @@
+{
+  "verifiedAtUtc": "2026-11-03T17:41:08.3847102Z",
+  "sourceCommit": "f212d21c78f6bc5ceee87eecf33f964f9afe134b",
+  "backend": "Overhaul Vulkan",
+  "capture": "Readback of actual swapchain-blit source; native presentation Y flip applied",
+  "worldCommand": ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+  "guiCommand": ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend '-PsmokeClient=200' verifyBackendSmoke --console=plain --no-configuration-cache",
+  "tests": {
+    "portableNative": 17,
+    "backendRangeUnit": 2,
+    "engineUnit": 48,
+    "adapterNative": 27,
+    "normalLoader": 22
+  },
+  "testFailures": 0,
+  "testsSkipped": 0,
+  "limits": {
+    "frameSlots": 3,
+    "transientBudgetBytes": 134217728,
+    "descriptorIdlePools": 16,
+    "descriptorIdleCapacity": 8192,
+    "attachmentIdleBundles": 64
+  },
+  "bufferPolicy": "Device-preferred for buffers without map usage; host-accessible for map usage and transient arenas",
+  "world": {
+    "frames": 355,
+    "passes": 2947,
+    "draws": 27139,
+    "submissions": {
+      "queueSubmissions": 400,
+      "surfaceFenceWaitCalls": 1,
+      "immediateSubmissions": 1,
+      "queueFenceWaitCalls": 26,
+      "queuedOperations": 21443,
+      "immediateFenceWaitCalls": 1,
+      "explicitHostWaits": 0
+    },
+    "buffers": {
+      "liveDevicePreferredBytes": 0,
+      "liveHostAccessibleBytes": 0,
+      "devicePreferredAllocations": 58,
+      "peakLiveBytes": 471031358,
+      "hostAccessibleAllocations": 103
+    },
+    "descriptors": {
+      "createdPools": 490,
+      "reusedPools": 3664,
+      "resetPools": 4154,
+      "destroyedPools": 490,
+      "evictedPools": 474,
+      "idlePools": 0,
+      "activePools": 0,
+      "idleDescriptors": 0
+    },
+    "attachments": {
+      "attachmentActive": 0,
+      "attachmentEvictions": 30,
+      "attachmentReuses": 2909,
+      "attachmentRenderPassCreations": 38,
+      "attachmentPrivateViewCreations": 52,
+      "attachmentIdle": 0,
+      "attachmentFramebufferCreations": 38
+    }
+  },
+  "gui": {
+    "frames": 528,
+    "passes": 4900,
+    "draws": 54363,
+    "submissions": {
+      "immediateSubmissions": 1,
+      "queueFenceWaitCalls": 27,
+      "queuedOperations": 25254,
+      "immediateFenceWaitCalls": 1,
+      "explicitHostWaits": 0,
+      "queueSubmissions": 573,
+      "surfaceFenceWaitCalls": 1
+    },
+    "buffers": {
+      "liveDevicePreferredBytes": 0,
+      "liveHostAccessibleBytes": 0,
+      "devicePreferredAllocations": 42,
+      "peakLiveBytes": 32874816,
+      "hostAccessibleAllocations": 68
+    },
+    "descriptors": {
+      "createdPools": 838,
+      "reusedPools": 5598,
+      "resetPools": 6436,
+      "destroyedPools": 838,
+      "evictedPools": 822,
+      "idlePools": 0,
+      "activePools": 0,
+      "idleDescriptors": 0
+    },
+    "attachments": {
+      "attachmentReuses": 4869,
+      "attachmentRenderPassCreations": 31,
+      "attachmentPrivateViewCreations": 39,
+      "attachmentIdle": 0,
+      "attachmentFramebufferCreations": 31,
+      "attachmentActive": 0,
+      "attachmentEvictions": 23
+    }
+  },
+  "counterMeaning": "Native API allocation/reuse and wait invocations; not blocked time or FPS. Buffer bytes exclude images, driver and other process storage.",
+  "validationLayers": false,
+  "performanceCompared": false,
+  "engineArtifacts": [
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "f3674da878c177ad5fdcd48bd10a4d5fbed048855ef7e004e51b0d8af67f877d"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-reuse-world-2026-11-03.png",
+      "sha256": "12f82a5801c8425920174ff3a0dd5b803a7b488432dc28628081ee41669bd1a4"
+    },
+    {
+      "file": "backend-reuse-world-2026-11-03.json",
+      "sha256": "8c138eb891ce70c379a1d926d51a29ef2fdef80a3bf391afc80292f05356c773"
+    },
+    {
+      "file": "backend-reuse-world-fixture-2026-11-03.json",
+      "sha256": "1cfc99de52f78c263fbde2ceeea84b26a2208333462d6d75e0c0e2d53c649239"
+    },
+    {
+      "file": "backend-reuse-screen-2026-11-03.png",
+      "sha256": "6568737dafc58278f18baef7375b022df551e5c24625a784bed23b6185efbdfb"
+    },
+    {
+      "file": "backend-reuse-screen-2026-11-03.json",
+      "sha256": "b1cbb6abadd2d89e2b7aef210ed49452e32c4307b0c21a6585ea45f4c3dc98b6"
+    }
+  ]
+}

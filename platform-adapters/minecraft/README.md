@@ -132,7 +132,17 @@ fence independently of later image-only blits.
 
 GPU presentation is asynchronous and uses three acquire semaphores. Synchronous
 commands remain available for explicit verification/readback; ordinary game
-passes use the batch queue. Static allocations remain host-visible VMA buffers.
+passes use the batch queue. Buffers without map usage use device-preferred VMA
+allocations and snapshot initial data into an ordered staging copy. CPU-mappable
+buffers retain host access; transient GPU arenas remain host-visible.
+
+The device caches up to 16 idle descriptor pools under an 8,192-descriptor budget,
+and 64 idle attachment bundles. Accepted work retains an exclusive lease until its
+fence; a new lease allocates fresh sets and bindings. Texture/view logical close invalidates
+matching framebuffers immediately or discards their active leases on retirement.
+Clear values and render areas remain per-pass; load/clear semantics, attachment
+order/holes, formats and subresources belong to the cache key. Smoke receipts
+record pool allocation/reuse counters and live buffer bytes at teardown.
 Long sessions, every render domain, complete shader packs, reload/dimension/mod
 parity, other loader/version renderers and controlled performance remain open.
 Instance divisors above one are unavailable; DrawIndex-sensitive direct multi-draw

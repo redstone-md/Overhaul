@@ -86,11 +86,13 @@ Performance claims require measurements, not implementation intent.
 
 1. Harden the now-working opt-in Fabric 26.3 native backend with longer sessions,
    resize/reload/dimension and full render-domain coverage. Profile the now-batched
-   command path, pool descriptors/framebuffers, add device-local static allocation
-   and measure against a controlled reference instance.
+   command path and bounded allocation caches, verify device-preferred static
+   allocation under longer sessions, and measure against a controlled reference.
 2. Connect the existing owned worker meshes/visibility path to continuous game
    section updates. Verify entities, block entities, particles, weather, lighting
    and scene ordering beyond the initial terrain/cloud/hand/HUD/fixture check.
+   The verified 26.3 compile/upload seam and snapshot constraints are documented
+   in `docs/TERRAIN_INTEGRATION.md`; vanilla section compilation is already async.
 3. Execute real depth/shadow/lighting/post passes and shader-pack render-state,
    ping-pong, custom-uniform, texture and unsupported-stage semantics.
 4. Integrate vanilla generation, NBT/region/packet loading, cross-chunk lighting,
@@ -193,3 +195,21 @@ contents through the existing ordered queue. Preserve mapped-buffer behavior and
 copy/update order. Verify native readback, overlapping in-flight leases, rollback,
 reuse and destruction before repeating the isolated game world. Record allocation
 counters rather than inferring performance gains from fewer object creations.
+
+## Native allocation reuse checkpoint: 2026-11-03
+
+- Unmappable game buffers now use device-preferred allocations with owned queued
+  initial uploads. CPU-mappable and transient buffers preserve host access.
+- Descriptor pool idle retention is bounded by 16 pools and 8,192 descriptors.
+  Attachment bundles retain at most 64 idle entries; close invalidation releases
+  cached source pins and marks accepted leases for discard after their fence.
+- Twenty-seven backend-native checks pass, including ten new upload/reuse/lifetime
+  cases. Build, source-size and module-boundary checks pass.
+- Actual GUI and world runs pass with normal shutdown. The world records 2,947
+  passes, 38 native framebuffer/render-pass creations and 2,909 bundle reuses;
+  descriptor pools record 490 creations and 3,664 reuses. All tracked buffer bytes
+  and active pool leases return to zero. These counters do not establish an FPS gain.
+- The next terrain integration must replace ordinary continuous section output,
+  preserving the existing upload/draw seam and complete scene semantics. See
+  `docs/TERRAIN_INTEGRATION.md`. Full shader-pack, world/tick, loader/version,
+  session/mod parity and controlled performance requirements remain open.

@@ -1,0 +1,13 @@
+{
+  "status":"PASS",
+  "world":"overhaul-smoke-cc8cbe88-6a4f-4dde-b746-d463a2acab5c",
+  "seed":424242,
+  "revision":2,
+  "indices":6,
+  "retiredLeases":0,
+  "additionalProbe":"backend=Overhaul Vulkan;scene=world;frames=314;draws=26519;image=backend-world.png",
+  "fixturePlacementThread":"Server thread",
+  "clientFixtureStatesVerified":5,
+  "fixtures":[{"block":"minecraft:oak_slab","x":2,"y":4,"z":4,"state":"Block{minecraft:oak_slab}[type=bottom,waterlogged=false]"},{"block":"minecraft:glass","x":4,"y":4,"z":4,"state":"Block{minecraft:glass}"},{"block":"minecraft:dandelion","x":6,"y":4,"z":4,"state":"Block{minecraft:dandelion}"},{"block":"minecraft:oak_stairs","x":8,"y":4,"z":4,"state":"Block{minecraft:oak_stairs}[facing=north,half=bottom,shape=straight,waterlogged=false]"},{"block":"minecraft:oak_leaves","x":10,"y":4,"z":4,"state":"Block{minecraft:oak_leaves}[distance=7,persistent=true,waterlogged=false]"}],
+  "failure":""
+}

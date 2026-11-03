@@ -5,7 +5,7 @@ The worktree began empty; no existing launcher instance or save was modified.
 
 ## Engine
 
-The combined command passed:
+The engine command below passed; the table also includes separately run backend checks:
 
 ```powershell
 .\gradlew.bat build :integration-tests:nativeTest :vulkan-backend:vulkanSmoke --args="--present --output build/verification/triangle.ppm"
@@ -18,7 +18,7 @@ The combined command passed:
 | platform-adapters | 3 | 0 | 0 |
 | vulkan-backend | 7 | 0 | 0 |
 | native integration | 17 | 0 | 0 |
-| experimental Fabric 26.3 backend native | 17 | 0 | 0 |
+| experimental Fabric 26.3 backend native | 27 | 0 | 0 |
 | backend read-range unit | 2 | 0 | 0 |
 
 Source files are below 500 lines, and the engine module import-boundary gate passes.
@@ -217,8 +217,54 @@ and zero snapshot leases were verified before normal save/disconnect and close.
 The latest [world image](evidence/backend-async-world-2026-11-03.png),
 [GUI image](evidence/backend-async-screen-2026-11-03.png) and
 [manifest](evidence/backend-async-2026-11-03.json) retain this checkpoint.
-Static buffers remain host-visible; descriptor/framebuffer pooling, allocation
-profiling and controlled reference benchmarks remain open.
+This checkpoint retained host-visible static buffers. The subsequent native
+allocation increment moves unmappable buffers to device-preferred storage and
+adds bounded descriptor/framebuffer reuse. Allocation profiling and controlled
+reference benchmarks remain open.
+
+## Fence-retired native allocation reuse
+
+At code commit `f212d21`, the backend build and all 27 native cases pass. Ten
+additional cases cover device-preferred initial uploads and partial-update order,
+staging ownership/rollback, descriptor capacity reuse across destroyed pipelines,
+real-fence isolation, early close and reentrant retirement, framebuffer load/clear
+semantics, attachment order/holes/depth/mips, invalidation and bounded eviction.
+The normal source-size and module-boundary gates also pass.
+
+Both the actual disposable-world command above and the 200-tick GUI command pass
+with the new allocation policy and caches. Their GPU-source PNGs were inspected:
+[world](evidence/backend-reuse-world-2026-11-03.png) and
+[GUI](evidence/backend-reuse-screen-2026-11-03.png). Terrain, five block fixtures,
+clouds, player hand/HUD and readable onboarding controls remain present.
+
+| Counter | World | GUI |
+| --- | ---: | ---: |
+| Presented frames | 355 | 528 |
+| Render passes | 2,947 | 4,900 |
+| Render submissions | 400 | 573 |
+| Framebuffer/render-pass creations | 38 | 31 |
+| Attachment bundle reuses | 2,909 | 4,869 |
+| Descriptor pool creations | 490 | 838 |
+| Descriptor pool reuses | 3,664 | 5,598 |
+| Device-preferred buffer allocations | 58 | 42 |
+| Host-accessible buffer allocations | 103 | 68 |
+| Peak tracked live buffer bytes | 471,031,358 | 32,874,816 |
+
+The world has 26 render-fence wait calls, one presentation-fence wait call and one
+synchronous debug readback. All tracked buffer bytes, active/idle descriptor pools
+and attachment leases are zero at shutdown; descriptor creation/destruction counts
+match. Five fixture packet states, revision 2 and zero snapshot leases also pass.
+The [manifest](evidence/backend-reuse-2026-11-03.json) hashes the receipts and images.
+
+Counters include startup and shutdown. They are not a controlled A/B benchmark,
+blocked-time measurement or FPS result. Buffer byte totals exclude images, driver
+storage and the rest of the process. Device-preferred VMA selection does not imply
+dedicated VRAM on unified-memory hardware; CPU mapping is retained only when the
+buffer usage requests it. Idle caches are bounded at 16 pools/8,192 descriptors and
+64 complete attachment bundles; accepted in-flight work owns separate leases.
+Validation layers, broad session/render-domain parity and controlled performance
+remain open. The continuous terrain integration boundary is recorded in
+[TERRAIN_INTEGRATION.md](TERRAIN_INTEGRATION.md).
 
 ## Remaining evidence
 
