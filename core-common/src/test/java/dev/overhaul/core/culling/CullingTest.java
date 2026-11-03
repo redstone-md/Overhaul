@@ -21,15 +21,16 @@ class CullingTest {
         SoftwareDepthBuffer buffer = new SoftwareDepthBuffer(7, 5);
         assertFalse(buffer.occluded(0,0,7,5,.9f));
         buffer.rasterize(0,0,.2f,7,0,.2f,0,5,.2f);
-        assertTrue(buffer.occluded(0,0,1,1,.8f));
+        assertTrue(buffer.occluded(1,1,2,2,.8f));
+        assertFalse(buffer.occluded(0,0,1,1,.8f),"Boundary/partial cells remain uncertain");
         assertFalse(buffer.occluded(0,0,7,5,.8f));
-        assertFalse(buffer.occluded(0,0,1,1,.2f));
+        assertFalse(buffer.occluded(1,1,2,2,.2f));
         assertFalse(buffer.occluded(-1,0,1,1,.8f));
         buffer.clear();
         assertFalse(buffer.occluded(0,0,1,1,.8f));
     }
 
-    @Test void hierarchicalQueriesMatchIndependentSampleCoverageForRandomRectangles() {
+    @Test void hierarchicalQueriesMatchIndependentFullCellCoverageForRandomRectangles() {
         int w = 19, h = 13;
         SoftwareDepthBuffer buffer = new SoftwareDepthBuffer(w,h);
         buffer.rasterize(0,0,.3f,19,0,.3f,0,13,.3f);
@@ -39,7 +40,7 @@ class CullingTest {
             int x1 = x0 + 1 + random.nextInt(w-x0), y1 = y0+1+random.nextInt(h-y0);
             boolean covered = true;
             for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++) {
-                if ((x+.5)/w + (y+.5)/h >= 1-1e-8) covered = false;
+                if (x==0||y==0||(x+1.0)/w+(y+1.0)/h>=1-1e-8) covered=false;
             }
             assertEquals(covered, buffer.occluded(x0,y0,x1,y1,.8f));
         }

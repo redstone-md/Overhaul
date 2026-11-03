@@ -247,3 +247,19 @@ boundary until frozen inputs replace them. Full scope and performance gates rema
 - Frozen inputs, independent lighting, broader scenes/worlds, continuous owned
   occlusion/indirect integration, all other version/loader renderers, shader-pack
   semantics, server systems and controlled benchmarks remain acceptance gates.
+
+## Active ordinary terrain occlusion increment
+
+Connect conservative software depth culling to ordinary terrain draw groups.
+Certify occluders from actual emitted SOLID geometry, not block collision proxies;
+merge adjacent certified planar faces and include actual emitted candidate bounds.
+Keep metadata mesh-owned through compilation/replacement, and snapshot meshes
+coherently while extracting draw groups without mutating entity/visibility lists.
+Capture the final bob/hurt/portal-adjusted projection, compose view rotation, use
+camera-relative doubles and account for reversed zero-to-one depth. Fully cover
+software cells and store farthest occluder depth; uncertain inputs fail open.
+Keep source/shader eligibility and frame budgets explicit. Verify hidden-section
+rejection and restoration after opening geometry/moving the camera in the actual
+world. Record accepted native indirect/instancing counters to prove the already
+selected terrain path; do not substitute unused CPU multidraw changes or infer FPS
+gains. Preserve the full version/shader/world/server/performance acceptance scope.

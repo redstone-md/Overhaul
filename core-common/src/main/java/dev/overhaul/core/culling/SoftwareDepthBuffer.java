@@ -9,9 +9,12 @@ import java.util.Arrays;
  */
 public final class SoftwareDepthBuffer {
     private static final float DEPTH_BIAS = 0.00001f;
+    private static final double COVERAGE_INSET = .01;
     private final int width, height;
     private final int[] widths, heights;
     private final float[][] levels;
+    private final float[] triangle=new float[9];
+    private final double[] edgeA=new double[16],edgeB=new double[16],edgeC=new double[16];
     private boolean dirty;
 
     public SoftwareDepthBuffer(int width, int height) {
@@ -35,29 +38,64 @@ public final class SoftwareDepthBuffer {
         dirty = true;
     }
 
-    /** Rasterizes strictly interior sample centers, leaving shared edges conservative. */
+    public int width(){return width;}
+    public int height(){return height;}
+
+    /** Rasterizes only cells completely covered by this triangle, using their farthest depth. */
     public void rasterize(float ax, float ay, float az, float bx, float by, float bz,
                           float cx, float cy, float cz) {
-        validate(ax, ay, az); validate(bx, by, bz); validate(cx, cy, cz);
-        double area = edge(ax, ay, bx, by, cx, cy);
-        if (Math.abs(area) < 1e-12) return;
-        int minX = Math.max(0, (int) Math.floor(Math.min(ax, Math.min(bx, cx))));
-        int maxX = Math.min(width - 1, (int) Math.ceil(Math.max(ax, Math.max(bx, cx))));
-        int minY = Math.max(0, (int) Math.floor(Math.min(ay, Math.min(by, cy))));
-        int maxY = Math.min(height - 1, (int) Math.ceil(Math.max(ay, Math.max(by, cy))));
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                double px = x + 0.5, py = y + 0.5;
-                double a = edge(bx, by, cx, cy, px, py) / area;
-                double b = edge(cx, cy, ax, ay, px, py) / area;
-                double c = 1 - a - b;
-                if (a <= 1e-8 || b <= 1e-8 || c <= 1e-8) continue;
-                float depth = (float) (a * az + b * bz + c * cz);
-                int index = y * width + x;
-                levels[0][index] = Math.min(levels[0][index], depth);
+        triangle[0]=ax;triangle[1]=ay;triangle[2]=az;triangle[3]=bx;triangle[4]=by;triangle[5]=bz;
+        triangle[6]=cx;triangle[7]=cy;triangle[8]=cz;rasterizePolygon(triangle,3);
+    }
+
+    /**
+     * A clipped convex planar polygon, packed xyz. Nonconvex/nonplanar/degenerate
+     * geometry contributes nothing. Adjacent faces may be merged before this call
+     * to avoid safe under-culling along triangle seams. Input is borrowed synchronously.
+     */
+    public void rasterizePolygon(float[] xyz,int vertices) {
+        if(xyz==null||vertices<3||vertices>16||xyz.length<vertices*3)throw new IllegalArgumentException("Invalid occluder polygon");
+        float left=width,top=height,right=0,bottom=0;
+        for(int i=0;i<vertices;i++){
+            int p=i*3;validate(xyz[p],xyz[p+1],xyz[p+2]);
+            left=Math.min(left,xyz[p]);right=Math.max(right,xyz[p]);top=Math.min(top,xyz[p+1]);bottom=Math.max(bottom,xyz[p+1]);
+        }
+        double area=0;int third=0;
+        for(int i=2;i<vertices;i++){
+            area=edge(xyz[0],xyz[1],xyz[3],xyz[4],xyz[i*3],xyz[i*3+1]);
+            if(Math.abs(area)>1e-10){third=i*3;break;}
+        }
+        if(third==0)return;
+        double orientation=Math.signum(area);
+        double dx=((xyz[5]-xyz[2])*(xyz[third+1]-xyz[1])-(xyz[third+2]-xyz[2])*(xyz[4]-xyz[1]))/area;
+        double dy=((xyz[3]-xyz[0])*(xyz[third+2]-xyz[2])-(xyz[third]-xyz[0])*(xyz[5]-xyz[2]))/area;
+        double base=xyz[2]-dx*xyz[0]-dy*xyz[1],excess=0;
+        int edges=0;
+        for(int i=0;i<vertices;i++){
+            int p=i*3,q=(i+1)%vertices*3;
+            double delta=xyz[p+2]-(base+dx*xyz[p]+dy*xyz[p+1]);
+            if(Math.abs(delta)>1e-4)return;excess=Math.max(excess,delta);
+            double ex=(double)xyz[q]-xyz[p],ey=(double)xyz[q+1]-xyz[p+1],length=Math.hypot(ex,ey);
+            if(length<1e-10)continue;
+            double a=-ey*orientation/length,b=ex*orientation/length,c=-a*xyz[p]-b*xyz[p+1];
+            for(int j=0;j<vertices;j++)if(a*xyz[j*3]+b*xyz[j*3+1]+c < -1e-5)return;
+            edgeA[edges]=a;edgeB[edges]=b;edgeC[edges++]=c;
+        }
+        if(edges<3)return;
+        for(int y=Math.max(0,(int)Math.floor(top));y<Math.min(height,(int)Math.ceil(bottom));y++){
+            for(int x=Math.max(0,(int)Math.floor(left));x<Math.min(width,(int)Math.ceil(right));x++){
+                boolean full=true;
+                for(int i=0;i<edges;i++){
+                    double a=edgeA[i],b=edgeB[i];
+                    if(a*(x+(a<0?1:0))+b*(y+(b<0?1:0))+edgeC[i]<=COVERAGE_INSET){full=false;break;}
+                }
+                if(!full)continue;
+                double far=base+dx*(x+(dx>0?1:0))+dy*(y+(dy>0?1:0))+excess;
+                float depth=Math.nextUp((float)Math.max(0,Math.min(1,far)));
+                int index=y*width+x;levels[0][index]=Math.min(levels[0][index],depth);
             }
         }
-        dirty = true;
+        dirty=true;
     }
 
     private void validate(float x, float y, float z) {
