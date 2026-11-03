@@ -42,13 +42,13 @@ public final class SpirvInterface {
     }
     public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary fragment,Set<Integer> importedSets){
         SpirvInterface vs=new SpirvInterface(vertex,importedSets),fs=new SpirvInterface(fragment,importedSets);Set<Integer> descriptors=new HashSet<>(vs.descriptors);descriptors.addAll(fs.descriptors);
-        Map<String,Integer> samplers=new LinkedHashMap<>(),attributes=new LinkedHashMap<>();Map<String,String> types=new LinkedHashMap<>();
-        for(var sampler:declared.samplers().entrySet())if(descriptors.contains(sampler.getValue()))samplers.put(sampler.getKey(),sampler.getValue());
+        Map<String,Integer> samplers=new LinkedHashMap<>(),attributes=new LinkedHashMap<>();Map<String,String> types=new LinkedHashMap<>(),samplerTypes=new LinkedHashMap<>();
+        for(var sampler:declared.samplers().entrySet())if(descriptors.contains(sampler.getValue())){samplers.put(sampler.getKey(),sampler.getValue());samplerTypes.put(sampler.getKey(),declared.samplerTypes().get(sampler.getKey()));}
         for(var attribute:declared.attributes().entrySet())if(vs.inputs.contains(attribute.getValue())){
             attributes.put(attribute.getKey(),attribute.getValue());types.put(attribute.getKey(),declared.attributeTypes().get(attribute.getKey()));
         }
         boolean block=descriptors.contains(0);
-        return new ProgramBindings(block?declared.uniforms():Map.of(),block?declared.uniformBytes():0,samplers,attributes,declared.varyings(),types);
+        return new ProgramBindings(block?declared.uniforms():Map.of(),block?declared.uniformBytes():0,samplers,attributes,declared.varyings(),types,samplerTypes);
     }
     private static ShaderCompilationException invalid(){return new ShaderCompilationException("Malformed compiled SPIR-V interface");}
 }

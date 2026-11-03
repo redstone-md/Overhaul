@@ -76,7 +76,7 @@ public final class PackProgramTranslator {
             layout.put(uniform.getKey(), new ProgramBindings.Uniform(type, offset, size));
             offset += size;
         }
-        ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes);
+        ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes,samplers);
         return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings),
                 rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings),bindings,coordinates);
     }
@@ -109,7 +109,7 @@ public final class PackProgramTranslator {
         while (matcher.find()) {
             String kind = matcher.group(1), type = matcher.group(2), name = matcher.group(3);
             if (kind.equals("uniform")) {
-                if (type.equals("sampler2D")) put(samplers,name,type);
+                if (type.equals("sampler2D")||type.equals("sampler2DShadow")) put(samplers,name,type);
                 else if (SIZES.containsKey(type)) put(uniforms,name,type);
                 else throw unsupported("Unsupported uniform type: " + type);
                 if (samplers.containsKey(name) && uniforms.containsKey(name)) throw unsupported("Conflicting uniform: " + name);
@@ -153,6 +153,8 @@ public final class PackProgramTranslator {
             body = body.replaceAll("\\b" + Pattern.quote(sampler) + "\\b", "overhaulSampler_" + sampler);
         }
         for(var function:TEXTURE_FUNCTIONS.entrySet())body=body.replaceAll("\\b"+function.getKey()+"\\b",function.getValue());
+        boolean shadow2D=Pattern.compile("\\bshadow2D\\s*\\(").matcher(body).find(),shadowProj=Pattern.compile("\\bshadow2DProj\\s*\\(").matcher(body).find();
+        body=body.replaceAll("\\bshadow2D\\b","overhaulShadow2D").replaceAll("\\bshadow2DProj\\b","overhaulShadow2DProj");
         body = body.replaceAll("\\bgl_VertexID\\b", "gl_VertexIndex")
                 .replaceAll("\\bgl_InstanceID\\b", "gl_InstanceIndex");
         StringBuilder prefix = new StringBuilder("#version 450\n");
@@ -165,7 +167,7 @@ public final class PackProgramTranslator {
             prefix.append("};\n");
         }
         for (String sampler : samplers.keySet()) prefix.append("layout(set=0,binding=")
-                .append(bindings.samplers().get(sampler)).append(") uniform sampler2D overhaulSampler_").append(sampler).append(";\n");
+                .append(bindings.samplers().get(sampler)).append(") uniform ").append(samplers.get(sampler)).append(" overhaulSampler_").append(sampler).append(";\n");
         if (vertex) for (Map.Entry<String,String> attribute : attributes.entrySet()) prefix.append("layout(location=")
                 .append(bindings.attributes().get(attribute.getKey())).append(") in ").append(attribute.getValue())
                 .append(' ').append(attribute.getKey()).append(";\n");
@@ -185,6 +187,14 @@ public final class PackProgramTranslator {
             if (body.contains("gl_FragData")) throw unsupported("Fragment output indices must be constant in [0,7]");
             for (int location : outputs) prefix.append("layout(location=").append(location)
                     .append(") out vec4 overhaulColor").append(location).append(";\n");
+        }
+        if(shadow2D){
+            prefix.append("vec4 overhaulShadow2D(sampler2DShadow s,vec3 p){return vec4(texture(s,p));}\n");
+            if(!vertex)prefix.append("vec4 overhaulShadow2D(sampler2DShadow s,vec3 p,float bias){return vec4(texture(s,p,bias));}\n");
+        }
+        if(shadowProj){
+            prefix.append("vec4 overhaulShadow2DProj(sampler2DShadow s,vec4 p){return vec4(textureProj(s,p));}\n");
+            if(!vertex)prefix.append("vec4 overhaulShadow2DProj(sampler2DShadow s,vec4 p,float bias){return vec4(textureProj(s,p,bias));}\n");
         }
         return prefix.append(BODY_MARKER).append(body).toString();
     }
