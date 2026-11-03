@@ -414,3 +414,7 @@ signed-byte quantization. Sprite UV mappings and pose-dependent sheeted decals
 need explicit equivalent paths. Preserve phase order, prepared render-type state,
 resource reload and fenced lifetimes. Items, moving blocks and custom geometry
 are additional domains. This is a design contract, not an implementation claim.
+
+The active tracer bullet uses shared quad geometry and 124-byte polygon instances
+to preserve per-face ordering and exact mapped/decal UVs. See the
+[model integration contract](docs/MODEL_INTEGRATION.md) before extending it.

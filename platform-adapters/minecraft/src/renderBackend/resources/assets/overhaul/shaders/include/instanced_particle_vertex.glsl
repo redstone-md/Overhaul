@@ -5,6 +5,7 @@
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:projection.glsl>
 #include <minecraft:sample_lightmap.glsl>
+#include <overhaul:packed_vertex.glsl>
 
 uniform sampler2D Sampler2;
 
@@ -18,11 +19,7 @@ void overhaulParticleVertex(vec3 position, vec2 uv, uint packedColor, uint packe
     sphericalVertexDistance = fog_spherical_distance(position);
     cylindricalVertexDistance = fog_cylindrical_distance(position);
     texCoord0 = uv;
-    vec4 color = vec4(float((packedColor >> 16u) & 255u), float((packedColor >> 8u) & 255u),
-                      float(packedColor & 255u), float(packedColor >> 24u)) / 255.0;
-    ivec2 light = ivec2(int(packedLight & 65535u), int(packedLight >> 16u));
-    light = (light ^ ivec2(32768)) - ivec2(32768);
-    vertexColor = color * sample_lightmap(Sampler2, light);
+    vertexColor = overhaulUnpackArgb(packedColor) * sample_lightmap(Sampler2, overhaulUnpackSignedShorts(packedLight));
 }
 
 #endif
