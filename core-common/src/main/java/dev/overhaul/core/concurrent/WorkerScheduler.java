@@ -22,10 +22,20 @@ public final class WorkerScheduler implements AutoCloseable {
         Objects.requireNonNull(threadPrefix, "threadPrefix");
         jobs = new BoundedMpmcQueue<Job<?>>(queueCapacity);
         workers = new Thread[workerCount];
-        for (int i = 0; i < workerCount; i++) {
-            workers[i] = new Thread(this::work, threadPrefix + "-" + i);
-            workers[i].setDaemon(true);
-            workers[i].start();
+        int started = 0;
+        try {
+            for (int i = 0; i < workerCount; i++) {
+                workers[i] = new Thread(this::work, threadPrefix + "-" + i);
+                workers[i].setDaemon(true);
+                workers[i].start();
+                started++;
+            }
+        } catch (RuntimeException | Error failure) {
+            // The failed/uncreated suffix is never joined. Previously started
+            // workers must stop before this inaccessible scheduler is abandoned.
+            try { stopWorkers(started); }
+            catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+            throw failure;
         }
     }
 
@@ -68,16 +78,20 @@ public final class WorkerScheduler implements AutoCloseable {
 
     public int pendingTasks() { return pending.get(); }
 
-    @Override public void close() {
-        for (Thread worker : workers) {
+    @Override public void close() { stopWorkers(workers.length); }
+
+    private void stopWorkers(int started) {
+        for (int i = 0; i < started; i++) {
+            Thread worker = workers[i];
             if (worker == Thread.currentThread()) {
                 throw new IllegalStateException("worker cannot join its own scheduler");
             }
         }
         accepting.set(false);
-        for (Thread worker : workers) LockSupport.unpark(worker);
+        for (int i = 0; i < started; i++) LockSupport.unpark(workers[i]);
         boolean interrupted = false;
-        for (Thread worker : workers) {
+        for (int i = 0; i < started; i++) {
+            Thread worker = workers[i];
             for (;;) {
                 try { worker.join(); break; }
                 catch (InterruptedException exception) { interrupted = true; }
