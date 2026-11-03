@@ -100,6 +100,8 @@ final class BackendSmokeProbe {
         report.put("capture","GPU surface source with presentation Y flip applied");
         report.put("submissionStatistics",owner.submissionStatistics());
         report.put("bufferStorageStatistics",owner.bufferStorage().snapshot());
+        report.put("descriptorPoolStatistics",owner.descriptorPools().stats());
+        report.put("attachmentPoolStatistics",owner.attachments().statistics());
         try {
             Files.createDirectories(directory);
             Files.writeString(directory.resolve("receipt.json"),new GsonBuilder().setPrettyPrinting().create().toJson(report));

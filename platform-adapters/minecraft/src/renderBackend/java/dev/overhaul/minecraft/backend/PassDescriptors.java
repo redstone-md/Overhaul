@@ -3,11 +3,11 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.util.TextureViewAndSampler;
+import dev.overhaul.vulkan.FrameRing;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,13 +19,13 @@ final class PassDescriptors implements AutoCloseable {
     private static final int SETS_PER_POOL=64;
     private record Key(OverhaulPipeline pipeline,List<Object> values) {}
     private record BufferView(GpuBufferSlice slice,int format) {}
-    private static final class Pool {final long handle;int remaining=SETS_PER_POOL;Pool(long handle){this.handle=handle;}}
     private final NativePassResources resources;
-    private final Map<OverhaulPipeline,List<Pool>> pools=new HashMap<>();
+    private final DescriptorPoolCache cache;
+    private final Map<DescriptorPoolCache.Shape,List<DescriptorPoolCache.Lease>> pools=new HashMap<>();
     private final Map<Key,Long> sets=new HashMap<>();
     private final Map<BufferView,Long> bufferViews=new HashMap<>();
 
-    PassDescriptors(NativePassResources resources){this.resources=resources;}
+    PassDescriptors(OverhaulDeviceBackend resources){this.resources=resources;cache=resources.descriptorPools();}
     long set(OverhaulPipeline pipeline,Object[] uniforms){
         List<Object> activeValues=new ArrayList<>();var active=pipeline.activeUniforms();
         for(int slot=active.nextSetBit(0);slot>=0;slot=active.nextSetBit(slot+1)){
@@ -34,10 +34,10 @@ final class PassDescriptors implements AutoCloseable {
         }
         Key key=new Key(pipeline,List.copyOf(activeValues));Long existing=sets.get(key);if(existing!=null)return existing;
         try(MemoryStack stack=MemoryStack.stackPush()){
-            Pool pool=pool(pipeline,stack);LongBuffer pointer=stack.mallocLong(1);
+            DescriptorPoolCache.Lease pool=pool(pipeline);LongBuffer pointer=stack.mallocLong(1);
             check(vkAllocateDescriptorSets(resources.context().device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default()
-                    .descriptorPool(pool.handle).pSetLayouts(stack.longs(pipeline.descriptorLayout())),pointer),"overhaul descriptor allocation");
-            pool.remaining--;long set=pointer.get(0);
+                    .descriptorPool(pool.handle()).pSetLayouts(stack.longs(pipeline.descriptorLayout())),pointer),"overhaul descriptor allocation");
+            pool.allocated();long set=pointer.get(0);
             VkWriteDescriptorSet.Buffer writes=VkWriteDescriptorSet.calloc(active.cardinality(),stack);int output=0;
             VkPhysicalDeviceProperties properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(resources.context().physicalDevice(),properties);
             for(int slot=active.nextSetBit(0);slot>=0;slot=active.nextSetBit(slot+1)){
@@ -74,19 +74,15 @@ final class PassDescriptors implements AutoCloseable {
         }
     }
     static void checkRange(GpuBufferSlice slice,long size){if(slice.offset()<0||slice.length()<1||slice.offset()>size||slice.length()>size-slice.offset())throw new IllegalArgumentException("Buffer slice outside native allocation");}
-    private Pool pool(OverhaulPipeline pipeline,MemoryStack stack){
-        List<Pool> available=pools.computeIfAbsent(pipeline,ignored->new ArrayList<>());
-        if(!available.isEmpty()&&available.getLast().remaining>0)return available.getLast();
-        EnumMap<UniformType,Integer> counts=new EnumMap<>(UniformType.class);
-        for(var uniform:pipeline.uniforms())counts.merge(uniform.type(),SETS_PER_POOL,Integer::sum);
-        VkDescriptorPoolSize.Buffer sizes=VkDescriptorPoolSize.calloc(counts.size(),stack);int index=0;
-        for(var count:counts.entrySet())sizes.get(index++).type(OverhaulPipelineState.descriptor(count.getKey())).descriptorCount(count.getValue());
-        LongBuffer pointer=stack.mallocLong(1);
-        check(vkCreateDescriptorPool(resources.context().device(),VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(SETS_PER_POOL).pPoolSizes(sizes),null,pointer),"overhaul descriptor arena");
-        Pool result=new Pool(pointer.get(0));available.add(result);return result;
+    private DescriptorPoolCache.Lease pool(OverhaulPipeline pipeline){
+        DescriptorPoolCache.Shape shape=DescriptorPoolCache.Shape.of(pipeline.uniforms(),SETS_PER_POOL);
+        List<DescriptorPoolCache.Lease> available=pools.computeIfAbsent(shape,ignored->new ArrayList<>());
+        if(!available.isEmpty()&&available.getLast().hasCapacity())return available.getLast();
+        DescriptorPoolCache.Lease result=cache.acquire(shape);available.add(result);return result;
     }
+    void submitted(FrameRing.Submission completion){for(var leases:pools.values())for(var lease:leases)lease.submitted(completion);}
     @Override public void close(){
-        for(var entries:pools.values())for(Pool pool:entries)vkDestroyDescriptorPool(resources.context().device(),pool.handle,null);
+        for(var leases:pools.values())for(var lease:leases)lease.close();
         for(long view:bufferViews.values())vkDestroyBufferView(resources.context().device(),view,null);
         pools.clear();sets.clear();bufferViews.clear();
     }

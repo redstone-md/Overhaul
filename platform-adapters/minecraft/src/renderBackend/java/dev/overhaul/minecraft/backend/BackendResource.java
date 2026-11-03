@@ -48,6 +48,7 @@ public abstract class BackendResource implements AutoCloseable {
         owner.requireOwner();
         if (closing) return;
         closing=true;
+        owner.resourceClosing(this);
         if (pins==0) destroy();
     }
 

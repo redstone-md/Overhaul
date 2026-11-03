@@ -22,6 +22,8 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     private final GpuAllocator allocator;
     private final ImmediateCommands commands;
     private final OverhaulCommandQueue queue;
+    private final DescriptorPoolCache descriptorPools;
+    private final AttachmentPool attachments;
     private final DeviceInfo info;
     private final BackendSmokeProbe smoke;
     private final BufferStorageStatistics bufferStorage=new BufferStorageStatistics();
@@ -50,6 +52,8 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
             context.close(); throw failure;
         }
         allocator=allocated; commands=lane; queue=work;
+        descriptorPools=new DescriptorPoolCache(context);
+        attachments=new AttachmentPool(this,64);
         smoke=new BackendSmokeProbe(this);
     }
 
@@ -65,6 +69,9 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     public ImmediateCommands commands() { requireOwner(); if (queue!=null) queue.flush(); return commands; }
     OverhaulCommandQueue queue() { requireOwner(); return queue; }
     BufferStorageStatistics bufferStorage() { requireOwner(); return bufferStorage; }
+    DescriptorPoolCache descriptorPools() { requireOwner(); return descriptorPools; }
+    AttachmentPool attachments() { requireOwner(); return attachments; }
+    void resourceClosing(BackendResource resource) { requireOwner(); attachments.invalidate(resource); }
     void rendered(int draws) { smoke.rendered(draws); }
     void presented(GpuTextureView source) { smoke.presented(source); }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() { requireOpen(); return smoke.awaitWorldCapture(); }
@@ -135,6 +142,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
             for (var encoder:encoders) encoder.close();
             for (var surface:surfaces) surface.close();
             queue.close();
+            attachments.close(); descriptorPools.close();
             closing=true;
         }
         context.waitIdle();

@@ -5,19 +5,17 @@ import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
-import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import static org.lwjgl.vulkan.VK10.*;
-import static dev.overhaul.vulkan.VulkanException.check;
 
-/** Attachment views, load/clear state and native render-pass lifetime belong to one submission. */
+/** Per-pass clear state leases exclusive fence-retired native objects from the device cache. */
 final class PassAttachments implements AutoCloseable {
     private record Entry(GpuImageView view,boolean depth,float[] color,Double clearDepth) {}
     private final NativePassResources resources;
     private final List<Entry> entries=new ArrayList<>();
-    private final List<GpuImageView> framebufferViews=new ArrayList<>();
+    private final AttachmentPool.Lease lease;
     private final List<Integer> colorFormats=new ArrayList<>();
     private final int[] colorReferences;
     private int depthReference=VK_ATTACHMENT_UNUSED;
@@ -25,14 +23,16 @@ final class PassAttachments implements AutoCloseable {
     final int width,height,x,y,areaWidth,areaHeight;
     long renderPass,framebuffer;
 
-    PassAttachments(NativePassResources resources,RenderPassDescriptor descriptor,Consumer<Object> retain) {
+    PassAttachments(OverhaulDeviceBackend resources,RenderPassDescriptor descriptor,Consumer<Object> retain) {
         this.resources=resources;
         int width=0,height=0;
+        List<OverhaulTextureView> sources=new ArrayList<>();
         colorReferences=new int[descriptor.colorAttachments().size()];
         for(int slot=0;slot<colorReferences.length;slot++) {
             var attachment=descriptor.colorAttachments().get(slot);
             if(attachment==null){colorReferences[slot]=VK_ATTACHMENT_UNUSED;colorFormats.add(VK_FORMAT_UNDEFINED);continue;}
             retain.accept(attachment.textureView());GpuImageView view=resources.texture(attachment.textureView());
+            sources.add((OverhaulTextureView)attachment.textureView());
             if(view.layerCount()!=1)throw new UnsupportedOperationException("Layered color attachments require an explicit layer view");
             float[] clear=attachment.clearValue().map(value->new float[]{value.x(),value.y(),value.z(),value.w()}).orElse(null);
             colorReferences[slot]=entries.size();entries.add(new Entry(view,false,clear,null));colorFormats.add(view.image().format().vkFormat());
@@ -42,6 +42,7 @@ final class PassAttachments implements AutoCloseable {
         var depth=descriptor.depthAttachment();
         if(depth!=null){
             retain.accept(depth.textureView());GpuImageView view=resources.texture(depth.textureView());
+            sources.add((OverhaulTextureView)depth.textureView());
             if(view.layerCount()!=1)throw new UnsupportedOperationException("Layered depth attachments require an explicit layer view");
             depthReference=entries.size();depthFormat=view.image().format().vkFormat();
             entries.add(new Entry(view,true,null,depth.clearValue().isPresent()?depth.clearValue().getAsDouble():null));
@@ -53,6 +54,11 @@ final class PassAttachments implements AutoCloseable {
         if(width<1||height<1)throw new IllegalArgumentException("A render pass needs attachments or a positive render area");
         this.width=width;this.height=height;x=area==null?0:area.x();y=area==null?0:area.y();areaWidth=area==null?width:area.width();areaHeight=area==null?height:area.height();
         if(x<0||y<0||areaWidth<1||areaHeight<1||(long)x+areaWidth>width||(long)y+areaHeight>height)throw new IllegalArgumentException("Render area outside attachment bounds");
+        List<AttachmentKey.Target> targets=new ArrayList<>();
+        for(var entry:entries){var view=entry.view();targets.add(new AttachmentKey.Target(view.image(),view.baseMip(),view.baseLayer(),
+                view.image().format().vkFormat(),view.image().format().aspectMask(),entry.depth(),entry.depth()?entry.clearDepth()!=null:entry.color()!=null));}
+        List<Integer> colors=new ArrayList<>();for(int reference:colorReferences)colors.add(reference);
+        lease=resources.attachments().acquire(new AttachmentKey(targets,colors,depthReference,width,height,1),sources);
     }
     List<Integer> colorFormats(){return List.copyOf(colorFormats);}
     int depthFormat(){return depthFormat;}
@@ -79,35 +85,8 @@ final class PassAttachments implements AutoCloseable {
         }
     }
     private void create(){
-        if(renderPass!=0)return;
-        try(MemoryStack stack=MemoryStack.stackPush()){
-            VkAttachmentDescription.Buffer attachments=VkAttachmentDescription.calloc(entries.size(),stack);
-            LongBuffer views=stack.mallocLong(entries.size());
-            for(int index=0;index<entries.size();index++){
-                Entry entry=entries.get(index);GpuImageView view=entry.view();
-                GpuImageView attachmentView=view.image().view(view.baseMip(),1,view.baseLayer(),1,VK_IMAGE_VIEW_TYPE_2D,view.image().format().aspectMask());
-                framebufferViews.add(attachmentView);views.put(attachmentView.handle());int layout=entry.depth()?VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                attachments.get(index).format(view.image().format().vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT)
-                        .loadOp(entry.depth()?(entry.clearDepth()!=null?VK_ATTACHMENT_LOAD_OP_CLEAR:VK_ATTACHMENT_LOAD_OP_LOAD):(entry.color()!=null?VK_ATTACHMENT_LOAD_OP_CLEAR:VK_ATTACHMENT_LOAD_OP_LOAD))
-                        .storeOp(VK_ATTACHMENT_STORE_OP_STORE).stencilLoadOp(VK_ATTACHMENT_LOAD_OP_LOAD).stencilStoreOp(VK_ATTACHMENT_STORE_OP_STORE)
-                        .initialLayout(layout).finalLayout(layout);
-            }views.flip();
-            VkAttachmentReference.Buffer colors=VkAttachmentReference.calloc(colorReferences.length,stack);
-            for(int slot=0;slot<colorReferences.length;slot++)colors.get(slot).attachment(colorReferences[slot]).layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            VkSubpassDescription.Buffer subpass=VkSubpassDescription.calloc(1,stack).pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(colors.remaining()).pColorAttachments(colors);
-            if(depthReference!=VK_ATTACHMENT_UNUSED)subpass.pDepthStencilAttachment(VkAttachmentReference.calloc(stack).attachment(depthReference).layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
-            VkSubpassDependency.Buffer dependencies=VkSubpassDependency.calloc(2,stack);
-            int stages=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            int access=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            dependencies.get(0).srcSubpass(VK_SUBPASS_EXTERNAL).dstSubpass(0).srcStageMask(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).dstStageMask(stages).srcAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(access);
-            dependencies.get(1).srcSubpass(0).dstSubpass(VK_SUBPASS_EXTERNAL).srcStageMask(stages).dstStageMask(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).srcAccessMask(access).dstAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
-            LongBuffer pointer=stack.mallocLong(1);
-            check(vkCreateRenderPass(resources.context().device(),VkRenderPassCreateInfo.calloc(stack).sType$Default().pAttachments(attachments).pSubpasses(subpass).pDependencies(dependencies),null,pointer),"overhaul render pass");renderPass=pointer.get(0);
-            check(vkCreateFramebuffer(resources.context().device(),VkFramebufferCreateInfo.calloc(stack).sType$Default().renderPass(renderPass).pAttachments(views).width(width).height(height).layers(1),null,pointer),"overhaul framebuffer");framebuffer=pointer.get(0);
-        }catch(RuntimeException|Error failure){close();throw failure;}
+        lease.create();renderPass=lease.renderPass();framebuffer=lease.framebuffer();
     }
-    void retainUntil(dev.overhaul.vulkan.FrameRing.Submission completion) {
-        for (var view:framebufferViews) view.retainUntil(completion);
-    }
-    @Override public void close(){if(framebuffer!=0)vkDestroyFramebuffer(resources.context().device(),framebuffer,null);if(renderPass!=0)vkDestroyRenderPass(resources.context().device(),renderPass,null);framebuffer=renderPass=0;for(var view:framebufferViews)view.close();framebufferViews.clear();}
+    void retainUntil(dev.overhaul.vulkan.FrameRing.Submission completion) { lease.retainUntil(completion); }
+    @Override public void close(){lease.close();framebuffer=renderPass=0;}
 }

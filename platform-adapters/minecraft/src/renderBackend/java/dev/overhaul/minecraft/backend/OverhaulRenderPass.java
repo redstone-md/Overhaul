@@ -53,6 +53,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private PassBindings.Scissor scissor;
     private boolean sealed,recorded,recordingSucceeded,closed,complete;
     private int drawCount;
+    private dev.overhaul.vulkan.FrameRing.Submission submission;
 
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
         this.owner=owner;owner.requireOpen();descriptors=new PassDescriptors(owner);
@@ -157,7 +158,10 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         commands.add(new Command(null,command->owner.timestamp(command,pool,index)));
     }
     public int drawCount(){return drawCount;}
-    void retainAttachmentsUntil(dev.overhaul.vulkan.FrameRing.Submission completion) { attachments.retainUntil(completion); }
+    void retainAttachmentsUntil(dev.overhaul.vulkan.FrameRing.Submission completion) {
+        submission=completion;
+        descriptors.submitted(completion); attachments.retainUntil(completion);
+    }
     /** Freezes frontend capture without beginning native recording or waiting for the GPU. */
     public void seal(){
         owner.requireOpen();if(closed)throw new IllegalStateException("Render pass is closed");if(sealed)return;
@@ -206,7 +210,9 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private void validateDirectMultiDraw(int count){requireCapture();checkUnsigned(count);if(pipeline==null)throw new IllegalStateException("Multi-draw requires a pipeline");if(count>1&&pipeline.usesDrawIndex())throw new UnsupportedOperationException("Native direct multi-draw extension is unavailable for DrawIndex shaders");}
     private void releasePins(){RuntimeException failure=null;for(int index=pins.size()-1;index>=0;index--)try{pins.get(index).close();}catch(Exception error){if(failure==null)failure=new IllegalStateException("Resource pin release failed",error);else failure.addSuppressed(error);}pins.clear();retained.clear();if(failure!=null)throw failure;}
     @Override public void close(){
-        if(closed)return;owner.requireOwner();closed=true;
+        if(closed)return;owner.requireOwner();
+        if(submission!=null){submission.await();if(closed)return;}
+        closed=true;
         try{descriptors.close();attachments.close();}
         finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();timestampResets.clear();timestampKeys.clear();sampled.clear();bufferReads.clear();releasePins();}}
     }
