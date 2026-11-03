@@ -20,13 +20,14 @@ import java.util.concurrent.CompletableFuture;
 
 /** End-to-end mutations exercise ordinary worker compilation, installed meshes, reload and native presentation. */
 public final class TerrainWorldProbe implements WorldSmokeProbe {
-    private enum Phase { INITIAL,EDIT,CAPTURE,RELOAD,OCCLUSION,PARTICLES,WEATHER,DONE }
+    private enum Phase { INITIAL,EDIT,CAPTURE,RELOAD,OCCLUSION,PARTICLES,WEATHER,MODELS,DONE }
     private final Thread owner=Thread.currentThread();
     private final CompletableFuture<String> result=new CompletableFuture<>();
     private final TerrainFixtures fixtures=new TerrainFixtures();
     private final TerrainOcclusionProbe occlusion=new TerrainOcclusionProbe();
     private final ParticleWorldProbe particles=new ParticleWorldProbe();
     private final WeatherWorldProbe weather=new WeatherWorldProbe();
+    private final ModelWorldProbe models=new ModelWorldProbe();
     private final List<Map<String,Object>> checkpoints=new ArrayList<>();
     private final List<OverhaulSectionCompiler> retired=new ArrayList<>();
     private final long[] sections={SectionPos.asLong(0,0,0),SectionPos.asLong(1,0,0)};
@@ -61,7 +62,7 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
         requireOwner();if(result.isDone())return;
         try {
             // Delegated probes own per-stage deadlines and report their current readiness state.
-            boolean delegated=phase==Phase.OCCLUSION||phase==Phase.PARTICLES||phase==Phase.WEATHER;
+            boolean delegated=phase==Phase.OCCLUSION||phase==Phase.PARTICLES||phase==Phase.WEATHER||phase==Phase.MODELS;
             if(!delegated&&System.nanoTime()-lastProgress>java.util.concurrent.TimeUnit.SECONDS.toNanos(40))
                 throw new IllegalStateException("Terrain smoke stalled in "+phase+"; workDone="+work.isDone());
             if(phase==Phase.INITIAL&&work.isDone()) {
@@ -91,6 +92,9 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
                 if(work.isDone()){work.join();work=weather.capture(minecraft,null);phase=Phase.WEATHER;lastProgress=System.nanoTime();}
             } else if(phase==Phase.WEATHER) {
                 weather.tick();
+                if(work.isDone()){work.join();work=models.capture(minecraft,null);phase=Phase.MODELS;lastProgress=System.nanoTime();}
+            } else if(phase==Phase.MODELS) {
+                models.tick();
                 if(work.isDone()){work.join();phase=Phase.DONE;writeReceipt("CAPTURED");result.complete("backend=Overhaul Vulkan;terrainStages="+checkpoints.size()+";"+imageEvidence);}
             }
         } catch(RuntimeException failure) {
@@ -181,6 +185,7 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
         occlusion.disconnected();
         particles.disconnected();
         weather.disconnected();
+        models.disconnected();
         Map<String,Long> workers=dispatcher.overhaul$workerStatistics();
         for(String key:List.of("terrainActiveTasks","terrainWorkerPending","terrainWorkerPumps"))if(workers.get(key)!=0)throw new IllegalStateException("Terrain workers remain after disconnect: "+workers);
         if(compiler.activeLeases()!=0||retired.stream().anyMatch(old->old.activeLeases()!=0))throw new IllegalStateException("Terrain page leases remain after unload");
@@ -208,5 +213,5 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
         catch(IOException failure){throw new IllegalStateException("Cannot write terrain smoke receipt",failure);}
     }
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Terrain smoke belongs to the client owner");}
-    @Override public void close(){requireOwner();weather.close();particles.close();occlusion.close();if(!result.isDone())result.completeExceptionally(new IllegalStateException("Terrain smoke closed before completion"));}
+    @Override public void close(){requireOwner();models.close();weather.close();particles.close();occlusion.close();if(!result.isDone())result.completeExceptionally(new IllegalStateException("Terrain smoke closed before completion"));}
 }

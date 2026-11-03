@@ -21,7 +21,7 @@ tasks.withType(Test).configureEach {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 tasks.named('test') { useJUnitPlatform { excludeTags 'backend-native' } }
-tasks.register('backendNativeTest', Test) {
+['backendNativeTest','backendModelFmaTest'].each { taskName -> tasks.register(taskName, Test) {
     group = 'verification'
     description = 'Exercises the experimental RenderPearl backend against a real Vulkan device.'
     testClassesDirs = sourceSets.test.output.classesDirs
@@ -31,7 +31,15 @@ tasks.register('backendNativeTest', Test) {
     // Minecraft's process-owned RenderSystem cannot be initialized again after shutdown.
     forkEvery = 1
     maxParallelForks = 1
-}
+    // Avoid a fresh native JVM for fixture/helper classes that contain no tests.
+    include '**/*Test.class'
+    if (taskName == 'backendModelFmaTest') {
+        description = 'Verifies model GPU parity in fresh JVMs with JOML fused math enabled.'
+        systemProperty 'joml.useMathFma', 'true'
+        filter { includeTestsMatching 'dev.overhaul.minecraft.model.*' }
+        setIncludes(['dev/overhaul/minecraft/model/*Test.class'])
+    }
+} }
 tasks.named('processResources') {
     doLast {
         def metadata = new File(destinationDir, 'fabric.mod.json')
@@ -48,6 +56,7 @@ tasks.register('prepareBackendSmoke') {
             delete file("run/${targetName}/overhaul-occlusion-smoke-latest.json")
             delete file("run/${targetName}/overhaul-particle-smoke-latest.json")
             delete file("run/${targetName}/overhaul-weather-smoke-latest.json")
+            delete file("run/${targetName}/overhaul-model-render-smoke-latest.json")
         }
     }
 }
@@ -190,6 +199,68 @@ tasks.register('verifyBackendSmoke') {
                             if (after["oit${type}Calls"][phase] <= before["oit${type}Calls"][phase]) throw new GradleException("Weather omitted OIT phase ${phase}")
                         }
                     } else if (after["normal${type}Calls"] <= before["normal${type}Calls"]) throw new GradleException('Weather omitted normal drawing')
+                }
+            }
+            def modelsFile = file("run/${targetName}/overhaul-model-render-smoke-latest.json")
+            if (!modelsFile.isFile()) throw new GradleException('Missing ordinary model receipt')
+            def models = new groovy.json.JsonSlurper().parse(modelsFile)
+            if (models.status != 'PASS' || models.instanceStride != 124
+                    || models.stages*.stage != ['models-normal','models-animated','models-oit','models-reloaded','models-clear']
+                    || !receipt.modelStatistics.closed || !receipt.modelStatistics.pipelineCacheClosed
+                    || !receipt.modelStatistics.arenaClosed || receipt.modelStatistics.pendingGroups != 0
+                    || !receipt.modelStatistics.staticGeometryClosed || !models.restoredFixture.playerModeRestored
+                    || !models.restoredFixture.clientRestorationMatches || !models.restoredFixture.cleared
+                    || receipt.modelStatistics.cachedModels != 0 || receipt.modelStatistics.cachedCubes != 0
+                    || receipt.modelStatistics.cachedQuads != 0
+                    || receipt.modelStatistics.pipelineGenerations < 2) {
+                throw new GradleException("Ordinary model stages or resource lifetime failed: ${models}")
+            }
+            models.stages.each { stage ->
+                def before = stage.before
+                def after = stage.after
+                def clear = stage.stage == 'models-clear'
+                if (!stage.cameraAccepted || !stage.chestMetadataMatches || !after.eligible
+                        || stage.improvedTransparency != !['models-normal','models-animated'].contains(stage.stage)
+                        || after.fallbackGroups != before.fallbackGroups || after.fallbackSubmits != before.fallbackSubmits) {
+                    throw new GradleException("Model capture did not preserve camera, configuration or owned preparation: ${stage}")
+                }
+                if (clear) {
+                    if (!stage.fixture.cleared || stage.fixture.visibleClientPresent || stage.fixture.translucentClientPresent) {
+                        throw new GradleException("Owned model fixtures remain after clear: ${stage}")
+                    }
+                } else {
+                    [stage.serverInvisibilityBefore,stage.serverInvisibilityAfter].each { proof ->
+                        if (!proof.active || !proof.infinite || !proof.hiddenFlag || proof.entityTicks <= 0 || proof.serverThread != 'Server thread') {
+                            throw new GradleException("Translucent fixture lacks an actual ticked server invisibility effect: ${stage}")
+                        }
+                    }
+                    if (stage.serverInvisibilityAfter.serverGameTime < stage.serverInvisibilityBefore.serverGameTime
+                            || !stage.fixture.clientInvisibleFlag || stage.fixture.clientEffectListRequired
+                            || (stage.stage != 'models-animated' && !stage.fixture.translucentVisibleToCamera)) {
+                        throw new GradleException("Model capture does not match the actual effect synchronization contract: ${stage}")
+                    }
+                    def quads = after.preparedQuads - before.preparedQuads
+                    if (quads <= 0 || after.preparedInstanceBytes - before.preparedInstanceBytes != 124 * quads
+                            || after.recordedInstances <= before.recordedInstances || after.normalCalls <= before.normalCalls
+                            || stage.pigModelSubmits <= 0 || stage.chestModelSubmits <= 0) {
+                        throw new GradleException("Ordinary pig/chest features did not execute instanced records: ${stage}")
+                    }
+                    if (stage.stage == 'models-normal' && after.sortedQuads <= before.sortedQuads) throw new GradleException('Translucent model quad sorting did not execute')
+                    if (stage.stage == 'models-animated' && (stage.maximumChestOpenness <= 0.8 || stage.maximumWalkPositionDelta <= 0.03 || stage.maximumWalkSpeed <= 0.01)) {
+                        throw new GradleException('Actual chest/pig animation did not advance')
+                    }
+                    if (stage.stage == 'models-animated' && (!stage.chestGuiHidden || stage.clientMenuId != stage.openMenuProof.serverMenuId || stage.openMenuProof.serverOpenCount <= 0)) {
+                        throw new GradleException('Animated chest did not preserve the actual open server menu')
+                    }
+                    if (stage.stage == 'models-animated' && (!stage.navigationAccepted || !stage.fixture.serverNavigation.accepted
+                            || stage.fixture.serverNavigation.entityTicks <= stage.fixture.serverNavigation.enabledAtTick)) {
+                        throw new GradleException('Model animation did not use accepted vanilla navigation after a physics tick')
+                    }
+                    if (['models-oit','models-reloaded'].contains(stage.stage)) {
+                        ['DEPTH_BOUNDS','TRANSMITTANCE','ACCUMULATE'].each { phase ->
+                            if (after.oitCalls[phase] <= before.oitCalls[phase]) throw new GradleException("Model omitted OIT phase ${phase}")
+                        }
+                    }
                 }
             }
         }

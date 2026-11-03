@@ -14,6 +14,8 @@ import dev.overhaul.minecraft.terrain.TerrainCullingController;
 import dev.overhaul.minecraft.particle.OverhaulQuadParticleRenderer;
 import dev.overhaul.minecraft.particle.ParticleRendererAccess;
 import dev.overhaul.minecraft.weather.OverhaulWeatherRenderer;
+import dev.overhaul.minecraft.model.ModelRendererAccess;
+import dev.overhaul.minecraft.model.OverhaulModelRenderer;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -39,6 +41,7 @@ final class BackendSmokeProbe {
     private boolean terrainIndirectObserved;
     private OverhaulQuadParticleRenderer particles;
     private OverhaulWeatherRenderer weather;
+    private OverhaulModelRenderer models;
 
     BackendSmokeProbe(OverhaulDeviceBackend owner) {
         this.owner=owner;
@@ -57,6 +60,7 @@ final class BackendSmokeProbe {
         boolean world=minecraft.level!=null;
         if(world&&minecraft.gameRenderer.featureRenderDispatcher() instanceof ParticleRendererAccess access)particles=access.overhaul$particles();
         if(world&&minecraft.levelRenderer.weatherEffectRenderer() instanceof OverhaulWeatherRenderer actual)weather=actual;
+        if(world&&minecraft.gameRenderer.featureRenderDispatcher() instanceof ModelRendererAccess access)models=access.overhaul$models();
         if(world&&minecraft.levelRenderer.sectionRenderDispatcher() instanceof TerrainDispatcherAccess dispatcher
                 &&dispatcher.overhaul$sectionCompiler() instanceof TerrainCompilerAccess access) {
             terrainDispatcher=dispatcher;terrainCompiler=access.overhaul$compiler();
@@ -133,6 +137,7 @@ final class BackendSmokeProbe {
         report.put("terrainIndirectObserved",terrainIndirectObserved);
         if(particles!=null)report.put("particleStatistics",particles.snapshot());
         if(weather!=null)report.put("weatherStatistics",weather.snapshot());
+        if(models!=null)report.put("modelStatistics",models.snapshot());
         if(terrainCulling!=null)report.put("terrainCullingStatistics",terrainCulling.snapshot());
         report.put("bufferStorageStatistics",owner.bufferStorage().snapshot());
         report.put("descriptorPoolStatistics",owner.descriptorPools().stats());
