@@ -40,7 +40,7 @@ public final class OverhaulSectionCompiler implements AutoCloseable {
 
     public OverhaulSectionCompiler(boolean ambientOcclusion,boolean cutoutLeaves,
             BlockStateModelSet blockModels,FluidStateModelSet fluidModels,BlockColors blockColors) {
-        this(ambientOcclusion,cutoutLeaves,blockModels,fluidModels,blockColors,new DirectSlabPool(64*1024,64),true);
+        this(ambientOcclusion,cutoutLeaves,blockModels,fluidModels,blockColors,null,true);
     }
     public OverhaulSectionCompiler(boolean ambientOcclusion,boolean cutoutLeaves,
             BlockStateModelSet blockModels,FluidStateModelSet fluidModels,BlockColors blockColors,
@@ -54,7 +54,8 @@ public final class OverhaulSectionCompiler implements AutoCloseable {
         this.blockModels=Objects.requireNonNull(blockModels,"blockModels");
         this.fluidModels=Objects.requireNonNull(fluidModels,"fluidModels");
         this.blockColors=Objects.requireNonNull(blockColors,"blockColors");
-        this.pool=Objects.requireNonNull(pool,"pool");
+        this.pool=ownsPool?new DirectSlabPool(64*1024,64,new TerrainSlabAllocator())
+                :Objects.requireNonNull(pool,"pool");
         this.ownsPool=ownsPool;
     }
 
