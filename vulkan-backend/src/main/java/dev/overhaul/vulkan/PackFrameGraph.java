@@ -33,13 +33,5 @@ final class PackFrameGraph {
         operations.put(name,new VulkanRenderGraph.Operation(uses,record));previous=name;
     }
     VulkanRenderGraph create(VulkanContext context,ImmediateCommands lane){return new VulkanRenderGraph(context,graph.build(),operations,imports,lane);}
-    private static RenderGraph.Format format(ImageFormat format){return switch(format){
-        case RGBA8_UNORM->RenderGraph.Format.RGBA8;case RGBA8_SRGB->RenderGraph.Format.RGBA8_SRGB;
-        case BGRA8_UNORM->RenderGraph.Format.BGRA8;case BGRA8_SRGB->RenderGraph.Format.BGRA8_SRGB;
-        case RGBA16_SFLOAT->RenderGraph.Format.RGBA16F;case RGBA32_SFLOAT->RenderGraph.Format.RGBA32F;
-        case R32_SFLOAT->RenderGraph.Format.R32F;case D16_UNORM->RenderGraph.Format.DEPTH16;
-        case D24_UNORM_S8_UINT->RenderGraph.Format.DEPTH24_STENCIL8;case D32_SFLOAT->RenderGraph.Format.DEPTH32F;
-        case D32_SFLOAT_S8_UINT->RenderGraph.Format.DEPTH32F_STENCIL8;
-        default->throw new IllegalArgumentException("Unsupported imported pack frame format: "+format);
-    };}
+    private static RenderGraph.Format format(ImageFormat format){return GraphImageFormats.graph(format);}
 }

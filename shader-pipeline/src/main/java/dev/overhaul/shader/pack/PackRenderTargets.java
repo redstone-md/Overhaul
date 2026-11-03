@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 /** Active GLSL target directives and dimension-dependent allocations, independent of Vulkan ownership. */
 public final class PackRenderTargets {
     private static final Pattern DIRECTIVE=Pattern.compile("\\bconst\\s+(int|bool|vec4)\\s+((?:colortex(?:[0-9]|1[0-5])|gcolor|gdepth|gnormal|composite|gaux[1-4]))(Format|ClearColor|Clear|MipmapEnabled)\\s*=\\s*([^;]+);");
-    public enum Format { RGBA8,RGBA16F,RGBA32F,R32F }
+    public enum Format { R8,RG8,RGB8,RGBA8,R16,RG16,RGB16,RGBA16,R16F,RG16F,RGB16F,RGBA16F,R32F,RG32F,RGB32F,RGBA32F,RGB10_A2,R11F_G11F_B10F }
     public record Color(float red,float green,float blue,float alpha){
         public Color{if(!Float.isFinite(red)||!Float.isFinite(green)||!Float.isFinite(blue)||!Float.isFinite(alpha))throw invalid("Nonfinite target clear color");}
     }
@@ -22,6 +22,7 @@ public final class PackRenderTargets {
     private PackRenderTargets(Map<Integer,Target> targets){this.targets=Map.copyOf(targets);}
     public Map<Integer,Target> targets(){return targets;}
     public static String stripDirectives(String source){return DIRECTIVE.matcher(source).replaceAll("");}
+    static boolean hasDirective(String source){return DIRECTIVE.matcher(source).find();}
     public static int colorIndex(String sampler){
         if(sampler.matches("colortex(?:[0-9]|1[0-5])"))return Integer.parseInt(sampler.substring(8));
         for(int index=0;index<ALIASES.length;index++)if(ALIASES[index].equals(sampler))return index;
@@ -43,7 +44,8 @@ public final class PackRenderTargets {
         private boolean legacyDepth;
         public Builder(ShaderPackProperties properties){this.properties=properties;}
         public void scan(String source){
-            String text=source.replaceAll("(?s)/\\*.*?\\*/"," ").replaceAll("(?m)//.*$","");var matcher=DIRECTIVE.matcher(text);
+            // Pack constants in block comments are metadata; line-commented constants are disabled.
+            String text=source.replaceAll("(?m)//.*$","");var matcher=DIRECTIVE.matcher(text);
             while(matcher.find()){
                 String key=colorIndex(matcher.group(2))+matcher.group(3),value=matcher.group(4).trim();
                 String prior=directives.putIfAbsent(key,value);

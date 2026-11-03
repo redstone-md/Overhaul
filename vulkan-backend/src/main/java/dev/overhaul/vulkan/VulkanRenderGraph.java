@@ -223,19 +223,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
     }
 
     private static int format(RenderGraph.Format format) {
-        return switch (format) {
-            case RGBA8 -> VK_FORMAT_R8G8B8A8_UNORM;
-            case RGBA8_SRGB -> VK_FORMAT_R8G8B8A8_SRGB;
-            case BGRA8 -> VK_FORMAT_B8G8R8A8_UNORM;
-            case BGRA8_SRGB -> VK_FORMAT_B8G8R8A8_SRGB;
-            case RGBA16F -> VK_FORMAT_R16G16B16A16_SFLOAT;
-            case RGBA32F -> VK_FORMAT_R32G32B32A32_SFLOAT;
-            case R32F -> VK_FORMAT_R32_SFLOAT;
-            case DEPTH16 -> VK_FORMAT_D16_UNORM;
-            case DEPTH24_STENCIL8 -> VK_FORMAT_D24_UNORM_S8_UINT;
-            case DEPTH32F -> VK_FORMAT_D32_SFLOAT;
-            case DEPTH32F_STENCIL8 -> VK_FORMAT_D32_SFLOAT_S8_UINT;
-        };
+        return GraphImageFormats.image(format).vkFormat();
     }
 
     private void requireOpen() {

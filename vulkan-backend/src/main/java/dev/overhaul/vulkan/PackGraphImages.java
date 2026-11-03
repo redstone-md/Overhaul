@@ -26,9 +26,6 @@ final class PackGraphImages implements AutoCloseable {
                 |VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         owned.add(image);return image.view(0,1,0,1);
     }
-    private static ImageFormat format(PackRenderTargets.Format format){return switch(format){
-        case RGBA8->ImageFormat.RGBA8_UNORM;case RGBA16F->ImageFormat.RGBA16_SFLOAT;
-        case RGBA32F->ImageFormat.RGBA32_SFLOAT;case R32F->ImageFormat.R32_SFLOAT;
-    };}
+    private static ImageFormat format(PackRenderTargets.Format format){return GraphImageFormats.image(dev.overhaul.shader.graph.RenderGraph.Format.valueOf(format.name()));}
     @Override public void close(){for(int index=owned.size()-1;index>=0;index--)owned.get(index).close();owned.clear();colors.clear();}
 }
