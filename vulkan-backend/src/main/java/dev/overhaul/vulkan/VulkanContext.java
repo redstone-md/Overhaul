@@ -5,10 +5,10 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
-import java.nio.LongBuffer;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Objects;
 
-import static org.lwjgl.glfw.GLFWVulkan.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
@@ -24,6 +24,7 @@ public final class VulkanContext implements AutoCloseable {
     private VkDevice device;
     private VkQueue queue;
     private long surface;
+    private SurfaceProvider surfaceProvider;
     private int queueFamily;
     private int queueFlags;
     private String deviceName;
@@ -35,33 +36,37 @@ public final class VulkanContext implements AutoCloseable {
 
     private VulkanContext() { }
 
-    public static VulkanContext openHeadless() { return open(0, false); }
-    public static VulkanContext openHeadless(boolean validation) { return open(0, validation); }
+    public static VulkanContext openHeadless() { return open(null, false); }
+    public static VulkanContext openHeadless(boolean validation) { return open(null, validation); }
     public static boolean validationAvailable() { return ValidationMonitor.available(); }
 
     /** The caller owns the GLFW window and must keep it alive until this context closes. */
     public static VulkanContext openWindowed(long window) {
-        if (window == 0) throw new IllegalArgumentException("window is null");
-        return open(window, false);
+        return openWindowed(new GlfwSurfaceProvider(window), false);
     }
 
     public static VulkanContext openWindowed(long window, boolean validation) {
-        if (window == 0) throw new IllegalArgumentException("window is null");
-        return open(window, validation);
+        return openWindowed(new GlfwSurfaceProvider(window), validation);
     }
 
-    private static VulkanContext open(long window, boolean validate) {
+    public static VulkanContext openWindowed(SurfaceProvider provider) { return openWindowed(provider, false); }
+
+    public static VulkanContext openWindowed(SurfaceProvider provider, boolean validation) {
+        return open(Objects.requireNonNull(provider, "surface provider"), validation);
+    }
+
+    private static VulkanContext open(SurfaceProvider provider, boolean validate) {
         VulkanContext context = new VulkanContext();
         try {
-            context.initialize(window, validate);
+            context.initialize(provider, validate);
             return context;
         } catch (RuntimeException | Error failure) {
-            context.close();
+            try { context.close(); } catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
         }
     }
 
-    private void initialize(long window, boolean validate) {
+    private void initialize(SurfaceProvider provider, boolean validate) {
         if (MemoryStack.stackGet().getSize() < 256 * 1024)
             throw new IllegalStateException("Vulkan device enumeration needs a larger LWJGL stack; set "
                 + "-Dorg.lwjgl.system.stackSize=1024 before initializing LWJGL");
@@ -69,14 +74,22 @@ public final class VulkanContext implements AutoCloseable {
             VkApplicationInfo app = VkApplicationInfo.calloc(stack).sType$Default()
                 .pApplicationName(stack.UTF8("overhaul")).applicationVersion(1)
                 .pEngineName(stack.UTF8("overhaul")).engineVersion(1).apiVersion(VK_API_VERSION_1_1);
-            PointerBuffer extensions = window == 0 ? null : glfwGetRequiredInstanceExtensions();
-            if (window != 0 && extensions == null) throw new IllegalStateException("GLFW has no Vulkan surface extensions");
+            surfaceProvider = provider;
+            LinkedHashSet<String> names = new LinkedHashSet<>();
+            if (provider != null) {
+                List<String> required = Objects.requireNonNull(provider.requiredInstanceExtensions(), "required extensions");
+                if (required.isEmpty()) throw new IllegalArgumentException("surface provider requires no instance extensions");
+                for (String name : required) {
+                    if (name == null || name.isBlank()) throw new IllegalArgumentException("invalid Vulkan extension name");
+                    names.add(name);
+                }
+            }
             if (validate) {
                 validation = new ValidationMonitor();
-                PointerBuffer expanded = stack.mallocPointer((extensions == null ? 0 : extensions.remaining()) + 1);
-                if (extensions != null) expanded.put(extensions.duplicate());
-                extensions = expanded.put(stack.UTF8(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)).flip();
+                names.add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
             }
+            PointerBuffer extensions = names.isEmpty() ? null : stack.mallocPointer(names.size());
+            if (extensions != null) { for (String name : names) extensions.put(stack.UTF8(name)); extensions.flip(); }
             VkInstanceCreateInfo create = VkInstanceCreateInfo.calloc(stack).sType$Default()
                 .pApplicationInfo(app).ppEnabledExtensionNames(extensions);
             if (validation != null) create.ppEnabledLayerNames(stack.pointers(stack.UTF8(ValidationMonitor.LAYER)))
@@ -85,10 +98,9 @@ public final class VulkanContext implements AutoCloseable {
             check(vkCreateInstance(create, null, pointer), "vkCreateInstance");
             instance = new VkInstance(pointer.get(0), create);
             if (validation != null) validation.attach(instance);
-            if (window != 0) {
-                LongBuffer handle = stack.mallocLong(1);
-                check(glfwCreateWindowSurface(instance, window, null, handle), "glfwCreateWindowSurface");
-                surface = handle.get(0);
+            if (provider != null) {
+                surface = provider.createSurface(instance);
+                if (surface == 0) throw new IllegalStateException("surface provider returned a null Vulkan surface");
             }
             selectPhysicalDevice(stack);
             VkDeviceQueueCreateInfo.Buffer queues = VkDeviceQueueCreateInfo.calloc(1, stack)
@@ -186,7 +198,7 @@ public final class VulkanContext implements AutoCloseable {
             vkDeviceWaitIdle(device);
             vkDestroyDevice(device, null);
         }
-        if (surface != 0) vkDestroySurfaceKHR(instance, surface, null);
+        if (surface != 0) surfaceProvider.destroySurface(instance, surface);
         if (validation != null) validation.close();
         if (instance != null) vkDestroyInstance(instance, null);
         closed = true;

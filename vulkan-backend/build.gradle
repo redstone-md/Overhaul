@@ -26,3 +26,35 @@ tasks.register('vulkanSmoke', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.overhaul.vulkan.VulkanSmoke'
 }
+
+// Minecraft 26.3 uses SDL3 and newer LWJGL bindings. Keep its native runtime
+// isolated: mixing these bindings with the default 3.3.6 native jars is invalid.
+sourceSets {
+    sdlSmoke {
+        java.srcDir 'src/sdl/java'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+dependencies {
+    sdlSmokeImplementation project(':core-common')
+    sdlSmokeImplementation(project(':shader-pipeline')) { transitive = false }
+    sdlSmokeImplementation platform('org.lwjgl:lwjgl-bom:3.4.3')
+    ['lwjgl', 'lwjgl-vulkan', 'lwjgl-sdl', 'lwjgl-vma', 'lwjgl-shaderc'].each {
+        sdlSmokeImplementation "org.lwjgl:${it}"
+    }
+    ['lwjgl', 'lwjgl-sdl', 'lwjgl-vma', 'lwjgl-shaderc'].each {
+        sdlSmokeRuntimeOnly "org.lwjgl:${it}::${natives}"
+    }
+    if (rootProject.nativeOs == 'macos') {
+        sdlSmokeRuntimeOnly "org.lwjgl:lwjgl-vulkan::${natives}"
+    }
+}
+
+tasks.register('sdlVulkanSmoke', JavaExec) {
+    group = 'verification'
+    description = 'Runs the Vulkan surface/render path on an isolated SDL3/LWJGL 3.4.3 runtime.'
+    classpath = sourceSets.sdlSmoke.runtimeClasspath
+    mainClass = 'dev.overhaul.vulkan.sdl.SdlVulkanSmoke'
+}
