@@ -166,21 +166,29 @@ public final class VulkanRenderGraph implements AutoCloseable {
         executing=true;
         List<GpuImage.LayoutChange> changes=new ArrayList<>();
         try{
-            commands.submit(command->{
-                for (RenderGraph.Pass pass:graph.passes()) {
-                    Operation operation=operations.get(pass.name());
-                    Map<String,Image> scoped=new LinkedHashMap<>();
-                    for (Map.Entry<String,Usage> use:operation.uses().entrySet()) {
-                        transition(command,bindings.get(use.getKey()),use.getValue(),changes);
-                        scoped.put(use.getKey(),images.get(use.getKey()));
-                    }
-                    operation.record().accept(new PassContext(command,Map.copyOf(scoped)));
-                }
-            });
+            commands.submit(command->recordPasses(command,changes));
             for(GpuImage.LayoutChange change:changes)change.commit();
         }finally{
             try{for(int index=changes.size()-1;index>=0;index--)changes.get(index).close();}
             finally{executing=false;}
+        }
+    }
+
+    /** Records into an enclosing encoder; its caller owns submission, transaction commit/rollback and imported-resource pins. */
+    public void record(VkCommandBuffer command,List<GpuImage.LayoutChange> changes){
+        requireOpen();Objects.requireNonNull(changes,"changes");
+        if(command.getDevice()!=context.device())throw new IllegalArgumentException("Foreign graph command buffer");
+        if(executing)throw new IllegalStateException("Nested render graph recording");
+        if(ownsCommands||!owned.isEmpty())throw new IllegalStateException("Inline graphs must borrow their command lane and fence-owned image resources");
+        executing=true;try{recordPasses(command,changes);}finally{executing=false;}
+    }
+    private void recordPasses(VkCommandBuffer command,List<GpuImage.LayoutChange> changes){
+        for(RenderGraph.Pass pass:graph.passes()){
+            Operation operation=operations.get(pass.name());Map<String,Image> scoped=new LinkedHashMap<>();
+            for(var use:operation.uses().entrySet()){
+                transition(command,bindings.get(use.getKey()),use.getValue(),changes);scoped.put(use.getKey(),images.get(use.getKey()));
+            }
+            operation.record().accept(new PassContext(command,Map.copyOf(scoped)));
         }
     }
 

@@ -34,6 +34,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     private GpuSampler sampler,depthSampler,mipSampler;
     private final PackMipmaps mipmaps;
     private PackFullscreenPass depthPass;
+    private ImmediateCommands frameLane;
     private boolean initialized,closed,frameBegun,opaqueComplete;
     private final boolean scene;
 
@@ -84,7 +85,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(!initialized){clear(plan,images.depth,new PackRenderTargets.Color(1,1,1,1));clear(plan,images.opaqueDepth,new PackRenderTargets.Color(1,1,1,1));}
         try{
             recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.BEGIN,CompiledShaderPack.Stage.PREPARE),frame.textures());
-            execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;
+            execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
         }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
     }
     /** Executes after all opaque writes are submitted and before any classic translucent geometry is captured. */
@@ -110,7 +111,7 @@ public final class PackGraphRuntime implements AutoCloseable {
             importDepth(plan,frame,images.depth,"import-world-depth");
             boolean finalWritten=recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.COMPOSITE,CompiledShaderPack.Stage.FINAL),frame.textures());
             blit(plan,finalWritten?images.output:images.colors.get(swaps.current(0)),frame.color(),false,"export-scene-color");
-            execute(plan,lane);frameBegun=false;opaqueComplete=false;
+            execute(plan,lane);frameBegun=false;opaqueComplete=false;frameLane=null;
         }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
     }
     private void clearTargets(PackFrameGraph plan,PackRenderTargets.Color fog){
@@ -159,6 +160,16 @@ public final class PackGraphRuntime implements AutoCloseable {
         requireOpen();if(index<0||index>2)throw new IllegalArgumentException("Pack depth sampler index must be in [0,2]");
         return index==1?images.opaqueDepth:images.depth;
     }
+    /** Refreshes world depth between geometry runs without a nested queue submission or writable-attachment feedback. */
+    public void recordDepthSnapshot(VkCommandBuffer command,GpuImageView source,List<GpuImage.LayoutChange> changes){
+        requireOpen();if(!frameBegun||frameLane==null||depthPass==null)throw new IllegalStateException("No captured shader-pack depth generation");
+        if(source==null||source.mipCount()!=1||source.layerCount()!=1||!source.image().format().isDepth()||source.image().context()!=context||source.image().width(source.baseMip())!=width||source.image().height(source.baseMip())!=height)
+            throw new IllegalArgumentException("Depth snapshot must use the real full-frame scene attachment");
+        PackFrameGraph plan=new PackFrameGraph();String input=plan.read(source),output=plan.write(images.depth);
+        plan.pass("snapshot-scene-depth",Map.of(input,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE,output,VulkanRenderGraph.Usage.COLOR_WRITE),
+                pass->depthPass.record(pass,List.of(output),Map.of("inputDepth",input),depthSampler.handle()));
+        try(VulkanRenderGraph graph=plan.create(context,frameLane)){graph.record(command,changes);}
+    }
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
     public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(!program.scene())throw new IllegalArgumentException("Not a scene program");return outputs(swaps.route(program));}
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */
@@ -167,7 +178,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
         if(passes.keySet().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.BEGIN||program.stage()==CompiledShaderPack.Stage.PREPARE))
             throw new IllegalStateException("Use beginFrame to bind uniforms for pre-scene pack programs");
-        clearTargets(plan,fog);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;
+        clearTargets(plan,fog);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
     }
     public static NativeGraphicsPipeline.Color colorState(ShaderPackProperties.ProgramState state,int target){return PackPipelineState.color(state,target);}
     private List<GpuImageView> outputs(PackTargetSwaps.Routing routing){
@@ -223,6 +234,6 @@ public final class PackGraphRuntime implements AutoCloseable {
         context.requireOwner();if(closed)return;List<PackFullscreenPass> reverse=new ArrayList<>(passes.values());Collections.reverse(reverse);
         for(var pass:reverse)pass.close();passes.clear();if(depthPass!=null){depthPass.close();depthPass=null;}
         if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(mipSampler!=null){mipSampler.close();mipSampler=null;}
-        if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}closed=true;
+        if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}frameLane=null;closed=true;
     }
 }
