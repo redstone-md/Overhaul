@@ -13,8 +13,12 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
     public ShaderPackCatalog { programs = List.copyOf(programs); diagnostics = List.copyOf(diagnostics); }
 
     public static ShaderPackCatalog discover(ShaderPackSource pack, Integer dimension, Map<String,Boolean> options) throws IOException {
+        return discoverForDimension(pack,ShaderPackDimensions.legacyIdentifier(dimension),options);
+    }
+
+    public static ShaderPackCatalog discoverForDimension(ShaderPackSource pack, String dimension, Map<String,Boolean> options) throws IOException {
         List<String> paths = pack.paths();
-        String prefix = dimension != null && paths.contains("world"+dimension+"/") ? "world"+dimension+"/" : "";
+        String prefix = ShaderPackDimensions.select(pack,paths,dimension);
         ShaderPackProperties properties = ShaderPackProperties.parse(paths.contains("shaders.properties") ? pack.read("shaders.properties") : "");
         List<String> diagnostics = new ArrayList<>();
         for (String key : properties.unsupportedProperties()) diagnostics.add("Unsupported pack property: "+key);

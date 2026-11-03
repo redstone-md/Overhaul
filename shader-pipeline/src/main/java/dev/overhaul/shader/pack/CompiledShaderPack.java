@@ -27,7 +27,12 @@ public final class CompiledShaderPack {
 
     public static CompiledShaderPack compile(ShaderPackSource source,Integer dimension,Map<String,Boolean> options,
                                               Map<String,String> macros,ShadercCompiler compiler)throws IOException{
-        ShaderPackCatalog catalog=ShaderPackCatalog.discover(source,dimension,options);
+        return compileForDimension(source,ShaderPackDimensions.legacyIdentifier(dimension),options,macros,compiler);
+    }
+
+    public static CompiledShaderPack compileForDimension(ShaderPackSource source,String dimension,Map<String,Boolean> options,
+                                              Map<String,String> macros,ShadercCompiler compiler)throws IOException{
+        ShaderPackCatalog catalog=ShaderPackCatalog.discoverForDimension(source,dimension,options);
         if(catalog.programs().size()>512)throw new UnsupportedShaderException("Shader pack exceeds the 512-program generation bound");
         if(!catalog.diagnostics().isEmpty())throw new UnsupportedShaderException(String.join("\n",catalog.diagnostics()));
         List<Program> programs=new ArrayList<>();PackRenderTargets.Builder targets=new PackRenderTargets.Builder(catalog.properties());
