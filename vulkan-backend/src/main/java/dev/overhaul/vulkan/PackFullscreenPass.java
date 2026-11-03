@@ -50,7 +50,7 @@ final class PackFullscreenPass implements AutoCloseable {
             var attributes=layout==null?List.<NativeGraphicsPipeline.Attribute>of():layout.fields.stream().map(field->new NativeGraphicsPipeline.Attribute(field.location(),0,field.format(),field.offset())).toList();
             List<NativeGraphicsPipeline.Color> colors=new ArrayList<>();
             for(int index=0;index<formats.size();index++)colors.add(PackPipelineState.color(program.state(),formats.get(index)==VK_FORMAT_UNDEFINED?-1:
-                    program.stage()==CompiledShaderPack.Stage.FINAL?0:program.code().framebuffer().colorTargets().get(index)));
+                    program.stage()==CompiledShaderPack.Stage.FINAL?0:program.code().framebuffer().colorTargets().get(index),program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE?"shadowcolor":"colortex"));
             pipeline=new NativeGraphicsPipeline(context,renderPass,new NativeGraphicsPipeline.Description(shaders,bindings,attributes,new long[]{descriptorLayout},0,
                     VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,VK_POLYGON_MODE_FILL,VK_CULL_MODE_NONE,VK_FRONT_FACE_COUNTER_CLOCKWISE,
                     new NativeGraphicsPipeline.Depth(false,false,VK_COMPARE_OP_ALWAYS,0,0),colors,false,width,height));

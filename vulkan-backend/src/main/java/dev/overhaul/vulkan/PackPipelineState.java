@@ -35,7 +35,10 @@ final class PackPipelineState {
         return factor;
     }
     static NativeGraphicsPipeline.Color color(ShaderPackProperties.ProgramState state,int target){
-        var blend=state.blends().getOrDefault("colortex"+target,state.blends().get("*"));
+        return color(state,target,"colortex");
+    }
+    static NativeGraphicsPipeline.Color color(ShaderPackProperties.ProgramState state,int target,String prefix){
+        var blend=state.blends().getOrDefault(prefix+target,state.blends().get("*"));
         boolean enabled=blend!=null&&blend.enabled();
         return new NativeGraphicsPipeline.Color(enabled,enabled?factor(blend.sourceRgb()):VK_BLEND_FACTOR_ONE,
                 enabled?factor(blend.destinationRgb()):VK_BLEND_FACTOR_ZERO,VK_BLEND_OP_ADD,
