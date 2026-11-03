@@ -8,4 +8,5 @@ public final class OverhaulGpuDevice extends FrontendGpuDevice {
     private final OverhaulDeviceBackend backend;
     OverhaulGpuDevice(OverhaulDeviceBackend backend) { super(backend); this.backend=backend; }
     public CompletableFuture<String> awaitWorldCapture() { return backend.awaitWorldCapture(); }
+    public CompletableFuture<String> awaitWorldCapture(String label) { return backend.awaitWorldCapture(label); }
 }

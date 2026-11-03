@@ -69,7 +69,7 @@ public final class WorldSmokeController implements ClientSmokeSession {
                 case WAIT_WORLD: captureWhenLoaded(); break;
                 case WAIT_FIXTURE: captureAfterClientFixtureUpdate(); break;
                 case WAIT_MESH: acceptMesh(); break;
-                case WAIT_PROBE: if (additional.isDone()) { evidence=additional.join(); disconnect(); } break;
+                case WAIT_PROBE: probe.tick(); if (additional.isDone()) { evidence=additional.join(); disconnect(); } break;
                 case DISCONNECTING: finishWhenDisconnected(); break;
                 default: break;
             }
@@ -144,6 +144,7 @@ public final class WorldSmokeController implements ClientSmokeSession {
 
     private void finishWhenDisconnected() {
         if (minecraft.level!=null || minecraft.hasSingleplayerServer()) return;
+        if(probe!=null)probe.disconnected();
         writeReceipt("PASS");
         LOG.info("Overhaul world smoke PASS world="+worldId+" revision="+expectedRevision+" indices="+indices
                 +" retiredLeases="+runtime.retiredLeases()+" disconnected=true");

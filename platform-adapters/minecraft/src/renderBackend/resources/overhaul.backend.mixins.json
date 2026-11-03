@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "dev.overhaul.minecraft.backendmixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin"],
+  "client": ["PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin", "LevelTerrainMixin"],
   "injectors": {"defaultRequire": 1}
 }

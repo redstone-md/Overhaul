@@ -75,6 +75,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     void rendered(int draws) { smoke.rendered(draws); }
     void presented(GpuTextureView source) { smoke.presented(source); }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() { requireOpen(); return smoke.awaitWorldCapture(); }
+    java.util.concurrent.CompletableFuture<String> awaitWorldCapture(String label) { requireOpen(); return smoke.awaitWorldCapture(label); }
     Map<String,Long> submissionStatistics() {
         long surfaceWaits=0;
         for (var surface:surfaces) surfaceWaits+=surface.blockingWaitCalls();

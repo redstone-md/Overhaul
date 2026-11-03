@@ -38,7 +38,10 @@ tasks.named('processResources') {
     }
 }
 tasks.register('prepareBackendSmoke') {
-    doLast { delete file("run/${targetName}/overhaul-backend-smoke/receipt.json") }
+    doLast {
+        delete file("run/${targetName}/overhaul-backend-smoke/receipt.json")
+        if (providers.gradleProperty('worldSmoke').isPresent()) delete file("run/${targetName}/overhaul-terrain-smoke-latest.json")
+    }
 }
 if (providers.gradleProperty('smokeClient').isPresent()||providers.gradleProperty('worldSmoke').isPresent()) {
     tasks.named('runClient') { dependsOn 'prepareBackendSmoke' }
@@ -56,6 +59,29 @@ tasks.register('verifyBackendSmoke') {
         def receipt = new groovy.json.JsonSlurper().parse(report)
         if (receipt.status != 'PASS' || receipt.backend != 'Overhaul Vulkan' || !receipt.closed) {
             throw new GradleException("Game backend smoke failed: ${receipt}")
+        }
+        if (providers.gradleProperty('worldSmoke').isPresent()) {
+            if (!receipt.terrainCompilerClosed || receipt.terrainActiveLeases != 0) throw new GradleException('Terrain compiler not closed before GPU shutdown')
+            def terrainFile = file("run/${targetName}/overhaul-terrain-smoke-latest.json")
+            if (!terrainFile.isFile()) throw new GradleException('Missing continuous terrain receipt')
+            def terrain = new groovy.json.JsonSlurper().parse(terrainFile)
+            if (terrain.status != 'PASS' || terrain.stages*.stage != ['initial','boundary','edited','reloaded']
+                    || terrain.serverMutationRounds != 3 || terrain.reloadedCompilerGenerations != 1
+                    || terrain.activePageLeases != 0 || terrain.retiredPageLeases != 0 || !terrain.retiredCompilersClosed) {
+                throw new GradleException("Continuous terrain scenarios or teardown failed: ${terrain}")
+            }
+            terrain.stages.findAll { it.stage != 'initial' }.each { stage ->
+                if (!stage.chestMetadata || stage.compiler.fluidBlocks < 1 || stage.finalClientStateBarrier <= 0
+                        || stage.leftCompileStart <= stage.finalClientStateBarrier || stage.rightCompileStart <= stage.finalClientStateBarrier) {
+                    throw new GradleException("Terrain snapshot is not newer than its final client-state barrier: ${stage}")
+                }
+            }
+            ([terrain.finalCompiler] + terrain.retiredCompilers).each { generation ->
+                if (generation.failed != 0 || generation.started != generation.completed
+                        || generation.overhaulWorkerCompiles != generation.started || generation.constructorThreadCompiles != 0) {
+                    throw new GradleException("Terrain compiler failed or escaped its workers: ${generation}")
+                }
+            }
         }
     }
 }

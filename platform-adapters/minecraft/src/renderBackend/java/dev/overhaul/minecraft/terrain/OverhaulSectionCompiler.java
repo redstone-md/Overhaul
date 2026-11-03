@@ -133,6 +133,7 @@ public final class OverhaulSectionCompiler implements AutoCloseable {
 
     public TerrainCompilationMonitor monitor() { return monitor; }
     public int activeLeases() { return pool.activeLeases(); }
+    public boolean isClosed() { synchronized(lifecycle){return closed;} }
 
     private void beginCompile() {
         synchronized (lifecycle) {

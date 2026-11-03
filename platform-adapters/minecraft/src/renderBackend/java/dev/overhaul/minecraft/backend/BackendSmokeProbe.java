@@ -22,7 +22,8 @@ final class BackendSmokeProbe {
     private final OverhaulDeviceBackend owner;
     private final Path directory;
     private final java.util.Set<String> capturedScenes=new java.util.HashSet<>();
-    private final java.util.concurrent.CompletableFuture<String> worldCapture=new java.util.concurrent.CompletableFuture<>();
+    private java.util.concurrent.CompletableFuture<String> worldCapture=new java.util.concurrent.CompletableFuture<>();
+    private String requestedWorldScene="world";
     private long frames,passes,draws,sceneFrames;
     private String scene,pendingScene,lastScreen,lastOverlay,capturedScreen,capturedOverlay;
     private int width,height,distinctPixels;
@@ -52,7 +53,7 @@ final class BackendSmokeProbe {
         if (world&&!worldRequested) return;
         boolean title=screen instanceof TitleScreen;
         if (!minecraft.isGameLoadFinished()||overlay!=null||(world?(minecraft.player==null||screen!=null):screen==null)) { sceneFrames=0; return; }
-        String nextScene=world?"world":title?"title":"screen";
+        String nextScene=world?requestedWorldScene:title?"title":"screen";
         if (capturedScenes.contains(nextScene)) return;
         if (!nextScene.equals(pendingScene)) { pendingScene=nextScene; sceneFrames=0; }
         if (++sceneFrames<100) return;
@@ -85,11 +86,18 @@ final class BackendSmokeProbe {
             captured=true;
             capturedScenes.add(scene);
             writeReceipt(false);
-            if (world) worldCapture.complete("backend=Overhaul Vulkan;scene=world;frames="+frames+";draws="+draws+";image="+output.getFileName());
+            if (world) worldCapture.complete("backend=Overhaul Vulkan;scene="+scene+";frames="+frames+";draws="+draws+";image="+output.getFileName());
         } catch (IOException failure) { throw new IllegalStateException("Cannot save backend smoke evidence",failure); }
     }
     java.util.concurrent.CompletableFuture<String> awaitWorldCapture() {
+        return awaitWorldCapture(null);
+    }
+    java.util.concurrent.CompletableFuture<String> awaitWorldCapture(String label) {
         if (directory==null) throw new IllegalStateException("Enable backend smoke capture before requesting world evidence");
+        if(label!=null&&!label.matches("[a-z][a-z0-9-]{0,31}"))throw new IllegalArgumentException("Invalid world capture label");
+        String name=label==null?"world":"world-"+label;
+        if(capturedScenes.contains(name)||worldRequested&&!worldCapture.isDone())throw new IllegalStateException("World capture already requested");
+        requestedWorldScene=name;worldCapture=new java.util.concurrent.CompletableFuture<>();
         worldRequested=true;
         return worldCapture.copy();
     }
@@ -115,6 +123,7 @@ final class BackendSmokeProbe {
             report.put("terrainCompilationStatistics",terrainCompiler.monitor().snapshot());
             report.put("terrainWorkerStatistics",terrainDispatcher.overhaul$workerStatistics());
             report.put("terrainActiveLeases",terrainCompiler.activeLeases());
+            report.put("terrainCompilerClosed",terrainCompiler.isClosed());
         }
         try {
             Files.createDirectories(directory);
