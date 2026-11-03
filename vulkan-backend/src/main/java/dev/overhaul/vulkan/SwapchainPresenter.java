@@ -194,6 +194,11 @@ public final class SwapchainPresenter implements AutoCloseable {
 
     /** Completes the GPU blit before returning, so an immediately created completed encoder fence is truthful. */
     public void blitAcquiredImage(GpuImageView source){
+        blitAcquiredImage(source,false);
+    }
+
+    /** Render frontends with a bottom-left image origin request a vertical presentation flip. */
+    public void blitAcquiredImage(GpuImageView source,boolean flipY){
         requireOpen();if(manualIndex==-1||manualBlitted)throw new IllegalStateException("surface needs one acquired, unfilled image");
         GpuImage image=source.image();if(image.context()!=context)throw new IllegalArgumentException("source image owner differs");
         if(source.layerCount()!=1||image.format().aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT)throw new IllegalArgumentException("surface blit needs one color layer");
@@ -212,6 +217,7 @@ public final class SwapchainPresenter implements AutoCloseable {
                     region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(mip).baseArrayLayer(layer).layerCount(1);
                     region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
                     region.srcOffsets(1).set(image.width(mip),image.height(mip),1);region.dstOffsets(1).set(width,height,1);
+                    if(flipY){region.dstOffsets(0).y(height);region.dstOffsets(1).y(0);}
                     vkCmdBlitImage(command,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,destination,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,region,VK_FILTER_NEAREST);
                 }
                 changes.add(image.recordTransition(command,mip,1,layer,1,previous));

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Instance-owned lifecycle hook. Vanilla rendering and gameplay remain authoritative. */
+/** Instance-owned diagnostic lifecycle hook; renderer selection belongs to its separate adapter. */
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
     @Unique private ClientRuntime overhaul$runtime;
@@ -29,7 +29,7 @@ public abstract class MinecraftMixin {
             overhaul$stopAfterTicks=Long.getLong("overhaul.diagnostics.stopAfterTicks",0L);
             overhaul$smoke=ClientSmokeFactory.create((Minecraft)(Object)this,overhaul$runtime,overhaul$source);
             if (overhaul$runtime.enabled()) java.util.logging.Logger.getLogger("overhaul").info(
-                    "Overhaul diagnostic client hook active; vanilla rendering remains enabled");
+                    "Overhaul diagnostic client hook active");
         }
         overhaul$runtime.tick();
         if (overhaul$smoke!=null) { overhaul$smoke.tick(); return; }

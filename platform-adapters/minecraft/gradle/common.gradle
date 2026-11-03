@@ -8,8 +8,9 @@ version = providers.gradleProperty('modVersion').getOrElse(sharedProperties.getP
 if (!version || version == 'unspecified') throw new GradleException('The root modVersion is required')
 def worldSmoke = providers.gradleProperty('worldSmoke').isPresent()
 def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
+def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
-layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}")
+layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}${overhaulBackend ? '-backend' : ''}")
 
 repositories {
     mavenCentral()
@@ -65,6 +66,7 @@ if (modelSmoke) {
     }
 }
 if (target.tier != 'legacy') sourceSets.test.java.srcDirs = ['src/test/java']
+if (overhaulBackend) apply from: 'gradle/render-backend.gradle'
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     systemProperty 'overhaul.loader', target.loader
@@ -135,6 +137,8 @@ tasks.named('jar') {
         exclude 'dev/overhaul/minecraft/smoke/**', 'dev/overhaul/minecraft/modelmixin/**',
                 'dev/overhaul/minecraft/ModelSmokeFactory.class'
     }
+    if (!overhaulBackend) exclude 'dev/overhaul/minecraft/backend/**', 'dev/overhaul/minecraft/backendmixin/**',
+            'overhaul.backend.mixins.json'
     manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)
     if (target.loader == 'forge' && target.tier != 'legacy') {
         manifest.attributes('MixinConfigs': 'overhaul.mixins.json')

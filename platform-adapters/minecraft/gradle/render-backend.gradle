@@ -1,0 +1,61 @@
+// Development-only native backend. Keep bindings supplied by Minecraft 26.3
+// separate from the portable backend's default LWJGL runtime.
+if (targetName != 'fabric-26.3') throw new GradleException('The experimental backend currently requires fabric-26.3')
+sourceSets.main.java.srcDir 'src/renderBackend/java'
+sourceSets.main.resources.srcDir 'src/renderBackend/resources'
+sourceSets.test.java.srcDir 'src/renderBackendTest/java'
+dependencies {
+    implementation files("../../vulkan-backend/build/libs/vulkan-backend-${project.version}.jar",
+            "../../vulkan-backend/build/libs/vulkan-backend-${project.version}-sdl34.jar",
+            "../../shader-pipeline/build/libs/shader-pipeline-${project.version}.jar")
+}
+tasks.withType(JavaExec).configureEach {
+    systemProperty 'org.lwjgl.system.stackSize', '1024'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (providers.gradleProperty('smokeClient').isPresent()||providers.gradleProperty('worldSmoke').isPresent()) {
+        systemProperty 'overhaul.backend.smokeDirectory', file("run/${targetName}/overhaul-backend-smoke").absolutePath
+    }
+}
+tasks.withType(Test).configureEach {
+    systemProperty 'org.lwjgl.system.stackSize', '1024'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+tasks.named('test') { useJUnitPlatform { excludeTags 'backend-native' } }
+tasks.register('backendNativeTest', Test) {
+    group = 'verification'
+    description = 'Exercises the experimental RenderPearl backend against a real Vulkan device.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'backend-native' }
+    systemProperty 'org.lwjgl.util.DebugAllocator', 'true'
+}
+tasks.named('processResources') {
+    doLast {
+        def metadata = new File(destinationDir, 'fabric.mod.json')
+        def json = new groovy.json.JsonSlurper().parse(metadata)
+        json.mixins += 'overhaul.backend.mixins.json'
+        metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+    }
+}
+tasks.register('prepareBackendSmoke') {
+    doLast { delete file("run/${targetName}/overhaul-backend-smoke/receipt.json") }
+}
+if (providers.gradleProperty('smokeClient').isPresent()||providers.gradleProperty('worldSmoke').isPresent()) {
+    tasks.named('runClient') { dependsOn 'prepareBackendSmoke' }
+}
+tasks.register('verifyBackendSmoke') {
+    group = 'verification'
+    description = 'Verifies actual Overhaul game-window draws, image evidence and orderly backend close.'
+    if (!providers.gradleProperty('smokeClient').isPresent()&&!providers.gradleProperty('worldSmoke').isPresent()) {
+        throw new GradleException('Backend smoke requires -PsmokeClient=200 or -PworldSmoke')
+    }
+    dependsOn 'runClient'
+    doLast {
+        def report = file("run/${targetName}/overhaul-backend-smoke/receipt.json")
+        if (!report.isFile()) throw new GradleException('The game backend produced no receipt')
+        def receipt = new groovy.json.JsonSlurper().parse(report)
+        if (receipt.status != 'PASS' || receipt.backend != 'Overhaul Vulkan' || !receipt.closed) {
+            throw new GradleException("Game backend smoke failed: ${receipt}")
+        }
+    }
+}

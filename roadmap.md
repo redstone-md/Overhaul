@@ -114,3 +114,16 @@ Performance claims require measurements, not implementation intent.
   World/model smoke sources and output directories are isolated from normal jars.
 - This proves an actual game-asset-to-Overhaul-Vulkan path. It does not prove that
   the game's onscreen renderer, entity domains or full shader packs are replaced.
+
+## Active RenderPearl backend increment
+
+Implement the actual 26.3 `GpuDeviceBackend`/command/resource boundary, consumed
+through the game's `FrontendGpuDevice`. Minecraft-specific types stay in the
+adapter; native image/mapping/pipeline mechanisms stay in `vulkan-backend`.
+The backend must create its device before the SDL window, then attach the surface.
+Recorded commands pin native resources until their real submission completes.
+First verify public frontend buffer/texture transfer and shader draws, then run
+an isolated opt-in game backend. No vanilla Vulkan/OpenGL implementation may act
+as a hidden fallback or count as Overhaul's replacement. Normal targets retain
+their current behavior while the new backend is verified. All earlier full-scene,
+shader-pack, world/tick, version and performance gates remain required.
