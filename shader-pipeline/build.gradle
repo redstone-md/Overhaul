@@ -1,0 +1,12 @@
+description = 'Shader-pack ingestion, GLSL translation and SPIR-V compilation.'
+
+def natives = rootProject.lwjglNatives
+
+dependencies {
+    api project(':core-common')
+    implementation platform("org.lwjgl:lwjgl-bom:${property('lwjglVersion')}")
+    implementation 'org.lwjgl:lwjgl'
+    implementation 'org.lwjgl:lwjgl-shaderc'
+    runtimeOnly "org.lwjgl:lwjgl::${natives}"
+    runtimeOnly "org.lwjgl:lwjgl-shaderc::${natives}"
+}

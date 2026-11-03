@@ -1,0 +1,82 @@
+plugins {
+    id 'base'
+}
+
+group = 'dev.overhaul'
+version = providers.gradleProperty('modVersion').get()
+
+def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+def architecture = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
+ext.nativeOs = osName.contains('win') ? 'windows' : osName.contains('mac') ? 'macos' : 'linux'
+ext.lwjglNatives = "natives-${nativeOs}" + (architecture in ['aarch64', 'arm64'] ? '-arm64' : '')
+
+subprojects {
+    apply plugin: 'java-library'
+
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories {
+        mavenCentral()
+    }
+
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(25)
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = project.name in ['core-common', 'platform-adapters'] ? 8 : 17
+    }
+
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.12.2')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        testLogging {
+            events 'failed', 'skipped'
+            exceptionFormat = 'full'
+        }
+    }
+
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}
+
+tasks.named('check') {
+    dependsOn subprojects.collect { it.tasks.named('check') }
+    dependsOn 'verifySourceSize'
+}
+
+tasks.named('assemble') {
+    dependsOn subprojects.collect { it.tasks.named('assemble') }
+}
+
+tasks.register('verifySourceSize') {
+    group = 'verification'
+    description = 'Enforces the repository limit of fewer than 500 lines per source file.'
+    def sources = fileTree(rootDir) {
+        include '**/*.java', '**/*.gradle', '**/*.glsl', '**/*.vert', '**/*.frag', '**/*.comp'
+        exclude '**/build/**', '**/.gradle/**'
+    }
+    inputs.files(sources)
+    doLast {
+        def oversized = sources.files.findAll { it.readLines('UTF-8').size() >= 500 }
+        if (!oversized.empty) {
+            throw new GradleException('Source files exceed the 499 line limit: ' + oversized*.path.join(', '))
+        }
+    }
+}
+
+tasks.named('wrapper') {
+    gradleVersion = '9.7.0'
+    distributionType = Wrapper.DistributionType.BIN
+    distributionSha256Sum = '84fbba45c7f4c64abc77460e1c00f541e9f960e3c7ed2538f1ede19eacd873ae'
+}

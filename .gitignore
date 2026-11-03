@@ -1,0 +1,13 @@
+.gradle/
+**/build/
+out/
+run/
+*.log
+*.hprof
+hs_err_pid*
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+local.properties

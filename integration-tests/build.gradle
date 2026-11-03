@@ -1,0 +1,8 @@
+description = 'Cross-module verification and opt-in native diagnostics.'
+
+dependencies {
+    implementation project(':core-common')
+    implementation project(':vulkan-backend')
+    implementation project(':shader-pipeline')
+    implementation project(':platform-adapters')
+}

@@ -1,0 +1,5 @@
+description = 'Java 8 compatible loader and version boundary contracts.'
+
+dependencies {
+    api project(':core-common')
+}
