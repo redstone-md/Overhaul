@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -25,7 +27,18 @@ public final class ModelVertexShaderSource implements ShaderSource {
     private static final Pattern VERSION=Pattern.compile("(?m)^#version[ \\t]+330[ \\t]*\\r?$");
     private static final Properties EXPECTED=manifest();
     private final OwnedVertexShaderSource source;
-    public ModelVertexShaderSource(ResourceManager resources){source=new OwnedVertexShaderSource(resources);}
+    public ModelVertexShaderSource(ResourceManager resources){source=new OwnedVertexShaderSource(resources,includeClosure());}
+    private static List<Identifier> includeClosure(){
+        List<Identifier> includes=new ArrayList<>();
+        for(String key:EXPECTED.stringPropertyNames()){
+            Identifier resource=Identifier.parse(key);String prefix="shaders/include/";
+            if(resource.getPath().startsWith(prefix))includes.add(Identifier.fromNamespaceAndPath(resource.getNamespace(),resource.getPath().substring(prefix.length())));
+        }
+        includes.sort(java.util.Comparator.comparing(Identifier::toString));
+        includes.add(Identifier.parse("overhaul:model_quad_inputs.glsl"));
+        includes.add(Identifier.parse("overhaul:packed_vertex.glsl"));
+        return includes;
+    }
     public static boolean supports(Identifier original){return original!=null&&original.getNamespace().equals("minecraft")&&PROGRAMS.contains(original.getPath());}
     public static Identifier adaptedVertex(Identifier original){
         if(!supports(original))throw new UnsupportedOperationException("Uncertified model vertex program: "+original);
