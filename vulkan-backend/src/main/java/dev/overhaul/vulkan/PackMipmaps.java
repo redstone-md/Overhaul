@@ -19,7 +19,7 @@ final class PackMipmaps {
     void generate(PackFrameGraph plan,List<GpuImageView> levels){
         if(levels==null||levels.isEmpty())throw new IllegalArgumentException("Missing pack mip chain");
         if(levels.size()==1)return;
-        requireLinearBlit(levels.getFirst().image().format().vkFormat());
+        requireLinearBlit(levels.get(0).image().format().vkFormat());
         for(int mip=1;mip<levels.size();mip++){
             GpuImageView source=levels.get(mip-1),target=levels.get(mip);
             String read=plan.read(source),write=plan.write(target);
