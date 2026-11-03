@@ -6,6 +6,7 @@ import dev.overhaul.minecraft.terrain.TerrainCullingAccess;
 import dev.overhaul.minecraft.terrain.TerrainCullingController;
 import dev.overhaul.minecraft.particle.OverhaulQuadParticleRenderer;
 import dev.overhaul.minecraft.particle.ParticleRendererAccess;
+import dev.overhaul.minecraft.weather.OverhaulWeatherRenderer;
 import net.minecraft.client.GameLoadCookie;
 import net.minecraft.client.Minecraft;
 import java.util.concurrent.CompletableFuture;
@@ -20,18 +21,21 @@ public abstract class ShaderReloadMixin {
         var controller=minecraft.levelRenderer instanceof TerrainCullingAccess access?access.overhaul$culling():null;
         var features=minecraft.gameRenderer==null?null:minecraft.gameRenderer.featureRenderDispatcher();
         var particles=features instanceof ParticleRendererAccess access?access.overhaul$particles():null;
+        var weather=minecraft.levelRenderer!=null&&minecraft.levelRenderer.weatherEffectRenderer() instanceof OverhaulWeatherRenderer owned?owned:null;
         long terrainToken=controller==null?0:controller.reloadStarted();
         long particleToken=particles==null?0:particles.reloadStarted();
+        long weatherToken=weather==null?0:weather.reloadStarted();
         try {
             var future=original.call(force,cookie);
-            if(controller!=null||particles!=null)future.whenComplete((ignored,failure)->minecraft.execute(
-                    ()->overhaul$finish(controller,particles,terrainToken,particleToken,failure==null)));
+            if(controller!=null||particles!=null||weather!=null)future.whenComplete((ignored,failure)->minecraft.execute(
+                    ()->overhaul$finish(controller,particles,weather,terrainToken,particleToken,weatherToken,failure==null)));
             return future;
-        }catch(RuntimeException|Error failure){overhaul$finish(controller,particles,terrainToken,particleToken,false);throw failure;}
+        }catch(RuntimeException|Error failure){overhaul$finish(controller,particles,weather,terrainToken,particleToken,weatherToken,false);throw failure;}
     }
-    @Unique private static void overhaul$finish(TerrainCullingController terrain,OverhaulQuadParticleRenderer particles,
-            long terrainToken,long particleToken,boolean success){
+    @Unique private static void overhaul$finish(TerrainCullingController terrain,OverhaulQuadParticleRenderer particles,OverhaulWeatherRenderer weather,
+            long terrainToken,long particleToken,long weatherToken,boolean success){
         if(terrain!=null)terrain.reloadFinished(terrainToken,success);
         if(particles!=null)particles.reloadFinished(particleToken,success);
+        if(weather!=null)weather.reloadFinished(weatherToken,success);
     }
 }

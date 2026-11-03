@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "dev.overhaul.minecraft.backendmixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin", "LevelTerrainMixin", "SectionGeometryMixin", "CompiledGeometryMixin", "TerrainCullingMixin", "TerrainProjectionMixin", "ShaderReloadMixin", "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin"],
+  "client": ["PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin", "LevelTerrainMixin", "SectionGeometryMixin", "CompiledGeometryMixin", "TerrainCullingMixin", "TerrainProjectionMixin", "ShaderReloadMixin", "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin", "WeatherGeometryMixin", "InstancedWeatherRendererMixin"],
   "injectors": {"defaultRequire": 1}
 }
