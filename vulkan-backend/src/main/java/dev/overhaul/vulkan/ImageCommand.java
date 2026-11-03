@@ -158,8 +158,12 @@ public final class ImageCommand implements AutoCloseable {
         requireOpen();
         if (!successful) throw new IllegalStateException("Cannot commit an unsuccessfully recorded image command");
         if (completed) return;
-        for (GpuImage.LayoutChange change:changes) change.commit();
         completed=true;
+        var iterator=changes.iterator();
+        while(iterator.hasNext()){GpuImage.LayoutChange change=iterator.next();change.commit();change.close();iterator.remove();}
+        // Rollback state is CPU-only. Discard it before an independent completed fence
+        // can destroy an endpoint; owned native staging/intermediates remain fence-owned.
+        changes.clear();
     }
     public long stagingBytes() { return stagingBytes; }
 
@@ -202,7 +206,7 @@ public final class ImageCommand implements AutoCloseable {
         requireOpen(); closed=true;
         RuntimeException failure=null;
         for (int index=changes.size()-1;index>=0;index--) {
-            try { changes.get(index).close(); }
+            try { if(completed)changes.get(index).commit(); changes.get(index).close(); }
             catch (RuntimeException error) { if(failure==null)failure=error;else failure.addSuppressed(error); }
         }
         for (int index=owned.size()-1;index>=0;index--) {
