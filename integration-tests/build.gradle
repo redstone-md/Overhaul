@@ -6,3 +6,17 @@ dependencies {
     implementation project(':shader-pipeline')
     implementation project(':platform-adapters')
 }
+
+tasks.named('test') {
+    useJUnitPlatform { excludeTags 'native' }
+}
+
+tasks.register('nativeTest', Test) {
+    group = 'verification'
+    description = 'Requires a Vulkan device; renders worker-built geometry and verifies GPU readback.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'native' }
+    systemProperty 'overhaul.verificationDir', layout.buildDirectory.dir('verification').get().asFile.absolutePath
+    outputs.upToDateWhen { false }
+}
