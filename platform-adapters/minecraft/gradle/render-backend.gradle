@@ -40,7 +40,10 @@ tasks.named('processResources') {
 tasks.register('prepareBackendSmoke') {
     doLast {
         delete file("run/${targetName}/overhaul-backend-smoke/receipt.json")
-        if (providers.gradleProperty('worldSmoke').isPresent()) delete file("run/${targetName}/overhaul-terrain-smoke-latest.json")
+        if (providers.gradleProperty('worldSmoke').isPresent()) {
+            delete file("run/${targetName}/overhaul-terrain-smoke-latest.json")
+            delete file("run/${targetName}/overhaul-occlusion-smoke-latest.json")
+        }
     }
 }
 if (providers.gradleProperty('smokeClient').isPresent()||providers.gradleProperty('worldSmoke').isPresent()) {
@@ -80,6 +83,26 @@ tasks.register('verifyBackendSmoke') {
                 if (generation.failed != 0 || generation.started != generation.completed
                         || generation.overhaulWorkerCompiles != generation.started || generation.constructorThreadCompiles != 0) {
                     throw new GradleException("Terrain compiler failed or escaped its workers: ${generation}")
+                }
+            }
+            def nativeDraws = receipt.nativeDrawStatistics
+            if (!receipt.terrainIndirectObserved || nativeDraws.indexedIndirectMultiRecordCalls < 1
+                    || nativeDraws.instancedIndexedIndirectCalls < 1 || nativeDraws.maxIndexedIndirectBatch < 2) {
+                throw new GradleException("Terrain did not use native indirect instanced batches: ${nativeDraws}")
+            }
+            def occlusionFile = file("run/${targetName}/overhaul-occlusion-smoke-latest.json")
+            if (!occlusionFile.isFile()) throw new GradleException('Missing ordinary terrain occlusion receipt')
+            def occlusion = new groovy.json.JsonSlurper().parse(occlusionFile)
+            if (occlusion.status != 'PASS' || occlusion.stages*.stage != ['occlusion-wall','occlusion-open','occlusion-closed','occlusion-camera']) {
+                throw new GradleException("Ordinary terrain occlusion scenarios failed: ${occlusion}")
+            }
+            occlusion.stages.each { stage ->
+                def observation = stage.observation
+                if (!observation.eligible || !observation.coherent || observation.lastCulled != stage.expectedCulled
+                        || observation.frame <= stage.baselineFrame || observation.lastTestedFrame != observation.frame
+                        || observation.frame != stage.culling.frames
+                        || observation.lastMeshStart != stage.targetCompileStart || stage.targetCompileStart <= stage.finalClientStateBarrier) {
+                    throw new GradleException("Occlusion did not observe the final coherent mesh: ${stage}")
                 }
             }
         }
