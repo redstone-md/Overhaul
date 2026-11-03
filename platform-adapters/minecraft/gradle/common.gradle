@@ -9,8 +9,10 @@ if (!version || version == 'unspecified') throw new GradleException('The root mo
 def worldSmoke = providers.gradleProperty('worldSmoke').isPresent()
 def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
+def querySmoke = providers.gradleProperty('querySmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
-layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}${overhaulBackend ? '-backend' : ''}")
+if (querySmoke && (!worldSmoke || modelSmoke || overhaulBackend)) throw new GradleException('Query smoke requires only -PworldSmoke -PquerySmoke')
+layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}${overhaulBackend ? '-backend' : ''}${querySmoke ? '-queries' : ''}")
 
 repositories {
     mavenCentral()
@@ -38,7 +40,7 @@ if (target.tier != 'legacy') {
         if (targetName != 'fabric-26.3') throw new GradleException('World smoke currently requires fabric-26.3')
         sourceSets.main.java.srcDir 'src/worldSmoke/java'
         sourceSets.main.java.srcDir modelSmoke ? 'src/modelSmoke/java' :
-                overhaulBackend ? 'src/backendWorldSmoke/java' : 'src/noModelSmoke/java'
+                overhaulBackend ? 'src/backendWorldSmoke/java' : querySmoke ? 'src/querySmoke/java' : 'src/noModelSmoke/java'
     } else sourceSets.main.java.srcDir 'src/nosmoke/java'
     sourceSets.main.resources.srcDirs = ['src/common/resources', "src/${target.loader}/resources"]
     if (modelSmoke) sourceSets.main.resources.srcDir 'src/modelSmoke/resources'
@@ -104,6 +106,12 @@ tasks.withType(JavaExec).configureEach {
 }
 
 if (providers.gradleProperty('worldSmoke').isPresent()) {
+    if (querySmoke) {
+        tasks.register('prepareQuerySmoke') {
+            doLast { delete file("run/${targetName}/overhaul-entity-query-smoke-latest.json") }
+        }
+        tasks.named('runClient') { dependsOn 'prepareQuerySmoke' }
+    }
     tasks.register('verifyWorldSmoke') {
         group = 'verification'
         description = 'Creates a new disposable world, validates live capture and orderly teardown.'
@@ -119,6 +127,21 @@ if (providers.gradleProperty('worldSmoke').isPresent()) {
                     !receipt.additionalProbe.contains('sourceLeases=0') ||
                     !file("run/${targetName}/overhaul-model-smoke/world-model-vulkan.png").isFile())) {
                 throw new GradleException('World model smoke did not prove native rendering of captured assets')
+            }
+            if (querySmoke) {
+                def queries = new groovy.json.JsonSlurper().parse(file("run/${targetName}/overhaul-entity-query-smoke-latest.json"))
+                def proof = queries.evidence
+                if (queries.status != 'PASS' || !queries.disconnected || !proof.cleanupComplete
+                        || proof.world != receipt.world || proof.serverThread != 'Server thread'
+                        || proof.fixtureStands != 72 || proof.fixtureOccupiedSections != 72 || proof.removedFixtures != 73
+                        || proof.ordinaryWorldTicks < 40 || proof.pigTicks < 40 || proof.orderedOracleCases.size() != 21
+                        || proof.afterOrdinaryTraffic.queries <= proof.beforeOrdinaryTraffic.queries
+                        || proof.finalStatistics.queries <= proof.initialStatistics.queries
+                        || proof.finalStatistics.fallbacks <= proof.initialStatistics.fallbacks
+                        || proof.finalStatistics.vanillaBypasses <= proof.initialStatistics.vanillaBypasses
+                        || !receipt.additionalProbe.contains('entityQueries=ordered-oracle')) {
+                    throw new GradleException("Actual server query oracle, traffic or cleanup proof failed: ${queries}")
+                }
             }
         }
     }
