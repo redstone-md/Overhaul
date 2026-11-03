@@ -153,6 +153,12 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     public boolean hasSceneProgram(){return scene;}
     public long samplerHandle(){requireOpen();return sampler.handle();}
+    public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}
+    /** These are copies of the scene depth; sampling never feeds back through its active writable attachment. */
+    public GpuImageView sampledDepth(int index){
+        requireOpen();if(index<0||index>2)throw new IllegalArgumentException("Pack depth sampler index must be in [0,2]");
+        return index==1?images.opaqueDepth:images.depth;
+    }
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
     public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(!program.scene())throw new IllegalArgumentException("Not a scene program");return outputs(swaps.route(program));}
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */
