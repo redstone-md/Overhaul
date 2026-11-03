@@ -9,6 +9,7 @@ import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import dev.overhaul.minecraft.shader.InstancedQuadGeometry;
 import dev.overhaul.minecraft.shader.ShaderResourceGate;
+import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import dev.overhaul.minecraft.backendmixin.RenderTypeSetupAccess;
 import dev.overhaul.minecraft.backendmixin.RenderSetupOitAccess;
 import net.minecraft.client.Minecraft;
@@ -27,7 +28,7 @@ import java.util.Objects;
 
 /** Ordinary model submissions retain game animation/hierarchy and become ordered hardware quad instances. */
 public final class OverhaulModelRenderer implements FeatureRenderer<ModelFeatureRenderer.Submit<?>> {
-    private record Draw(PreparedRenderType prepared,GpuBufferSlice instances,GpuBufferSlice arguments,int count){}
+    private record Draw(PreparedRenderType prepared,GpuBufferSlice instances,GpuBufferSlice arguments,int count,SceneDrawDomain domain){}
     private record Group(List<Draw> draws,int fallbackIndex){}
     private final Thread owner=Thread.currentThread();
     private final ModelFeatureRenderer fallback;
@@ -70,7 +71,7 @@ public final class OverhaulModelRenderer implements FeatureRenderer<ModelFeature
         }
         ensureArena();arena.beginGroup();var batches=new ModelFrameBatches(sorted);
         for(var submit:submits){
-            var batch=batches.batch(submit.renderType());collector.configure(submit,batch);
+            var batch=batches.batch(submit.renderType(),ModelSubmitDomainAccess.domain(submit));collector.configure(submit,batch);
             poses.last().set(submit.pose());int before=arena.size();prepareModel(submit);
             int count=arena.size()-before;preparedSubmits++;
             if(submit.sheetedDecalPose()!=null)decalQuads+=count;else if(submit.uvMapping()!=null)mappedQuads+=count;
@@ -84,7 +85,7 @@ public final class OverhaulModelRenderer implements FeatureRenderer<ModelFeature
             try(var mapped=memory.allocateGpuMapped(20,4,GpuBuffer.USAGE_INDIRECT_PARAMETERS)){
                 mapped.data().order(ByteOrder.nativeOrder()).putInt(6).putInt(count).putInt(0).putInt(0).putInt(0);arguments=mapped.slice();
             }
-            draws.add(new Draw(batch.prepared,instances,arguments,count));
+            draws.add(new Draw(batch.prepared,instances,arguments,count,batch.domain));
             preparedQuads+=count;preparedBytes+=(long)count*InstancedModelPipelines.INSTANCE_STRIDE;
             if(batch.sorting!=null)sortedQuads+=count;maxDrawInstances=Math.max(maxDrawInstances,count);
         }
@@ -101,7 +102,7 @@ public final class OverhaulModelRenderer implements FeatureRenderer<ModelFeature
         for(var draw:group.draws()){
             var prepared=draw.prepared();RenderPipeline original=stage==null?prepared.pipeline():prepared.oitPipelineSet().getPipeline(stage);
             if(compiled==null){compiled=new PipelineCache(RenderSystem.getDevice(),new ModelVertexShaderSource(Minecraft.getInstance().getResourceManager()));pipelineGenerations++;}
-            var pipeline=compiled.get(pipelines.variant(original));if(pipeline==null)throw new IllegalStateException("Owned model pipeline failed to compile");
+            var pipeline=compiled.get(pipelines.variant(original,draw.domain()));if(pipeline==null)throw new IllegalStateException("Owned model pipeline failed to compile");
             if(quad==null)quad=new InstancedQuadGeometry(RenderSystem.getDevice());
             pass.pushDebugGroup(()->"Overhaul instanced model "+prepared.name());
             try{

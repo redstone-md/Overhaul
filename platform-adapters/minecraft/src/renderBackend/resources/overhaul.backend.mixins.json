@@ -3,6 +3,14 @@
   "minVersion": "0.8",
   "package": "dev.overhaul.minecraft.backendmixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin", "LevelTerrainMixin", "SectionGeometryMixin", "CompiledGeometryMixin", "TerrainCullingMixin", "TerrainProjectionMixin", "ShaderReloadMixin", "ShaderPackFrameMixin", "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin", "WeatherGeometryMixin", "InstancedWeatherRendererMixin", "ModelCubeCaptureMixin", "InstancedModelRendererMixin", "RenderTypeSetupAccess", "RenderSetupOitAccess", "ModelPartStructureAccess"],
+  "client": [
+    "PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin",
+    "LevelTerrainMixin", "SectionGeometryMixin", "CompiledGeometryMixin", "TerrainCullingMixin", "TerrainProjectionMixin",
+    "ShaderReloadMixin", "ShaderPackFrameMixin", "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin",
+    "WeatherGeometryMixin", "InstancedWeatherRendererMixin", "ModelCubeCaptureMixin", "InstancedModelRendererMixin",
+    "RenderTypeSetupAccess", "RenderSetupOitAccess", "ModelPartStructureAccess",
+    "SubmitStorageDomainMixin", "SubmitCollectionDomainMixin", "ModelSubmitDomainMixin", "EntitySubmitDomainMixin",
+    "BlockEntitySubmitDomainMixin", "RenderTypeFactoryAccess", "RenderTypeDomainMixin", "FallbackModelDomainMixin"
+  ],
   "injectors": {"defaultRequire": 1}
 }

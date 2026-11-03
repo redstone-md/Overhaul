@@ -7,10 +7,12 @@ import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import dev.overhaul.minecraft.shader.InstancedPipelineVariants;
+import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.oit.OitPipelineSet;
 import net.minecraft.client.renderer.oit.OitStage;
 import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.Map;
 
 /** Quad-instance ABI shared by the certified original entity, glint, outline and crumbling programs. */
@@ -22,7 +24,7 @@ public final class InstancedModelPipelines {
             .addAttribute("InstanceMin",GpuFormat.RGB32_FLOAT).addAttribute("InstanceMax",GpuFormat.RGB32_FLOAT)
             .addAttribute("InstanceUv01",GpuFormat.RGBA32_FLOAT).addAttribute("InstanceUv23",GpuFormat.RGBA32_FLOAT)
             .addAttribute("InstanceMaterial",GpuFormat.RGBA32_UINT).addAttribute("InstanceEncoding",GpuFormat.R32_UINT).build();
-    private final Map<Identifier,InstancedPipelineVariants> variants=new HashMap<>();
+    private final Map<SceneDrawDomain,Map<Identifier,InstancedPipelineVariants>> variants=new EnumMap<>(SceneDrawDomain.class);
     public static boolean compatible(RenderPipeline original){
         if(original==null||original.getPrimitiveTopology()!=PrimitiveTopology.QUADS)return false;
         // RenderPearl keeps a fixed-size table; unused binding slots are null.
@@ -39,9 +41,13 @@ public final class InstancedModelPipelines {
         };
     }
     public RenderPipeline variant(RenderPipeline original){
+        return variant(original,SceneDrawDomain.UNKNOWN);
+    }
+    public RenderPipeline variant(RenderPipeline original,SceneDrawDomain domain){
         if(!compatible(original))throw new UnsupportedOperationException("Unsupported model vertex contract: "+original);
         Identifier vertex=original.getShaders().get(ShaderType.VERTEX);
-        return variants.computeIfAbsent(vertex,key->new InstancedPipelineVariants(ModelVertexShaderSource.adaptedVertex(key),"model_quad_instanced",CORNERS,INSTANCES)).variant(original);
+        return variants.computeIfAbsent(domain,key->new HashMap<>()).computeIfAbsent(vertex,
+                key->new InstancedPipelineVariants(ModelVertexShaderSource.adaptedVertex(key),"model_quad_instanced",domain,CORNERS,INSTANCES)).variant(original);
     }
     public static boolean compatibleOit(OitPipelineSet family){
         if(family==null)return true;
