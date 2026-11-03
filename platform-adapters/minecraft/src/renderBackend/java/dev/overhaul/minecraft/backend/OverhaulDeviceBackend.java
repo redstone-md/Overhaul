@@ -60,6 +60,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativePassR
     public ImmediateCommands commands() { requireOwner(); return commands; }
     void rendered(int draws) { smoke.rendered(draws); }
     void presented(GpuTextureView source) { smoke.presented(source); }
+    java.util.concurrent.CompletableFuture<String> awaitWorldCapture() { requireOpen(); return smoke.awaitWorldCapture(); }
 
     @Override public GpuSurfaceBackend createSurface(long window,BooleanSupplier isIconified) {
         requireOpen();

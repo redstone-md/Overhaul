@@ -18,8 +18,10 @@ import java.util.Map;
 final class BackendSmokeProbe {
     private final OverhaulDeviceBackend owner;
     private final Path directory;
+    private final java.util.Set<String> capturedScenes=new java.util.HashSet<>();
+    private final java.util.concurrent.CompletableFuture<String> worldCapture=new java.util.concurrent.CompletableFuture<>();
     private long frames,passes,draws,sceneFrames;
-    private String scene,lastScreen,lastOverlay;
+    private String scene,pendingScene,lastScreen,lastOverlay,capturedScreen,capturedOverlay;
     private int width,height,distinctPixels;
     private boolean captured;
 
@@ -31,7 +33,7 @@ final class BackendSmokeProbe {
     void rendered(int draws) { passes++; this.draws+=draws; }
     void presented(GpuTextureView source) {
         frames++;
-        if (directory==null||captured) return;
+        if (directory==null) return;
         Minecraft minecraft=Minecraft.getInstance();
         var screen=minecraft.gui.screen();
         var overlay=minecraft.gui.overlay();
@@ -39,9 +41,13 @@ final class BackendSmokeProbe {
         lastOverlay=overlay==null?"none":overlay.getClass().getName();
         boolean world=minecraft.level!=null;
         boolean title=screen instanceof TitleScreen;
-        if (!minecraft.isGameLoadFinished()||overlay!=null||(!world&&screen==null)) { sceneFrames=0; return; }
+        if (!minecraft.isGameLoadFinished()||overlay!=null||(world?(minecraft.player==null||screen!=null):screen==null)) { sceneFrames=0; return; }
+        String nextScene=world?"world":title?"title":"screen";
+        if (capturedScenes.contains(nextScene)) return;
+        if (!nextScene.equals(pendingScene)) { pendingScene=nextScene; sceneFrames=0; }
         if (++sceneFrames<100) return;
-        scene=world?"world":title?"title":"screen";
+        scene=nextScene;
+        capturedScreen=lastScreen; capturedOverlay=lastOverlay;
         var view=owner.texture(source);
         if (view.image().format()!=ImageFormat.RGBA8_UNORM||view.layerCount()!=1) {
             throw new IllegalStateException("Backend smoke expects the game's RGBA8 surface source");
@@ -67,16 +73,26 @@ final class BackendSmokeProbe {
             var decoded=ImageIO.read(output.toFile());
             if (decoded==null||decoded.getWidth()!=width||decoded.getHeight()!=height) throw new IOException("PNG verification failed");
             captured=true;
+            capturedScenes.add(scene);
             writeReceipt(false);
+            if (world) worldCapture.complete("backend=Overhaul Vulkan;scene=world;frames="+frames+";draws="+draws+";image="+output.getFileName());
         } catch (IOException failure) { throw new IllegalStateException("Cannot save backend smoke evidence",failure); }
     }
-    void close() { if (directory!=null) writeReceipt(true); }
+    java.util.concurrent.CompletableFuture<String> awaitWorldCapture() {
+        if (directory==null) throw new IllegalStateException("Enable backend smoke capture before requesting world evidence");
+        return worldCapture.copy();
+    }
+    void close() {
+        if (directory!=null) writeReceipt(true);
+        if (!worldCapture.isDone()) worldCapture.completeExceptionally(new IllegalStateException("Device closed before world capture"));
+    }
     private void writeReceipt(boolean closed) {
         Map<String,Object> report=new LinkedHashMap<>();
         report.put("status",captured&&draws>0&&frames>0?"PASS":"INCOMPLETE");
         report.put("backend",owner.getDeviceInfo().backendName()); report.put("device",owner.getDeviceInfo().name());
         report.put("scene",scene); report.put("frames",frames); report.put("passes",passes); report.put("draws",draws);
-        report.put("screen",lastScreen); report.put("overlay",lastOverlay);
+        report.put("screen",capturedScreen); report.put("overlay",capturedOverlay);
+        report.put("lastScreen",lastScreen); report.put("lastOverlay",lastOverlay);
         report.put("width",width); report.put("height",height); report.put("distinctPixelsAtLeast",distinctPixels);
         report.put("captured",captured); report.put("closed",closed);
         report.put("capture","GPU surface source with presentation Y flip applied");

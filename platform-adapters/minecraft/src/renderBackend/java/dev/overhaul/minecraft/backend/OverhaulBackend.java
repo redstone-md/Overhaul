@@ -1,7 +1,6 @@
 package dev.overhaul.minecraft.backend;
 
 import com.mojang.renderpearl.api.device.*;
-import com.mojang.renderpearl.frontend.FrontendGpuDevice;
 import dev.overhaul.vulkan.SdlSurfaceProvider;
 import dev.overhaul.vulkan.VulkanContext;
 import static org.lwjgl.sdl.SDLError.SDL_GetError;
@@ -31,7 +30,7 @@ public final class OverhaulBackend implements GpuBackend {
             var context=VulkanContext.openForPresentation(SdlSurfaceProvider.presentationExtensions(),
                     options.useValidationLayers()&&VulkanContext.validationAvailable());
             var backend=new OverhaulDeviceBackend(context,options);
-            try { return new FrontendGpuDevice(backend); }
+            try { return new OverhaulGpuDevice(backend); }
             catch (RuntimeException|Error failure) { backend.close(); throw failure; }
         } catch (RuntimeException failure) {
             var error=new BackendCreationException("Overhaul device creation failed: "+failure.getMessage(),

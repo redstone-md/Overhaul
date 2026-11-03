@@ -37,7 +37,8 @@ if (target.tier != 'legacy') {
     if (providers.gradleProperty('worldSmoke').isPresent()) {
         if (targetName != 'fabric-26.3') throw new GradleException('World smoke currently requires fabric-26.3')
         sourceSets.main.java.srcDir 'src/worldSmoke/java'
-        sourceSets.main.java.srcDir modelSmoke ? 'src/modelSmoke/java' : 'src/noModelSmoke/java'
+        sourceSets.main.java.srcDir modelSmoke ? 'src/modelSmoke/java' :
+                overhaulBackend ? 'src/backendWorldSmoke/java' : 'src/noModelSmoke/java'
     } else sourceSets.main.java.srcDir 'src/nosmoke/java'
     sourceSets.main.resources.srcDirs = ['src/common/resources', "src/${target.loader}/resources"]
     if (modelSmoke) sourceSets.main.resources.srcDir 'src/modelSmoke/resources'
