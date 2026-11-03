@@ -9,6 +9,8 @@ public final class ClientRuntime implements AutoCloseable {
     private SectionKey sampledSection;
     private long ticks, accepted;
     private Throwable failure;
+    private long capturedRevision, acceptedRevision;
+    private int acceptedIndices, retiredLeases=-1;
     private boolean closed;
 
     public ClientRuntime(boolean enabled) { this.enabled=enabled; }
@@ -16,7 +18,9 @@ public final class ClientRuntime implements AutoCloseable {
     /** Loader tick hook; no work is submitted without an explicit capture call. */
     public void tick() {
         requireOwner(); ticks++;
-        if (world!=null) accepted+=world.drain((key,mesh)-> { /* Diagnostic consumes and releases geometry. */ });
+        if (world!=null) accepted+=world.drain((key,mesh)-> {
+            acceptedRevision=mesh.revision(); acceptedIndices=mesh.indexCount();
+        });
         if (world!=null && sampledSection!=null) {
             Throwable error=world.takeFailure(sampledSection);
             if (error!=null) failure=error;
@@ -34,13 +38,13 @@ public final class ClientRuntime implements AutoCloseable {
             worldIdentity=identity;
         }
         if (sampledSection!=null && !sampledSection.equals(key)) world.unload(sampledSection);
-        try { world.capture(key,source); sampledSection=key; }
+        try { capturedRevision=world.capture(key,source); sampledSection=key; }
         catch (java.util.concurrent.RejectedExecutionException rejected) { failure=rejected; }
     }
 
     public void leaveWorld() {
         requireOwner();
-        if (world!=null) world.close();
+        if (world!=null) { world.close(); retiredLeases=world.retiredLeases(); }
         world=null; worldIdentity=null; sampledSection=null;
     }
 
@@ -48,6 +52,10 @@ public final class ClientRuntime implements AutoCloseable {
     public long tickCount() { requireOwner(); return ticks; }
     public long acceptedMeshes() { requireOwner(); return accepted; }
     public Throwable takeFailure() { requireOwner(); Throwable result=failure; failure=null; return result; }
+    public long capturedRevision() { requireOwner(); return capturedRevision; }
+    public long acceptedRevision() { requireOwner(); return acceptedRevision; }
+    public int acceptedIndices() { requireOwner(); return acceptedIndices; }
+    public int retiredLeases() { requireOwner(); return retiredLeases; }
 
     private void requireOwner() {
         if (Thread.currentThread()!=owner) throw new IllegalStateException("runtime belongs to the client thread");

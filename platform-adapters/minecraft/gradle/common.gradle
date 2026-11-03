@@ -3,7 +3,10 @@ ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetNam
 ext.set('loom.platform', target.loader)
 group = 'dev.overhaul'
 version = '0.1.0-SNAPSHOT'
-layout.buildDirectory = file("build/${targetName}")
+def worldSmoke = providers.gradleProperty('worldSmoke').isPresent()
+def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
+if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
+layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}")
 
 repositories {
     mavenCentral()
@@ -27,7 +30,13 @@ if (target.tier != 'legacy') {
     sourceSets.main.java.srcDir 'src/common/java'
     sourceSets.main.java.srcDir "src/${target.loader}/java"
     sourceSets.main.java.srcDir target.minecraft == '26.3' ? 'src/unobfuscated/java' : 'src/mapped/java'
+    if (providers.gradleProperty('worldSmoke').isPresent()) {
+        if (targetName != 'fabric-26.3') throw new GradleException('World smoke currently requires fabric-26.3')
+        sourceSets.main.java.srcDir 'src/worldSmoke/java'
+        sourceSets.main.java.srcDir modelSmoke ? 'src/modelSmoke/java' : 'src/noModelSmoke/java'
+    } else sourceSets.main.java.srcDir 'src/nosmoke/java'
     sourceSets.main.resources.srcDirs = ['src/common/resources', "src/${target.loader}/resources"]
+    if (modelSmoke) sourceSets.main.resources.srcDir 'src/modelSmoke/resources'
 } else {
     sourceSets.main.java.srcDir 'src/legacy/java'
     sourceSets.main.resources.srcDirs = ['src/legacy/resources']
@@ -42,6 +51,16 @@ dependencies {
     if (target.tier != 'legacy') testImplementation 'org.ow2.asm:asm:9.8'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+if (modelSmoke) {
+    dependencies {
+        implementation files('../../vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar',
+                '../../shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar')
+    }
+    tasks.withType(JavaExec).configureEach {
+        systemProperty 'org.lwjgl.system.stackSize', '1024'
+        jvmArgs '--enable-native-access=ALL-UNNAMED'
+    }
+}
 if (target.tier != 'legacy') sourceSets.test.java.srcDirs = ['src/test/java']
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
@@ -53,12 +72,38 @@ tasks.withType(Test).configureEach {
     classpath += sourceSets.main.compileClasspath
 }
 tasks.withType(JavaExec).configureEach {
-    if (providers.gradleProperty('diagnostics').isPresent() || providers.gradleProperty('smokeClient').isPresent()) {
+    if (providers.gradleProperty('diagnostics').isPresent() || providers.gradleProperty('smokeClient').isPresent()
+            || providers.gradleProperty('worldSmoke').isPresent()) {
         systemProperty 'overhaul.diagnostics.enable', 'true'
     }
     if (providers.gradleProperty('smokeClient').isPresent()) {
         def requested = providers.gradleProperty('smokeClient').get()
         systemProperty 'overhaul.diagnostics.stopAfterTicks', requested.empty ? '200' : requested
+    }
+    if (providers.gradleProperty('worldSmoke').isPresent()) {
+        systemProperty 'overhaul.diagnostics.worldSmoke', 'true'
+        systemProperty 'overhaul.diagnostics.expectedRunDirectory', file("run/${targetName}").absolutePath
+    }
+}
+
+if (providers.gradleProperty('worldSmoke').isPresent()) {
+    tasks.register('verifyWorldSmoke') {
+        group = 'verification'
+        description = 'Creates a new disposable world, validates live capture and orderly teardown.'
+        dependsOn 'runClient'
+        doLast {
+            def reportFile = file("run/${targetName}/overhaul-world-smoke-latest.json")
+            if (!reportFile.isFile()) throw new GradleException('World smoke produced no receipt')
+            def receipt = new groovy.json.JsonSlurper().parse(reportFile)
+            if (receipt.status != 'PASS' || receipt.indices <= 0 || receipt.retiredLeases != 0) {
+                throw new GradleException("World smoke failed: ${receipt}")
+            }
+            if (modelSmoke && (!receipt.additionalProbe.contains('bakedModels=true') ||
+                    !receipt.additionalProbe.contains('sourceLeases=0') ||
+                    !file("run/${targetName}/overhaul-model-smoke/world-model-vulkan.png").isFile())) {
+                throw new GradleException('World model smoke did not prove native rendering of captured assets')
+            }
+        }
     }
 }
 tasks.named('processResources') {
@@ -71,6 +116,12 @@ tasks.named('processResources') {
         if (target.loader != 'forge' || target.minecraft == '26.3') {
             filter { line -> line.contains('"refmap"') ? null : line }
         }
+    }
+    if (modelSmoke) doLast {
+        def metadata = new File(destinationDir, 'fabric.mod.json')
+        def json = new groovy.json.JsonSlurper().parse(metadata)
+        json.mixins += 'overhaul.model-smoke.mixins.json'
+        metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
     }
 }
 tasks.named('jar') {
@@ -95,6 +146,9 @@ afterEvaluate {
                 def entries = jar.entries().toList()
                 def forbidden = entries.find { it.name.startsWith('org/lwjgl/') || it.name.startsWith('dev/overhaul/vulkan/') }
                 if (forbidden) throw new GradleException("Server-safe adapter bundled native code: ${forbidden.name}")
+                if (!worldSmoke && entries.any { it.name.startsWith('dev/overhaul/minecraft/smoke/') }) {
+                    throw new GradleException('A normal adapter jar contains development world-creation code')
+                }
                 def metadata = target.tier == 'legacy' ? 'mcmod.info' : target.loader == 'fabric' ? 'fabric.mod.json' :
                         target.loader == 'neoforge' ? 'META-INF/neoforge.mods.toml' : 'META-INF/mods.toml'
                 if (jar.getEntry(metadata) == null) throw new GradleException("Missing ${metadata}")

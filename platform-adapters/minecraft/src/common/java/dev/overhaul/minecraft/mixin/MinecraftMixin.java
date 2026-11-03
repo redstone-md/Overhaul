@@ -3,6 +3,8 @@ package dev.overhaul.minecraft.mixin;
 import dev.overhaul.adapter.ClientRuntime;
 import dev.overhaul.adapter.SectionKey;
 import dev.overhaul.minecraft.MinecraftSectionSource;
+import dev.overhaul.minecraft.ClientSmokeFactory;
+import dev.overhaul.minecraft.ClientSmokeSession;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -17,6 +19,7 @@ public abstract class MinecraftMixin {
     @Unique private MinecraftSectionSource overhaul$source;
     @Unique private long overhaul$reportedMeshes;
     @Unique private long overhaul$stopAfterTicks;
+    @Unique private ClientSmokeSession overhaul$smoke;
 
     @Inject(method="tick()V",at=@At("HEAD"),require=1)
     private void overhaul$tick(CallbackInfo callback) {
@@ -24,10 +27,12 @@ public abstract class MinecraftMixin {
             overhaul$runtime=new ClientRuntime(Boolean.getBoolean("overhaul.diagnostics.enable"));
             overhaul$source=new MinecraftSectionSource((Minecraft)(Object)this);
             overhaul$stopAfterTicks=Long.getLong("overhaul.diagnostics.stopAfterTicks",0L);
+            overhaul$smoke=ClientSmokeFactory.create((Minecraft)(Object)this,overhaul$runtime,overhaul$source);
             if (overhaul$runtime.enabled()) java.util.logging.Logger.getLogger("overhaul").info(
                     "Overhaul diagnostic client hook active; vanilla rendering remains enabled");
         }
         overhaul$runtime.tick();
+        if (overhaul$smoke!=null) { overhaul$smoke.tick(); return; }
         if (overhaul$stopAfterTicks>0 && overhaul$runtime.tickCount()>=overhaul$stopAfterTicks) {
             java.util.logging.Logger.getLogger("overhaul").info("Overhaul client smoke reached ticks="
                     +overhaul$runtime.tickCount()+"; requesting orderly shutdown");
@@ -52,6 +57,7 @@ public abstract class MinecraftMixin {
 
     @Inject(method="close()V",at=@At("HEAD"),require=1,remap=false)
     private void overhaul$close(CallbackInfo callback) {
+        if (overhaul$smoke!=null) overhaul$smoke.close();
         if (overhaul$runtime!=null) overhaul$runtime.close();
     }
 }

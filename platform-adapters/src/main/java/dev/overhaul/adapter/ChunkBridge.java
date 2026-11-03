@@ -26,6 +26,7 @@ public final class ChunkBridge implements AutoCloseable {
     private final int maximumSections;
     private long revision;
     private boolean closed;
+    private int retiredLeases=-1;
 
     public ChunkBridge(int workers, int queueCapacity, int slabBytes, int slabCount, int maximumSections) {
         if (maximumSections<1) throw new IllegalArgumentException("maximumSections must be positive");
@@ -85,6 +86,10 @@ public final class ChunkBridge implements AutoCloseable {
     public int pendingTasks() { requireOwner(); return pipeline.pendingChunks(); }
     public int trackedSections() { requireOwner(); return sections.size(); }
     public int activeLeases() { requireOwner(); return pool.activeLeases(); }
+    public int retiredLeases() {
+        if (Thread.currentThread()!=owner) throw new IllegalStateException("adapter belongs to world thread");
+        return retiredLeases;
+    }
 
     private void requireOwner() {
         if (Thread.currentThread()!=owner) throw new IllegalStateException("adapter belongs to the world thread");
@@ -97,6 +102,7 @@ public final class ChunkBridge implements AutoCloseable {
         for (Slot slot:sections.values()) slot.close();
         sections.clear();
         pipeline.close();
+        retiredLeases=pool.activeLeases();
         pool.close();
     }
 
