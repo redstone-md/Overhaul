@@ -72,7 +72,8 @@ public final class GpuAllocator implements AutoCloseable {
     }
 
     void unmap(long allocation) { vmaUnmapMemory(handle, allocation); }
-    void flush(long allocation, long size) { vmaFlushAllocation(handle, allocation, 0, size); }
+    // VMA expands unaligned ranges to nonCoherentAtomSize; offsets stay local to this allocation.
+    void flush(long allocation, long offset, long size) { vmaFlushAllocation(handle, allocation, offset, size); }
     void invalidate(long allocation, long size) { vmaInvalidateAllocation(handle, allocation, 0, size); }
 
     void destroy(GpuBuffer buffer, long bufferHandle, long allocation) {

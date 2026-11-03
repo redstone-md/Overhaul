@@ -11,6 +11,7 @@ public final class GpuBuffer implements AutoCloseable {
     private final boolean hostVisible;
     private long handle;
     private ByteBuffer mapping;
+    private long hostWrittenBytes;
 
     GpuBuffer(GpuAllocator allocator, long handle, long allocation, int size, boolean hostVisible) {
         this.allocator = allocator;
@@ -23,12 +24,21 @@ public final class GpuBuffer implements AutoCloseable {
     public long handle() { requireOpen(); return handle; }
     public int size() { return size; }
 
-    public void write(ByteBuffer source) {
+    public void write(ByteBuffer source) { write(0, source); }
+
+    /** Writes the source's remaining range, preserving its position/limit and all other destination bytes. */
+    public void write(int destinationOffset, ByteBuffer source) {
         requireHost();
-        if (source.remaining() > size) throw new IllegalArgumentException("source exceeds allocation");
-        mapped().put(0, source, source.position(), source.remaining());
-        allocator.flush(allocation, size);
+        int length = java.util.Objects.requireNonNull(source, "source").remaining();
+        if (destinationOffset < 0 || destinationOffset > size - length)
+            throw new IllegalArgumentException("write range exceeds allocation");
+        if (length == 0) return;
+        mapped().put(destinationOffset, source, source.position(), length);
+        allocator.flush(allocation, destinationOffset, length);
+        hostWrittenBytes += length;
     }
+
+    long hostWrittenBytes() { requireOpen(); return hostWrittenBytes; }
 
     public ByteBuffer read() {
         requireHost();

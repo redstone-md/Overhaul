@@ -14,7 +14,8 @@ public final class GpuModelMesh implements AutoCloseable {
     private final Consumer<GpuModelMesh> onClose;
     private final double originX,originY,originZ;
     private final ModelTranslucentSorter sorter;
-    private final ByteBuffer indexScratch,translucentScratch;
+    private final ByteBuffer translucentScratch;
+    private final int translucentOffset;
     private final int[] counts=new int[RenderLayer.values().length];
     private double lastX=Double.NaN,lastY=Double.NaN,lastZ=Double.NaN;
     GpuBuffer vertices,indices,indirect;
@@ -24,16 +25,14 @@ public final class GpuModelMesh implements AutoCloseable {
         this.context=context;this.onClose=onClose;
         originX=mesh.originX();originY=mesh.originY();originZ=mesh.originZ();sorter=mesh.newTranslucentSorter();
         ByteBuffer vertexData=mesh.vertexBuffer(),indexData=mesh.indexBuffer();
-        indexScratch=ByteBuffer.allocateDirect(indexData.remaining()).order(ByteOrder.nativeOrder());indexScratch.put(indexData).flip();
-        ByteBuffer translucent=indexScratch.duplicate().order(ByteOrder.nativeOrder());
-        translucent.position(mesh.firstIndex(RenderLayer.TRANSLUCENT)*4);
-        translucentScratch=translucent.slice().order(ByteOrder.nativeOrder());
+        translucentOffset=Math.multiplyExact(mesh.firstIndex(RenderLayer.TRANSLUCENT),Integer.BYTES);
+        translucentScratch=ByteBuffer.allocateDirect(Math.multiplyExact(sorter.indexCount(),Integer.BYTES)).order(ByteOrder.nativeOrder());
         try {
             vertices=allocator.deviceBuffer(Math.max(1,vertexData.remaining()),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             if (vertexData.hasRemaining()) try(GpuBuffer staging=allocator.hostBuffer(vertexData.remaining(),VK_BUFFER_USAGE_TRANSFER_SRC_BIT)) {
                 staging.write(vertexData);commands.copy(staging,vertices,vertexData.remaining());
             }
-            indices=allocator.hostBuffer(Math.max(1,indexScratch.remaining()),VK_BUFFER_USAGE_INDEX_BUFFER_BIT);indices.write(indexScratch);
+            indices=allocator.hostBuffer(Math.max(1,indexData.remaining()),VK_BUFFER_USAGE_INDEX_BUFFER_BIT);indices.write(indexData);
             indirect=allocator.hostBuffer(RenderLayer.values().length*20,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
             ByteBuffer draws=ByteBuffer.allocate(RenderLayer.values().length*20).order(ByteOrder.nativeOrder());
             for(RenderLayer layer:RenderLayer.values()){
@@ -47,7 +46,8 @@ public final class GpuModelMesh implements AutoCloseable {
         context.requireOwner();if(closed)throw new IllegalStateException("Model mesh closed");
         if(sorter.indexCount()==0 || (lastX==camera.x()&&lastY==camera.y()&&lastZ==camera.z()))return;
         translucentScratch.clear();sorter.writeSortedIndices(translucentScratch,camera.x(),camera.y(),camera.z());
-        indices.write(indexScratch);lastX=camera.x();lastY=camera.y();lastZ=camera.z();
+        translucentScratch.flip();indices.write(translucentOffset,translucentScratch);
+        lastX=camera.x();lastY=camera.y();lastZ=camera.z();
     }
     int indexCount(RenderLayer layer){return counts[layer.ordinal()];}
     public double originX(){return originX;}public double originY(){return originY;}public double originZ(){return originZ;}
