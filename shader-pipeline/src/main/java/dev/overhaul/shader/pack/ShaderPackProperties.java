@@ -36,7 +36,7 @@ public final class ShaderPackProperties {
         for (var entry : new TreeMap<>(values).entrySet()) {
             if (entry.getKey().equals(blendPrefix) || entry.getKey().startsWith(blendPrefix+".")) {
                 String buffer = entry.getKey().equals(blendPrefix) ? "*" : entry.getKey().substring(blendPrefix.length()+1);
-                if (!buffer.equals("*") && !buffer.matches("colortex(?:[0-9]|1[0-5])")) throw unsupported("Unsupported blend buffer: "+buffer);
+                if (!buffer.equals("*") && !buffer.matches("colortex(?:[0-9]|1[0-5])|shadowcolor[01]")) throw unsupported("Unsupported blend buffer: "+buffer);
                 blends.put(buffer,parseBlend(entry.getValue()));
             }
         }
@@ -45,7 +45,7 @@ public final class ShaderPackProperties {
         String flipPrefix = "flip."+name+".";
         for (var entry : new TreeMap<>(values).entrySet()) if (entry.getKey().startsWith(flipPrefix)) {
             String target = entry.getKey().substring(flipPrefix.length());
-            if (!target.matches("colortex(?:[0-9]|1[0-5])") || !Set.of("true","false").contains(entry.getValue())) throw unsupported("Invalid buffer flip: "+entry.getKey());
+            if (!target.matches("colortex(?:[0-9]|1[0-5])|shadowcolor[01]") || !Set.of("true","false").contains(entry.getValue())) throw unsupported("Invalid buffer flip: "+entry.getKey());
             flips.put(target,Boolean.valueOf(entry.getValue()));
         }
         return new ProgramState(enabled,blends,alpha,flips);
@@ -55,8 +55,8 @@ public final class ShaderPackProperties {
         List<String> result = new ArrayList<>();
         for (String key : new java.util.TreeSet<>(values.keySet())) {
             boolean pipeline = key.matches("program\\.[A-Za-z0-9_/-]+\\.enabled")
-                    || key.matches("(?:blend|alphaTest)\\.[A-Za-z0-9_/-]+(?:\\.colortex(?:[0-9]|1[0-5]))?")
-                    || key.matches("flip\\.[A-Za-z0-9_/-]+\\.colortex(?:[0-9]|1[0-5])")
+                    || key.matches("(?:blend|alphaTest)\\.[A-Za-z0-9_/-]+(?:\\.(?:colortex(?:[0-9]|1[0-5])|shadowcolor[01]))?")
+                    || key.matches("flip\\.[A-Za-z0-9_/-]+\\.(?:colortex(?:[0-9]|1[0-5])|shadowcolor[01])")
                     || key.matches("size\\.buffer\\.colortex(?:[0-9]|1[0-5])");
             if (!pipeline && !key.startsWith("screen") && !key.startsWith("profile.") && !key.equals("sliders")) result.add(key);
         }

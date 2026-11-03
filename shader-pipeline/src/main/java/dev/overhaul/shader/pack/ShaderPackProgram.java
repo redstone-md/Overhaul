@@ -43,7 +43,7 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
     public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,
                                              CoordinateConvention coordinates,ShaderPackProperties.AlphaTest alphaTest) {
         var framebuffer = FramebufferBindings.parse(fragment);
-        var translated = new PackProgramTranslator().translate(PackRenderTargets.stripDirectives(vertex),PackRenderTargets.stripDirectives(fragment), coordinates);
+        var translated = new PackProgramTranslator().translate(PackShadowSettings.stripDirectives(vertex),PackShadowSettings.stripDirectives(fragment), coordinates);
         SpirvBinary compiledVertex=compiler.compile(name+".vsh",translated.vertex(),ShaderStage.VERTEX);
         SpirvBinary compiledFragment=compiler.compile(name+".fsh",FragmentAlphaTest.lower(translated.fragment(),alphaTest),ShaderStage.FRAGMENT);
         return new ShaderPackProgram(compiledVertex,compiledFragment,SpirvInterface.active(translated.bindings(),compiledVertex,compiledFragment),framebuffer,coordinates,alphaTest);

@@ -69,9 +69,11 @@ public final class PackRenderTargets {
                 used.put(colorIndex(matcher.group(2)),true);
             }
         }
-        public void use(ShaderPackProgram code){
+        public void requireTarget(int index){if(index<0||index>15)throw invalid("Invalid color target: "+index);used.put(index,true);}
+        public void use(ShaderPackProgram code){use(code,true);}
+        public void use(ShaderPackProgram code,boolean includeOutputs){
             legacyDepth|=code.descriptors().samplers().containsKey("gdepth");
-            for(int index:code.framebuffer().colorTargets())if(index>=0)used.put(index,true);
+            if(includeOutputs)for(int index:code.framebuffer().colorTargets())if(index>=0)used.put(index,true);
             for(String sampler:code.descriptors().samplers().keySet()){int index=colorIndex(sampler);if(index>=0)used.put(index,true);}
         }
         public PackRenderTargets build(){

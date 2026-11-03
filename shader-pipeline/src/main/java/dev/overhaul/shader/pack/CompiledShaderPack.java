@@ -23,9 +23,11 @@ public final class CompiledShaderPack {
     private final List<Program> programs;
     private final Map<String,Sources> sources;
     private final PackRenderTargets targets;
-    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,Map<String,Sources> sources){this.programs=List.copyOf(programs);this.targets=targets;this.sources=Map.copyOf(sources);}
+    private final PackShadowSettings shadow;
+    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);}
     public List<Program> programs(){return programs;}
     public PackRenderTargets targets(){return targets;}
+    public PackShadowSettings shadow(){return shadow;}
     public Sources sources(Program program){Sources value=sources.get(program.name());if(value==null)throw new IllegalArgumentException("Program belongs to another pack generation");return value;}
 
     public static CompiledShaderPack compile(ShaderPackSource source,Integer dimension,Map<String,Boolean> options,
@@ -39,6 +41,7 @@ public final class CompiledShaderPack {
         if(catalog.programs().size()>512)throw new UnsupportedShaderException("Shader pack exceeds the 512-program generation bound");
         if(!catalog.diagnostics().isEmpty())throw new UnsupportedShaderException(String.join("\n",catalog.diagnostics()));
         List<Program> programs=new ArrayList<>();PackRenderTargets.Builder targets=new PackRenderTargets.Builder(catalog.properties());
+        PackShadowSettings.Builder shadow=new PackShadowSettings.Builder(catalog.properties());
         Map<String,Sources> sources=new java.util.LinkedHashMap<>();long sourceCharacters=0;
         PackPreprocessor preprocessor=new PackPreprocessor(source,compiler,macros,options);
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
@@ -49,18 +52,25 @@ public final class CompiledShaderPack {
             sourceCharacters+=(long)vertex.length()+fragment.length();if(sourceCharacters>67_108_864)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),new Sources(vertex,fragment));
             targets.scan(fragment);
+            shadow.scan(vertex);shadow.scan(fragment);
             ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
                     discovered.state().alphaTest().orElse(null));
-            targets.use(code);
+            boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
+            for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)
+                throw new UnsupportedShaderException("Buffer flip uses the wrong output namespace: "+discovered.name()+"."+target);
+            for(String target:discovered.state().blends().keySet())if(!target.equals("*")&&(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0))
+                throw new UnsupportedShaderException("Blend uses the wrong output namespace: "+discovered.name()+"."+target);
+            targets.use(code,!shadowOutputs);shadow.use(code,shadowOutputs);
             programs.add(new Program(discovered.name(),stage,ordinal(name),code,discovered.state(),PackRenderTargets.mipmapTargets(fragment)));
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
-        return new CompiledShaderPack(programs,targets.build(),sources);
+        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources);
     }
     private static Stage stage(String name){
         if(name.startsWith("gbuffers_"))return Stage.GBUFFER;
         if(name.equals("shadow")||name.startsWith("shadow_"))return Stage.SHADOW;
+        if(name.matches("shadowcomp[0-9]*"))return Stage.SHADOWCOMPOSITE;
         for(Stage stage:Stage.values())if(stage!=Stage.GBUFFER&&stage!=Stage.SHADOW
                 &&name.matches(stage.name().toLowerCase(java.util.Locale.ROOT)+"[0-9]*"))return stage;
         throw new UnsupportedShaderException("Unknown shader pack program stage: "+name);
