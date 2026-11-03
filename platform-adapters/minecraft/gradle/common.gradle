@@ -161,7 +161,8 @@ tasks.named('processResources') {
         def config = new File(destinationDir, 'overhaul.mixins.json')
         def json = new groovy.json.JsonSlurper().parse(config)
         json.mixins = (json.mixins + ['EntitySectionStorageMixin', 'ChunkMapParseMixin', 'MinecraftServerChunkParseMixin', 'ChunkMapLightingMixin',
-                'ChunkMapGenerationMixin', 'RandomStateGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin']).unique()
+                'ChunkMapGenerationMixin', 'RandomStateGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin',
+                'NodeEvaluatorMixin']).unique()
         config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
     }
     if (modelSmoke) doLast {
