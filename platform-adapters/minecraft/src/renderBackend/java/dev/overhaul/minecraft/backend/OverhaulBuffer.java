@@ -19,7 +19,7 @@ public final class OverhaulBuffer extends BackendResource implements GpuBuffer {
         hostAccessible=(usage&(USAGE_MAP_READ|USAGE_MAP_WRITE))!=0;
         try {
             int nativeUsage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            if ((usage&USAGE_VERTEX)!=0) nativeUsage|=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            if ((usage&USAGE_VERTEX)!=0) nativeUsage|=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             if ((usage&USAGE_INDEX)!=0) nativeUsage|=VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
             if ((usage&USAGE_UNIFORM)!=0) nativeUsage|=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
             if ((usage&USAGE_UNIFORM_TEXEL_BUFFER)!=0) nativeUsage|=VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;

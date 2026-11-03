@@ -19,17 +19,18 @@ import static dev.overhaul.vulkan.VulkanException.check;
 
 /** Device-owned idle pools contain capacity metadata only, never pipelines or bound resources. */
 final class DescriptorPoolCache implements AutoCloseable {
-    record Shape(int uniformBuffers,int combinedSamplers,int texelBuffers,int maxSets){
+    record Shape(int uniformBuffers,int combinedSamplers,int texelBuffers,int storageBuffers,int maxSets){
+        Shape(int uniformBuffers,int combinedSamplers,int texelBuffers,int maxSets){this(uniformBuffers,combinedSamplers,texelBuffers,0,maxSets);}
         Shape{
-            if(uniformBuffers<0||combinedSamplers<0||texelBuffers<0||maxSets<1)throw new IllegalArgumentException("Invalid descriptor capacity");
-            Math.multiplyExact(uniformBuffers,maxSets);Math.multiplyExact(combinedSamplers,maxSets);Math.multiplyExact(texelBuffers,maxSets);
+            if(uniformBuffers<0||combinedSamplers<0||texelBuffers<0||storageBuffers<0||maxSets<1)throw new IllegalArgumentException("Invalid descriptor capacity");
+            Math.multiplyExact(uniformBuffers,maxSets);Math.multiplyExact(combinedSamplers,maxSets);Math.multiplyExact(texelBuffers,maxSets);Math.multiplyExact(storageBuffers,maxSets);
         }
         static Shape of(List<BindGroupLayout.UniformDescription> uniforms,int sets){
             int buffers=0,samplers=0,texels=0;
             for(var uniform:uniforms)switch(uniform.type()){case UNIFORM_BUFFER->buffers++;case COMBINED_IMAGE_SAMPLER->samplers++;case TEXEL_BUFFER->texels++;}
             return new Shape(buffers,samplers,texels,sets);
         }
-        long weight(){return((long)uniformBuffers+combinedSamplers+texelBuffers)*maxSets;}
+        long weight(){return((long)uniformBuffers+combinedSamplers+texelBuffers+storageBuffers)*maxSets;}
     }
     record Stats(long createdPools,long reusedPools,long resetPools,long destroyedPools,long evictedPools,
                  int idlePools,int activePools,long idleDescriptors){}
@@ -57,11 +58,12 @@ final class DescriptorPoolCache implements AutoCloseable {
     }
     private Pool create(Shape shape){
         try(MemoryStack stack=MemoryStack.stackPush()){
-            int count=(shape.uniformBuffers()>0?1:0)+(shape.combinedSamplers()>0?1:0)+(shape.texelBuffers()>0?1:0);
+            int count=(shape.uniformBuffers()>0?1:0)+(shape.combinedSamplers()>0?1:0)+(shape.texelBuffers()>0?1:0)+(shape.storageBuffers()>0?1:0);
             VkDescriptorPoolSize.Buffer sizes=VkDescriptorPoolSize.calloc(count,stack);int index=0;
             if(shape.uniformBuffers()>0)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(shape.uniformBuffers()*shape.maxSets());
             if(shape.combinedSamplers()>0)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(shape.combinedSamplers()*shape.maxSets());
-            if(shape.texelBuffers()>0)sizes.get(index).type(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER).descriptorCount(shape.texelBuffers()*shape.maxSets());
+            if(shape.texelBuffers()>0)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER).descriptorCount(shape.texelBuffers()*shape.maxSets());
+            if(shape.storageBuffers()>0)sizes.get(index).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(shape.storageBuffers()*shape.maxSets());
             LongBuffer pointer=stack.mallocLong(1);
             check(vkCreateDescriptorPool(context.device(),VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(shape.maxSets()).pPoolSizes(sizes),null,pointer),"overhaul descriptor pool");
             createdPools++;return new Pool(shape,pointer.get(0));

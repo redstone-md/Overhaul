@@ -14,11 +14,13 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
     private static final float[] ORTHOGRAPHIC={2,0,0,0,0,2,0,0,0,0,-2,0,-1,-1,-1,1};
     private static final float[] ORTHOGRAPHIC_INVERSE={.5f,0,0,0,0,.5f,0,0,0,0,-.5f,0,.5f,.5f,-.5f,1};
     private static final float[] NORMAL_IDENTITY={1,0,0,0,1,0,0,0,1};
+    private static final float[] LIGHTMAP_MATRIX={1f/256,0,0,0,0,1f/256,0,0,0,0,1,0,8f/256,8f/256,0,1};
     private final long started=System.nanoTime();
     private long previousTime=started;
     private final float[] projection=new float[16],projectionInverse=new float[16],view=new float[16],viewInverse=new float[16];
     private final float[] previousProjection=new float[16],previousView=new float[16];
     private final float[] originalProjection=new float[16];
+    private final float[] modelViewProjection=new float[16],normal=new float[9];
     private final Matrix4f matrix=new Matrix4f();
     private LevelRenderState state;
     private Minecraft minecraft;
@@ -36,6 +38,8 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
         }
         matrix.set(projection).invert().get(projectionInverse);state.cameraRenderState.viewRotationMatrix.get(view);
         matrix.set(view).invert().get(viewInverse);
+        matrix.set(projection).mul(state.cameraRenderState.viewRotationMatrix).get(modelViewProjection);
+        for(int column=0;column<3;column++)for(int row=0;row<3;row++)normal[column*3+row]=viewInverse[row*4+column];
         state.cameraRenderState.projectionMatrix.get(originalProjection);
         near=originalProjection[14]/(1+originalProjection[10]);
         for(float value:projectionInverse)if(!Float.isFinite(value))throw new UnsupportedShaderException("Singular shader-pack camera projection");
@@ -64,10 +68,14 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
             case "gbufferModelViewInverse"->values.setMatrix(name,4,viewInverse);
             case "gbufferPreviousProjection"->values.setMatrix(name,4,previousProjection);
             case "gbufferPreviousModelView"->values.setMatrix(name,4,previousView);
-            case "overhaulModelViewProjection","overhaulProjection"->values.setMatrix(name,4,ORTHOGRAPHIC);
-            case "overhaulProjectionInverse"->values.setMatrix(name,4,ORTHOGRAPHIC_INVERSE);
-            case "overhaulModelView","overhaulModelViewInverse","overhaulTextureMatrix0","overhaulTextureMatrix1"->values.setMatrix(name,4,IDENTITY);
-            case "overhaulNormalMatrix"->values.setMatrix(name,3,NORMAL_IDENTITY);
+            case "overhaulModelViewProjection"->values.setMatrix(name,4,program.scene()?modelViewProjection:ORTHOGRAPHIC);
+            case "overhaulProjection"->values.setMatrix(name,4,program.scene()?projection:ORTHOGRAPHIC);
+            case "overhaulProjectionInverse"->values.setMatrix(name,4,program.scene()?projectionInverse:ORTHOGRAPHIC_INVERSE);
+            case "overhaulModelView"->values.setMatrix(name,4,program.scene()?view:IDENTITY);
+            case "overhaulModelViewInverse"->values.setMatrix(name,4,program.scene()?viewInverse:IDENTITY);
+            case "overhaulTextureMatrix0"->values.setMatrix(name,4,IDENTITY);
+            case "overhaulTextureMatrix1"->values.setMatrix(name,4,program.scene()?LIGHTMAP_MATRIX:IDENTITY);
+            case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
             default->throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());
         }
     }

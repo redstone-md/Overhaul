@@ -102,6 +102,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
     }
     public boolean hasSceneProgram(){return scene;}
+    public long samplerHandle(){requireOpen();return sampler.handle();}
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
     public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(!program.scene())throw new IllegalArgumentException("Not a scene program");return outputs(swaps.route(program));}
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */

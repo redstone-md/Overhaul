@@ -75,6 +75,14 @@ public final class LegacyShaderContract {
             source = replace(source,"gl_FragCoord","vec4(gl_FragCoord.x, overhaulViewportHeight-gl_FragCoord.y, gl_FragCoord.zw)");
             declarations.append("uniform float overhaulViewportHeight;\n");
         }
+        if(!vertex&&reversed&&contains(source,"gl_FragCoord"))source=replace(source,"gl_FragCoord","vec4(gl_FragCoord.xy,1.0-gl_FragCoord.z,gl_FragCoord.w)");
+        if(!vertex&&reversed&&contains(source,"gl_FragDepth")){
+            source=replace(source,"gl_FragDepth","overhaulOpenGlDepth");declarations.append("float overhaulOpenGlDepth;\n");
+            Pattern main=Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void)?\\s*\\)");
+            if(!main.matcher(source).find())throw new UnsupportedShaderException("Fragment depth conversion requires a canonical main entry point");
+            source=main.matcher(source).replaceFirst("void overhaulPackFragment()");
+            source+="\nvoid main(){overhaulOpenGlDepth=1.0-gl_FragCoord.z;overhaulPackFragment();gl_FragDepth=1.0-overhaulOpenGlDepth;}\n";
+        }
         if (vertex) {
             Pattern main = Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void)?\\s*\\)");
             var match = main.matcher(source);

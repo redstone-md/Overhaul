@@ -24,11 +24,13 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
     private final OverhaulCommandQueue queue;
     private final DescriptorPoolCache descriptorPools;
     private final AttachmentPool attachments;
+    private final ShaderPackSceneState shaderPacks;
     private final DeviceInfo info;
     private final BackendSmokeProbe smoke;
     private final BufferStorageStatistics bufferStorage=new BufferStorageStatistics();
     private final BackendDrawStatistics drawStatistics=new BackendDrawStatistics();
     private final Set<BackendResource> resources=new LinkedHashSet<>();
+    private final ThreadLocal<PipelineCompileMetadata> pipelineCompilations=new ThreadLocal<>();
     private final List<OverhaulCommandEncoder> encoders=new ArrayList<>();
     private final List<OverhaulSurface> surfaces=new ArrayList<>();
     private final boolean debugging;
@@ -55,6 +57,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
         allocator=allocated; commands=lane; queue=work;
         descriptorPools=new DescriptorPoolCache(context);
         attachments=new AttachmentPool(this,64);
+        shaderPacks=new ShaderPackSceneState(this);
         smoke=new BackendSmokeProbe(this);
     }
 
@@ -67,6 +70,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
     void forget(BackendResource resource) { requireOwner(); resources.remove(resource); }
     @Override public VulkanContext context() { requireOwner(); return context; }
     public GpuAllocator allocator() { requireOwner(); return allocator; }
+    @Override public ShaderPackSceneState shaderPacks(){requireOpen();return shaderPacks;}
     public ImmediateCommands commands() { requireOwner(); if (queue!=null) queue.flush(); return commands; }
     OverhaulCommandQueue queue() { requireOwner(); return queue; }
     BufferStorageStatistics bufferStorage() { requireOwner(); return bufferStorage; }
@@ -114,7 +118,16 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
     @Override public BackendRenderPipeline.Pending compilePipeline(BackendRenderPipeline.CreateInfo info) {
         // Frontend invokes this on its compilation executor. Pending copies shader input;
         // native work and ownership registration happen during finishCompile on the render thread.
-        return OverhaulPipeline.compile(this,info);
+        PipelineCompileMetadata metadata=pipelineCompilations.get();
+        if(metadata!=null&&(!metadata.name().equals(info.name())||info.shaders().stream().noneMatch(shader->
+                shader.module().type()==com.mojang.renderpearl.api.pipeline.ShaderType.FRAGMENT&&shader.name().equals(metadata.fragment()))))
+            throw new IllegalStateException("Frontend pipeline compile metadata differs from the actual backend shader identity");
+        return OverhaulPipeline.compile(this,info,metadata);
+    }
+    /** The supplied frontend executor owns this scope; nested work restores the previous device-local context. */
+    void compileWithMetadata(PipelineCompileMetadata metadata,Runnable work){
+        PipelineCompileMetadata previous=pipelineCompilations.get();pipelineCompilations.set(metadata);
+        try{work.run();}finally{if(previous==null)pipelineCompilations.remove();else pipelineCompilations.set(previous);}
     }
     @Override public GpuQueryPool createTimestampQueryPool(int count) { requireOpen(); return new OverhaulQueryPool(this,count); }
     @Override public long getTimestampCalibrationOffset() { requireOpen(); return OverhaulQueryPool.calibrationOffset(this); }
@@ -128,8 +141,8 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
         return type.cast(resource);
     }
     @Override public dev.overhaul.vulkan.GpuBuffer buffer(GpuBuffer buffer) { return owned(buffer,OverhaulBuffer.class).nativeBuffer(); }
-    public dev.overhaul.vulkan.GpuImage image(GpuTexture texture) { return owned(texture,OverhaulTexture.class).image(); }
-    @Override public dev.overhaul.vulkan.GpuImageView texture(GpuTextureView view) { return owned(view,OverhaulTextureView.class).nativeView(); }
+    public dev.overhaul.vulkan.GpuImage image(GpuTexture texture) { return shaderPacks.redirect(owned(texture,OverhaulTexture.class).image()); }
+    @Override public dev.overhaul.vulkan.GpuImageView texture(GpuTextureView view) { return shaderPacks.redirect(owned(view,OverhaulTextureView.class).nativeView()); }
     @Override public dev.overhaul.vulkan.GpuSampler sampler(GpuSampler sampler) { return owned(sampler,OverhaulSampler.class).nativeSampler(); }
     @Override public AutoCloseable retain(Object resource) { return owned(resource,BackendResource.class).pin(); }
     @Override public void prepareTimestamp(GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).prepare(index); }
@@ -142,6 +155,7 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
         if (closed) return;
         requireOwner();
         if (!closing) {
+            shaderPacks.close();
             queue.drain();
             for (var encoder:encoders) encoder.close();
             for (var surface:surfaces) surface.close();

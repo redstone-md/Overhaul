@@ -35,6 +35,9 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private final OverhaulDeviceBackend owner;
     private final PassAttachments attachments;
     private final PassDescriptors descriptors;
+    private final ShaderPackSceneGeneration scene;
+    private final TerrainPackDescriptors terrainDescriptors;
+    private PassAttachments ordinaryLoading,terrainAttachments;
     private final BackendDrawStatistics.Recording drawMetrics=new BackendDrawStatistics.Recording();
     private final List<Command> commands=new ArrayList<>();
     private final List<TimestampReset> timestampResets=new ArrayList<>();
@@ -57,8 +60,8 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private dev.overhaul.vulkan.FrameRing.Submission submission;
 
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
-        this.owner=owner;owner.requireOpen();descriptors=new PassDescriptors(owner);
-        try{attachments=new PassAttachments(owner,descriptor,this::retain);}
+        this.owner=owner;owner.requireOpen();descriptors=new PassDescriptors(owner);scene=owner.shaderPacks().capture();terrainDescriptors=scene==null?null:new TerrainPackDescriptors(owner);
+        try{if(scene!=null)retain(scene);attachments=new PassAttachments(owner,descriptor,this::retain,scene);}
         catch(RuntimeException|Error failure){releasePins();throw failure;}
     }
     private void requireCapture(){owner.requireOpen();if(closed||sealed)throw new IllegalStateException("Render pass no longer accepts commands");}
@@ -165,6 +168,8 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     void retainAttachmentsUntil(dev.overhaul.vulkan.FrameRing.Submission completion) {
         submission=completion;
         descriptors.submitted(completion); attachments.retainUntil(completion);
+        if(terrainDescriptors!=null)terrainDescriptors.submitted(completion);
+        if(ordinaryLoading!=null)ordinaryLoading.retainUntil(completion);if(terrainAttachments!=null)terrainAttachments.retainUntil(completion);
     }
     /** Freezes frontend capture without beginning native recording or waiting for the GPU. */
     public void seal(){
@@ -203,10 +208,33 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         if(!sealed)seal();recorded=true;
         for(var reset:timestampResets)owner.resetTimestamp(command,reset.pool(),reset.index());
         for(var view:sampled)transitions.add(view.image().recordTransition(command,view.baseMip(),view.mipCount(),view.baseLayer(),view.layerCount(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-        attachments.begin(command,transitions);
-        try{for(Command entry:commands){if(entry.bindings()!=null)entry.bindings().bind(command,owner,attachments,descriptors);entry.draw().accept(command);}}
-        finally{vkCmdEndRenderPass(command);}
+        if(scene==null){
+            attachments.begin(command,transitions);
+            try{for(Command entry:commands){if(entry.bindings()!=null)entry.bindings().bind(command,owner,attachments,descriptors);entry.draw().accept(command);}}
+            finally{vkCmdEndRenderPass(command);}
+        }else recordScene(command);
         recordingSucceeded=true;
+    }
+    private void recordScene(VkCommandBuffer command){
+        // Apply frontend clear semantics once; every resumed draw run uses LOAD attachments.
+        attachments.begin(command,transitions);vkCmdEndRenderPass(command);
+        ordinaryLoading=attachments.loading(owner);PassAttachments current=null;
+        try{
+            for(Command entry:commands){
+                if(entry.bindings()==null){if(current!=null){vkCmdEndRenderPass(command);current=null;}entry.draw().accept(command);continue;}
+                var state=entry.bindings();boolean replace=attachments.hasColor(scene.color())&&scene.terrain(state.pipeline());
+                if(replace&&terrainAttachments==null)terrainAttachments=scene.attachments(attachments);
+                PassAttachments desired=replace?terrainAttachments:ordinaryLoading;
+                if(current!=desired){
+                    if(current!=null){vkCmdEndRenderPass(command);current=null;}
+                    if(replace)scene.sampleTransitions(command,state,desired,transitions);
+                    desired.begin(command,transitions);current=desired;
+                }
+                if(replace)scene.pipeline(state.pipeline()).bind(command,state,desired,descriptors,terrainDescriptors);
+                else state.bind(command,owner,desired,descriptors);
+                entry.draw().accept(command);
+            }
+        }finally{if(current!=null)vkCmdEndRenderPass(command);}
     }
     /** Called only after the encoder's native queue submission succeeds. */
     public void complete(){
@@ -222,7 +250,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         if(closed)return;owner.requireOwner();
         if(submission!=null){submission.await();if(closed)return;}
         closed=true;
-        try{descriptors.close();attachments.close();}
+        try{descriptors.close();if(terrainDescriptors!=null)terrainDescriptors.close();if(terrainAttachments!=null)terrainAttachments.close();if(ordinaryLoading!=null)ordinaryLoading.close();attachments.close();}
         finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();timestampResets.clear();timestampKeys.clear();sampled.clear();bufferReads.clear();releasePins();}}
     }
 }

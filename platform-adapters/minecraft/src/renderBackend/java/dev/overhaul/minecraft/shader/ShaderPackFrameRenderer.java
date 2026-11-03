@@ -3,63 +3,59 @@ package dev.overhaul.minecraft.shader;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.backend.OverhaulGpuDevice;
+import dev.overhaul.minecraft.backend.ShaderPackSceneState;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.ShaderPackSource;
-import dev.overhaul.vulkan.PackGraphRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
-import net.minecraft.world.level.Level;
 import org.joml.Matrix4fc;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Game-renderer owned pack generation. Runs after world passes and before hand/HUD depth is cleared. */
+/** Owns installation and frame boundaries; the device pins captured scene generations through native retirement. */
 public final class ShaderPackFrameRenderer implements AutoCloseable {
     private final Thread owner=Thread.currentThread();
     private final Minecraft minecraft;
     private final float[] projection=new float[16];
     private final ShaderPackFrameUniforms uniforms=new ShaderPackFrameUniforms();
-    private PackGraphRuntime runtime;
-    private Object dimension;
-    private Object world;
+    private ShaderPackSceneState scenes;
+    private Object dimension,world;
     private String configuration="";
     private int width,height;
-    private boolean projectionReady,closed;
+    private boolean installed,prepared,captured,closed;
     public ShaderPackFrameRenderer(Minecraft minecraft){this.minecraft=minecraft;}
-    public void projection(Matrix4fc matrix){requireOpen();matrix.get(projection);projectionReady=true;}
-    public void render(RenderTarget target,LevelRenderState state){
-        requireOpen();String requested=System.getProperty("overhaul.shaderPack","").trim();
-        if(requested.isEmpty()){invalidate();return;}
+    public void projection(Matrix4fc matrix){
+        requireOpen();matrix.get(projection);prepared=true;
+    }
+    public void beginWorld(){
+        requireOpen();
+        RenderTarget target=minecraft.gameRenderer.mainRenderTarget();LevelRenderState state=minecraft.gameRenderer.gameRenderState().levelRenderState;
+        String requested=System.getProperty("overhaul.shaderPack","").trim();if(requested.isEmpty()){invalidate();return;}
         if(!(RenderSystem.getDevice() instanceof OverhaulGpuDevice device))throw new IllegalStateException("A shader pack requires the owned Vulkan backend");
-        if(minecraft.level==null||!projectionReady)throw new IllegalStateException("Shader-pack frame lacks the captured world projection");
-        var resources=device.nativeFrames();var key=minecraft.level.dimension();
+        if(minecraft.level==null||captured||!prepared)throw new IllegalStateException("Shader-pack frame lacks its world/projection or is already captured");
+        var resources=device.nativeFrames();scenes=resources.shaderPacks();var key=minecraft.level.dimension();
         String options=System.getProperty("overhaul.shaderPackOptions","");String macros=System.getProperty("overhaul.shaderPackDefines","");
         String nextConfiguration=requested+"\n"+options+"\n"+macros;
-        if(runtime==null||world!=minecraft.level||width!=target.width||height!=target.height||!key.equals(dimension)||!configuration.equals(nextConfiguration)){
+        if(!installed||world!=minecraft.level||width!=target.width||height!=target.height||!key.equals(dimension)||!configuration.equals(nextConfiguration)){
             Path path=minecraft.gameDirectory.toPath().resolve(requested).normalize();
             try(ShaderPackSource source=ShaderPackSource.open(path);ShadercCompiler compiler=new ShadercCompiler()){
-                Integer packDimension=key.equals(Level.OVERWORLD)?0:key.equals(Level.NETHER)?-1:key.equals(Level.END)?1:null;
-                CompiledShaderPack pack=CompiledShaderPack.compile(source,packDimension,options(options),definitions(macros),compiler);
-                PackGraphRuntime replacement=new PackGraphRuntime(resources.context(),resources.allocator(),pack,target.width,target.height,compiler);
-                if(runtime!=null)runtime.close();runtime=replacement;width=target.width;height=target.height;dimension=key;world=minecraft.level;configuration=nextConfiguration;uniforms.resetHistory();
+                Map<String,String> definitions=definitions(macros);Map<String,Boolean> selected=options(options);
+                CompiledShaderPack pack=CompiledShaderPack.compileForDimension(source,key.identifier().toString(),selected,definitions,compiler);
+                scenes.install(pack,target.width,target.height,compiler);installed=true;
+                width=target.width;height=target.height;dimension=key;world=minecraft.level;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+path,failure);}
         }
-        var color=target.getColorTextureView();var depth=target.getDepthTextureView();
-        AutoCloseable colorPin=resources.retain(color),depthPin=null;
-        try{
-            if(depth!=null)depthPin=resources.retain(depth);
-            var lane=resources.commands(); // Flushes all preceding frontend scene writes onto this same native queue.
-            uniforms.capture(minecraft,state,target.width,target.height,projection);
-            var fog=state.cameraRenderState.fogData.color;
-            runtime.render(lane,new PackGraphRuntime.Frame(resources.texture(color),depth==null?null:resources.texture(depth),
-                    new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),Map.of()),uniforms);
-            uniforms.complete();projectionReady=false;
-        }finally{try{if(depthPin!=null)depthPin.close();}catch(Exception failure){throw new IllegalStateException("Cannot release shader-pack depth view",failure);}
-            finally{try{colorPin.close();}catch(Exception failure){throw new IllegalStateException("Cannot release shader-pack color view",failure);}}}
+        uniforms.capture(minecraft,state,target.width,target.height,projection);var fog=state.cameraRenderState.fogData.color;
+        scenes.begin(target.getColorTextureView(),target.getDepthTextureView(),new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),uniforms);captured=true;prepared=false;
+    }
+    public void render(RenderTarget target,LevelRenderState state){
+        requireOpen();if(System.getProperty("overhaul.shaderPack","").isBlank()){invalidate();return;}
+        if(!captured)throw new IllegalStateException("Shader-pack projection was not captured before world rendering");
+        try{scenes.finish();uniforms.complete();}finally{captured=false;}
     }
     private static Map<String,Boolean> options(String text){
         Map<String,Boolean> result=new LinkedHashMap<>();for(var entry:definitions(text).entrySet()){
@@ -75,7 +71,8 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
             if(!name.matches("[A-Za-z_]\\w*")||value.isEmpty()||result.putIfAbsent(name,value)!=null)throw new IllegalArgumentException("Invalid or duplicate shader-pack option: "+name);
         }return result;
     }
-    public void invalidate(){requireOpen();if(runtime!=null){runtime.close();runtime=null;}dimension=null;world=null;configuration="";uniforms.resetHistory();}
+    public void abort(){invalidate();}
+    public void invalidate(){requireOpen();try{if(scenes!=null)scenes.clear();}finally{prepared=captured=false;installed=false;dimension=null;world=null;configuration="";uniforms.resetHistory();}}
     private void requireOpen(){if(Thread.currentThread()!=owner||closed)throw new IllegalStateException("Shader-pack renderer is closed or accessed outside its owner");}
     @Override public void close(){if(closed)return;requireOpen();invalidate();closed=true;}
 }

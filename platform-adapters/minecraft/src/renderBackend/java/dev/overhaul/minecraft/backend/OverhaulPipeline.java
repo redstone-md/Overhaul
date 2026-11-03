@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.renderpearl.backend.api.BackendRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
+import dev.overhaul.shader.pack.ShaderPackProperties;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import java.nio.LongBuffer;
@@ -16,7 +17,7 @@ import static dev.overhaul.vulkan.VulkanException.check;
 
 /** Owned native pipelines; worker preparation copies SPIR-V before frontend modules can close. */
 public final class OverhaulPipeline extends BackendResource implements BackendRenderPipeline {
-    private record Prepared(CreateInfo info,List<NativeGraphicsPipeline.Shader> shaders,BitSet activeUniforms,boolean usesDrawIndex) {}
+    private record Prepared(CreateInfo info,List<NativeGraphicsPipeline.Shader> shaders,BitSet activeUniforms,boolean usesDrawIndex,PipelineCompileMetadata compileMetadata) {}
     private record Formats(List<Integer> colors,int depth) {Formats{colors=List.copyOf(colors);}}
     private final Prepared prepared;
     private final Map<Formats,NativeGraphicsPipeline> variants=new HashMap<>();
@@ -35,6 +36,9 @@ public final class OverhaulPipeline extends BackendResource implements BackendRe
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     public static Pending compile(OverhaulDeviceBackend owner,CreateInfo source) {
+        return compile(owner,source,null);
+    }
+    static Pending compile(OverhaulDeviceBackend owner,CreateInfo source,PipelineCompileMetadata compileMetadata) {
         if(source.pushConstantsSize()<0||source.pushConstantsSize()%4!=0)throw new IllegalArgumentException("Invalid push-constant range");
         List<NativeGraphicsPipeline.Shader> shaders=new ArrayList<>();BitSet active=new BitSet();boolean reflectionComplete=true;
         for(var shader:source.shaders()) {
@@ -52,7 +56,7 @@ public final class OverhaulPipeline extends BackendResource implements BackendRe
         if(!reflectionComplete)active.set(0,source.uniforms().size());
         CreateInfo copy=new CreateInfo(source.name(),List.of(),List.copyOf(source.vertexBuffers()),List.copyOf(source.attribBindings()),List.copyOf(source.uniforms()),source.pushConstantsSize(),
                 source.depthStencilState(),source.polygonMode(),source.cull(),java.util.Collections.unmodifiableList(new ArrayList<>(source.colorTargetStates())),source.primitiveTopology());
-        Prepared prepared=new Prepared(copy,List.copyOf(shaders),(BitSet)active.clone(),shaders.stream().anyMatch(shader->hasDrawIndex(shader.code())));
+        Prepared prepared=new Prepared(copy,List.copyOf(shaders),(BitSet)active.clone(),shaders.stream().anyMatch(shader->hasDrawIndex(shader.code())),compileMetadata);
         return new Pending(){private OverhaulPipeline result;@Override public synchronized BackendRenderPipeline finishCompile(){if(result==null)result=new OverhaulPipeline(owner,prepared);return result;}};
     }
     NativeGraphicsPipeline variant(long renderPass,List<Integer> colors,int depth) {
@@ -66,6 +70,7 @@ public final class OverhaulPipeline extends BackendResource implements BackendRe
     long descriptorLayout(){requireNativeAlive();return descriptorLayout;}
     BackendRenderPipeline.CreateInfo info(){return prepared.info();}
     boolean usesDrawIndex(){return prepared.usesDrawIndex();}
+    ShaderPackProperties.AlphaTest inheritedAlphaTest(){return prepared.compileMetadata()==null?null:prepared.compileMetadata().inheritedAlphaTest();}
     private static boolean hasDrawIndex(java.nio.ByteBuffer code){
         for(int word=5;word<code.remaining()/4;){int instruction=code.getInt(word*4),count=instruction>>>16,opcode=instruction&65535;
             if(count<1||word+count>code.remaining()/4)throw new IllegalArgumentException("Malformed SPIR-V instruction stream");

@@ -16,6 +16,7 @@ final class PassAttachments implements AutoCloseable {
     private final NativePassResources resources;
     private final List<Entry> entries=new ArrayList<>();
     private final AttachmentPool.Lease lease;
+    private final List<BackendResource> sources;
     private final List<Integer> colorFormats=new ArrayList<>();
     private final int[] colorReferences;
     private int depthReference=VK_ATTACHMENT_UNUSED;
@@ -24,9 +25,13 @@ final class PassAttachments implements AutoCloseable {
     long renderPass,framebuffer;
 
     PassAttachments(OverhaulDeviceBackend resources,RenderPassDescriptor descriptor,Consumer<Object> retain) {
+        this(resources,descriptor,retain,null);
+    }
+    PassAttachments(OverhaulDeviceBackend resources,RenderPassDescriptor descriptor,Consumer<Object> retain,BackendResource generation) {
         this.resources=resources;
         int width=0,height=0;
-        List<OverhaulTextureView> sources=new ArrayList<>();
+        List<BackendResource> sources=new ArrayList<>();
+        if(generation!=null)sources.add(generation);
         colorReferences=new int[descriptor.colorAttachments().size()];
         for(int slot=0;slot<colorReferences.length;slot++) {
             var attachment=descriptor.colorAttachments().get(slot);
@@ -35,6 +40,7 @@ final class PassAttachments implements AutoCloseable {
             sources.add((OverhaulTextureView)attachment.textureView());
             if(view.layerCount()!=1)throw new UnsupportedOperationException("Layered color attachments require an explicit layer view");
             float[] clear=attachment.clearValue().map(value->new float[]{value.x(),value.y(),value.z(),value.w()}).orElse(null);
+            if(generation instanceof ShaderPackSceneGeneration scene&&view.image()==scene.color().image())clear=null;
             colorReferences[slot]=entries.size();entries.add(new Entry(view,false,clear,null));colorFormats.add(view.image().format().vkFormat());
             int w=view.image().width(view.baseMip()),h=view.image().height(view.baseMip());
             if(width!=0&&(width!=w||height!=h))throw new IllegalArgumentException("Mismatched render attachment extents");width=w;height=h;
@@ -54,11 +60,40 @@ final class PassAttachments implements AutoCloseable {
         if(width<1||height<1)throw new IllegalArgumentException("A render pass needs attachments or a positive render area");
         this.width=width;this.height=height;x=area==null?0:area.x();y=area==null?0:area.y();areaWidth=area==null?width:area.width();areaHeight=area==null?height:area.height();
         if(x<0||y<0||areaWidth<1||areaHeight<1||(long)x+areaWidth>width||(long)y+areaHeight>height)throw new IllegalArgumentException("Render area outside attachment bounds");
+        this.sources=List.copyOf(sources);lease=acquire(resources,this.sources);
+    }
+    PassAttachments(OverhaulDeviceBackend resources,List<GpuImageView> colors,GpuImageView depth,List<BackendResource> sources,int width,int height){
+        this.resources=resources;this.sources=List.copyOf(sources);this.width=width;this.height=height;x=y=0;areaWidth=width;areaHeight=height;
+        colorReferences=new int[colors.size()];
+        for(int slot=0;slot<colors.size();slot++){
+            var view=colors.get(slot);colorReferences[slot]=view==null?VK_ATTACHMENT_UNUSED:entries.size();colorFormats.add(view==null?VK_FORMAT_UNDEFINED:view.image().format().vkFormat());
+            if(view!=null){checkExtent(view);entries.add(new Entry(view,false,null,null));}
+        }
+        if(depth!=null){checkExtent(depth);depthReference=entries.size();depthFormat=depth.image().format().vkFormat();entries.add(new Entry(depth,true,null,null));}
+        lease=acquire(resources,this.sources);
+    }
+    private PassAttachments(OverhaulDeviceBackend resources,PassAttachments original,GpuImageView from,GpuImageView to,BackendResource generation,boolean load){
+        this.resources=resources;width=original.width;height=original.height;x=original.x;y=original.y;areaWidth=original.areaWidth;areaHeight=original.areaHeight;
+        colorReferences=original.colorReferences.clone();depthReference=original.depthReference;depthFormat=original.depthFormat;
+        List<BackendResource> retained=new ArrayList<>(original.sources);if(generation!=null)retained.add(generation);sources=List.copyOf(retained);
+        for(Entry entry:original.entries){var view=!entry.depth()&&same(entry.view(),from)?to:entry.view();checkExtent(view);
+            entries.add(new Entry(view,entry.depth(),load?null:entry.color(),load?null:entry.clearDepth()));}
+        for(int reference:colorReferences)colorFormats.add(reference==VK_ATTACHMENT_UNUSED?VK_FORMAT_UNDEFINED:entries.get(reference).view().image().format().vkFormat());
+        lease=acquire(resources,sources);
+    }
+    PassAttachments loading(OverhaulDeviceBackend owner){return new PassAttachments(owner,this,null,null,null,true);}
+    PassAttachments redirect(OverhaulDeviceBackend owner,GpuImageView from,GpuImageView to,BackendResource generation){return new PassAttachments(owner,this,from,to,generation,false);}
+    boolean hasColor(GpuImageView view){for(Entry entry:entries)if(!entry.depth()&&same(entry.view(),view))return true;return false;}
+    GpuImageView depthView(){return depthReference==VK_ATTACHMENT_UNUSED?null:entries.get(depthReference).view();}
+    List<BackendResource> resourceSources(){return sources;}
+    private static boolean same(GpuImageView left,GpuImageView right){return right!=null&&left.image()==right.image()&&left.baseMip()==right.baseMip()&&left.baseLayer()==right.baseLayer();}
+    private void checkExtent(GpuImageView view){if(view.layerCount()!=1||view.mipCount()!=1||view.image().width(view.baseMip())!=width||view.image().height(view.baseMip())!=height)throw new IllegalArgumentException("Pack scene attachment extent differs from game pass");}
+    private AttachmentPool.Lease acquire(OverhaulDeviceBackend resources,List<BackendResource> sources){
         List<AttachmentKey.Target> targets=new ArrayList<>();
         for(var entry:entries){var view=entry.view();targets.add(new AttachmentKey.Target(view.image(),view.baseMip(),view.baseLayer(),
                 view.image().format().vkFormat(),view.image().format().aspectMask(),entry.depth(),entry.depth()?entry.clearDepth()!=null:entry.color()!=null));}
         List<Integer> colors=new ArrayList<>();for(int reference:colorReferences)colors.add(reference);
-        lease=resources.attachments().acquire(new AttachmentKey(targets,colors,depthReference,width,height,1),sources);
+        return resources.attachments().acquire(new AttachmentKey(targets,colors,depthReference,width,height,1),sources);
     }
     List<Integer> colorFormats(){return List.copyOf(colorFormats);}
     int depthFormat(){return depthFormat;}

@@ -12,7 +12,7 @@ import java.util.Set;
 /** Reads surviving SPIR-V interface variables after optimization, retaining compiler-assigned binding numbers. */
 public final class SpirvInterface {
     private final Set<Integer> descriptors=new HashSet<>(),inputs=new HashSet<>();
-    private SpirvInterface(SpirvBinary binary){
+    private SpirvInterface(SpirvBinary binary,Set<Integer> importedSets){
         ByteBuffer words=ByteBuffer.wrap(binary.bytes()).order(ByteOrder.LITTLE_ENDIAN);
         if(words.remaining()<20||words.remaining()%4!=0)throw invalid();
         if(words.getInt(0)==0x03022307)words.order(ByteOrder.BIG_ENDIAN);
@@ -30,14 +30,18 @@ public final class SpirvInterface {
         for(var variable:variables.entrySet()){
             int id=variable.getKey(),storage=variable.getValue();
             if(bindings.containsKey(id)){
-                if(sets.getOrDefault(id,-1)!=0)throw new ShaderCompilationException("Pack descriptor escaped set zero");
-                descriptors.add(bindings.get(id));
+                int set=sets.getOrDefault(id,-1);
+                if(set!=0&&!importedSets.contains(set))throw new ShaderCompilationException("Pack descriptor escaped declared descriptor sets");
+                if(set==0)descriptors.add(bindings.get(id));
             }
             if(storage==1&&locations.containsKey(id))inputs.add(locations.get(id));
         }
     }
     public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary fragment){
-        SpirvInterface vs=new SpirvInterface(vertex),fs=new SpirvInterface(fragment);Set<Integer> descriptors=new HashSet<>(vs.descriptors);descriptors.addAll(fs.descriptors);
+        return active(declared,vertex,fragment,Set.of());
+    }
+    public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary fragment,Set<Integer> importedSets){
+        SpirvInterface vs=new SpirvInterface(vertex,importedSets),fs=new SpirvInterface(fragment,importedSets);Set<Integer> descriptors=new HashSet<>(vs.descriptors);descriptors.addAll(fs.descriptors);
         Map<String,Integer> samplers=new LinkedHashMap<>(),attributes=new LinkedHashMap<>();Map<String,String> types=new LinkedHashMap<>();
         for(var sampler:declared.samplers().entrySet())if(descriptors.contains(sampler.getValue()))samplers.put(sampler.getKey(),sampler.getValue());
         for(var attribute:declared.attributes().entrySet())if(vs.inputs.contains(attribute.getValue())){

@@ -15,13 +15,13 @@ final class AttachmentBundle implements AutoCloseable {
     private final AttachmentPool pool;
     private final OverhaulDeviceBackend owner;
     private final AttachmentKey key;
-    private final List<OverhaulTextureView> sources;
+    private final List<BackendResource> sources;
     private final List<GpuImageView> views=new ArrayList<>();
     private final BackendPins pins;
     private long renderPass,framebuffer;
     private boolean closed;
 
-    AttachmentBundle(AttachmentPool pool,OverhaulDeviceBackend owner,AttachmentKey key,List<OverhaulTextureView> sources) {
+    AttachmentBundle(AttachmentPool pool,OverhaulDeviceBackend owner,AttachmentKey key,List<? extends BackendResource> sources) {
         this.pool=pool;this.owner=owner;this.key=key;this.sources=List.copyOf(sources);
         pins=new BackendPins(owner,sources.toArray());
     }
@@ -29,9 +29,9 @@ final class AttachmentBundle implements AutoCloseable {
     long renderPass(){return renderPass;}
     long framebuffer(){return framebuffer;}
     boolean references(BackendResource resource){
-        for(var source:sources)if(source==resource||source.texture()==resource)return true;return false;
+        for(var source:sources)if(source==resource||source instanceof OverhaulTextureView view&&view.texture()==resource)return true;return false;
     }
-    boolean sourcesOpen(){for(var source:sources)if(source.isClosed()||((BackendResource)source.texture()).isClosed())return false;return true;}
+    boolean sourcesOpen(){for(var source:sources)if(source.isClosed()||source instanceof OverhaulTextureView view&&((BackendResource)view.texture()).isClosed())return false;return true;}
     void create(){
         if(closed)throw new IllegalStateException("Attachment bundle is closed");
         if(renderPass!=0)return;

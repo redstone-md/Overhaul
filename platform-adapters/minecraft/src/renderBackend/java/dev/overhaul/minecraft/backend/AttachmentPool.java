@@ -22,7 +22,7 @@ final class AttachmentPool implements AutoCloseable {
         if(capacity<0)throw new IllegalArgumentException("Negative attachment cache capacity");
         this.owner=owner; this.capacity=capacity;
     }
-    Lease acquire(AttachmentKey key,List<OverhaulTextureView> sources) {
+    Lease acquire(AttachmentKey key,List<? extends BackendResource> sources) {
         owner.requireOwner();
         if(closed)throw new IllegalStateException("Attachment pool is closed");
         AttachmentBundle selected=null;

@@ -21,6 +21,11 @@ record PassBindings(OverhaulPipeline pipeline,Object[] uniforms,Map<Integer,GpuB
             long set=descriptors.set(pipeline,uniforms);
             vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,nativePipeline.layout(),0,stack.longs(set),null);
             if(constants!=null&&pipeline.pushConstantsSize()>0)vkCmdPushConstants(command,nativePipeline.layout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,constants);
+        }
+        geometry(command,resources,attachments);
+    }
+    void geometry(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments){
+        try(MemoryStack stack=MemoryStack.stackPush()){
             for(var expected:pipeline.info().vertexBuffers()){
                 GpuBufferSlice slice=vertices.get(expected.bufferSlot());
                 if(slice==null)throw new IllegalStateException("Missing vertex buffer slot "+expected.bufferSlot());

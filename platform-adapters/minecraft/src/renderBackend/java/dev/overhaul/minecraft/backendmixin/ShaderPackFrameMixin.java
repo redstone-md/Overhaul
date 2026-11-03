@@ -1,9 +1,16 @@
 package dev.overhaul.minecraft.backendmixin;
 
 import dev.overhaul.minecraft.shader.ShaderPackFrameRenderer;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -24,11 +31,19 @@ public abstract class ShaderPackFrameMixin {
             if(overhaul$shaderPack==null)overhaul$shaderPack=new ShaderPackFrameRenderer(minecraft);overhaul$shaderPack.projection(matrix);
         }return matrix;
     }
-    @Inject(method="renderLevel",at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/GameRenderer;render3dHud(Lnet/minecraft/client/renderer/state/level/CameraRenderState;Lnet/minecraft/client/renderer/state/level/PlayerRenderState;Lnet/minecraft/client/renderer/state/OptionsRenderState;Z)V"))
-    private void overhaul$renderPackBeforeHand(CallbackInfo callback){
-        if(overhaul$shaderPack!=null)overhaul$shaderPack.render(minecraft.gameRenderer.mainRenderTarget(),minecraft.gameRenderer.gameRenderState().levelRenderState);
+    @WrapOperation(method="renderLevel",at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/LevelRenderer;render(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;ZLnet/minecraft/client/renderer/state/level/CameraRenderState;Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;Lorg/joml/Vector4f;ZZ)V"))
+    private void overhaul$worldPackScope(LevelRenderer renderer,GraphicsResourceAllocator allocator,boolean outline,CameraRenderState camera,
+                                        GpuBufferSlice fog,Vector4f color,boolean worldFog,boolean postProcessing,Operation<Void> original){
+        try{
+            if(overhaul$shaderPack!=null)overhaul$shaderPack.beginWorld();
+            original.call(renderer,allocator,outline,camera,fog,color,worldFog,postProcessing);
+            if(overhaul$shaderPack!=null)overhaul$shaderPack.render(minecraft.gameRenderer.mainRenderTarget(),minecraft.gameRenderer.gameRenderState().levelRenderState);
+        }
+        catch(RuntimeException|Error failure){
+            try{if(overhaul$shaderPack!=null)overhaul$shaderPack.abort();}catch(RuntimeException cleanup){failure.addSuppressed(cleanup);}throw failure;
+        }
     }
-    @Inject(method="onResourceManagerReload",at=@At("HEAD"))
+    @Inject(method={"onResourceManagerReload","setLevel","resetData"},at=@At("HEAD"))
     private void overhaul$reloadPack(CallbackInfo callback){if(overhaul$shaderPack!=null)overhaul$shaderPack.invalidate();}
     @Inject(method="close",at=@At("HEAD"))
     private void overhaul$closePack(CallbackInfo callback){if(overhaul$shaderPack!=null){overhaul$shaderPack.close();overhaul$shaderPack=null;}}

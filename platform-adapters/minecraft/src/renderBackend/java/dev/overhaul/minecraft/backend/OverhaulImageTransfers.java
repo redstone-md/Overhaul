@@ -17,7 +17,10 @@ final class OverhaulImageTransfers {
     OverhaulImageTransfers(OverhaulDeviceBackend owner) { this.owner=owner; }
 
     private void enqueue(Runnable callback,Consumer<OverhaulImageOperation> builder,Object... resources) {
-        var operation=new OverhaulImageOperation(owner,callback,resources);
+        var generation=owner.shaderPacks().capture();
+        Object[] retained=resources;
+        if(generation!=null){retained=java.util.Arrays.copyOf(resources,resources.length+1);retained[resources.length]=generation;}
+        var operation=new OverhaulImageOperation(owner,callback,retained);
         try { builder.accept(operation); }
         catch (RuntimeException|Error failure) {
             try { operation.close(); } catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
@@ -29,6 +32,7 @@ final class OverhaulImageTransfers {
     private GpuImage image(GpuTexture texture) { return owner.image(texture); }
 
     void clearColor(GpuTexture texture,Vector4fc color) {
+        if(owner.shaderPacks().suppressesColorClear(texture))return;
         enqueue(null,operation->{
             GpuImage image=image(texture);
             for (int layer=0;layer<image.layers();layer++) for (int mip=0;mip<image.mipLevels();mip++) {
