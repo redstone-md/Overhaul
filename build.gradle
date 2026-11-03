@@ -61,6 +61,36 @@ subprojects {
 tasks.named('check') {
     dependsOn subprojects.collect { it.tasks.named('check') }
     dependsOn 'verifySourceSize'
+    dependsOn 'verifyModuleBoundaries'
+}
+
+tasks.register('verifyModuleBoundaries') {
+    group = 'verification'
+    description = 'Keeps Minecraft/loader classes out of the portable engine and graphics out of Java 8 core.'
+    def rules = [
+        'core-common': ['net.minecraft.', 'net.fabricmc.', 'net.minecraftforge.', 'net.neoforged.', 'org.lwjgl.'],
+        'shader-pipeline': ['net.minecraft.', 'net.fabricmc.', 'net.minecraftforge.', 'net.neoforged.'],
+        'vulkan-backend': ['net.minecraft.', 'net.fabricmc.', 'net.minecraftforge.', 'net.neoforged.'],
+        'platform-adapters': ['net.minecraft.', 'net.fabricmc.', 'net.minecraftforge.', 'net.neoforged.', 'org.lwjgl.']
+    ]
+    def sourceFiles = rules.collectEntries { module, ignored ->
+        [(module): fileTree("${module}/src/main/java") { include '**/*.java' }]
+    }
+    inputs.files(sourceFiles.values())
+    doLast {
+        def violations = []
+        rules.each { module, forbidden ->
+            sourceFiles[module].each { source ->
+                source.readLines('UTF-8').eachWithIndex { line, index ->
+                    def match = line =~ /^\s*import\s+(?:static\s+)?([\w.]+)\*?\s*;/
+                    if (match.find() && forbidden.any { match.group(1).startsWith(it) }) {
+                        violations.add("${source}:${index + 1}: ${match.group(1)}")
+                    }
+                }
+            }
+        }
+        if (!violations.empty) throw new GradleException('Module boundary violations:\n' + violations.join('\n'))
+    }
 }
 
 tasks.named('assemble') {
