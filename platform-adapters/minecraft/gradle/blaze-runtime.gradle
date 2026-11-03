@@ -7,6 +7,10 @@ if (platform == null) throw new GradleException('Unsupported Blaze3D native plat
 def suffix = arch in ['aarch64','arm64'] ? '-arm64' : arch in ['x86_64','amd64'] ? '' : null
 if (suffix == null) throw new GradleException('Unsupported Blaze3D native architecture')
 def nativeClassifier = "natives-${platform}${suffix}"
+def clientVariant = "blaze-client-${platform}${suffix}"
+tasks.matching { it.name in ['jar', 'remapJar', 'sourcesJar', 'remapSourcesJar'] }.configureEach {
+    archiveAppendix = clientVariant
+}
 configurations {
     blazeBindings { canBeConsumed = false; transitive = false }
     blazeNativeAddons { canBeConsumed = false; transitive = false }
@@ -120,6 +124,7 @@ tasks.named('processResources') {
         if (target.loader == 'fabric') {
             def metadata = new File(destinationDir, 'fabric.mod.json')
             def config = new groovy.json.JsonSlurper().parse(metadata)
+            config.environment = 'client'
             config.mixins = ((config.mixins ?: []) + 'overhaul.blaze.mixins.json').unique()
             config.jars = ((config.jars ?: []) + entries.collect { [file: it.path] }).unique()
             metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config))
@@ -140,5 +145,6 @@ tasks.named('processResources') {
 }
 tasks.named('jar') {
     if (target.loader == 'forge') doFirst { manifest.attributes('MixinConfigs': 'overhaul.mixins.json,overhaul.blaze.mixins.json') }
-    manifest.attributes('Overhaul-Blaze-Native-Classifier': nativeClassifier)
+    manifest.attributes('Overhaul-Blaze-Native-Classifier': nativeClassifier,
+            'Overhaul-Artifact-Variant': clientVariant)
 }
