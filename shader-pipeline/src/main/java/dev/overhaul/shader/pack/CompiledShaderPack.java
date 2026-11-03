@@ -37,7 +37,7 @@ public final class CompiledShaderPack {
         if(!catalog.diagnostics().isEmpty())throw new UnsupportedShaderException(String.join("\n",catalog.diagnostics()));
         List<Program> programs=new ArrayList<>();PackRenderTargets.Builder targets=new PackRenderTargets.Builder(catalog.properties());
         Map<String,Sources> sources=new java.util.LinkedHashMap<>();long sourceCharacters=0;
-        PackPreprocessor preprocessor=new PackPreprocessor(source,compiler,macros);
+        PackPreprocessor preprocessor=new PackPreprocessor(source,compiler,macros,options);
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
             if(!discovered.state().enabled())continue;
             String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);Stage stage=stage(name);

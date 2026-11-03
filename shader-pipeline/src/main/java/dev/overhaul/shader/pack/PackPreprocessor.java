@@ -15,10 +15,20 @@ public final class PackPreprocessor {
     private final ShaderPackSource pack;
     private final ShadercCompiler compiler;
     private final Map<String,String> definitions;
+    private final PackBooleanOptions options;
 
     public PackPreprocessor(ShaderPackSource pack, ShadercCompiler compiler, Map<String,String> definitions) {
+        this(pack,compiler,definitions,Map.of());
+    }
+
+    public PackPreprocessor(ShaderPackSource pack, ShadercCompiler compiler, Map<String,String> definitions,
+                            Map<String,Boolean> selectedOptions) {
         this.pack = java.util.Objects.requireNonNull(pack); this.compiler = java.util.Objects.requireNonNull(compiler);
         this.definitions = Map.copyOf(definitions);
+        this.options = new PackBooleanOptions(selectedOptions);
+        for (String name : selectedOptions.keySet()) if (definitions.containsKey(name)) {
+            throw new IllegalArgumentException("A shader-pack boolean option cannot also be an external macro: " + name);
+        }
     }
 
     public String process(String entry, ShaderStage stage) throws IOException {
@@ -30,7 +40,7 @@ public final class PackPreprocessor {
         Map<String,Integer> sourceIds = new LinkedHashMap<>();
         String name = ShaderPackSource.normalize(entry);
         sourceIds.put(name,0);
-        String text = preserveMetadata(pack.read(name),metadata);
+        String text = preserveMetadata(options.apply(pack.read(name)),metadata);
         String result = compiler.preprocess(name,text,stage,definitions,(requested,requester,relative) -> {
             String include = requested;
             if (relative && !include.startsWith("/")) {
@@ -39,7 +49,7 @@ public final class PackPreprocessor {
             }
             include = ShaderPackSource.normalize(include);
             sourceIds.computeIfAbsent(include,ignored -> sourceIds.size());
-            return new ShadercCompiler.ResolvedInclude(include,preserveMetadata(pack.read(include),metadata));
+            return new ShadercCompiler.ResolvedInclude(include,preserveMetadata(options.apply(pack.read(include)),metadata));
         });
         // shaderc may emit quoted file #line extensions; compiler diagnostics already
         // retain those paths, while compatibility output uses a fresh source name.
