@@ -63,3 +63,37 @@ Unit tests establish algorithm contracts. Native smoke tests establish only the
 specific GPU path exercised. Loader compilation establishes linkage, not gameplay.
 Claims of full replacement require visible in-game parity for every render domain.
 Performance claims require measurements, not implementation intent.
+
+## Verified checkpoint: 2026-11-03
+
+- All five specialist workstreams delivered code, reviewed and committed by domain.
+- Engine build, source-size and module-boundary gates pass. There are 42 passing
+  engine unit tests and four passing native integration tests.
+- Worker-built geometry reaches Vulkan; source slab reuse, indirect draws,
+  instancing, frame-ring retirement and sparse CPU visibility updates are tested.
+- Semaphore-driven presentation passes 62 geometry frames across resize. GPU blits
+  do not require CPU image readback or a queue-idle wait on each presentation.
+- Unchanged pinned Iris example basic/textured programs execute with real texture,
+  UBO, blending and coordinate-conversion pixel checks. This is a tested subset.
+- All 11 pinned loader targets build and pass 22 loader tests from one recorded
+  source snapshot. Source/artifact receipts are retained under `docs/evidence`.
+- Fabric 26.3 starts, initializes resources, runs the actual client hook for 200
+  ticks and stops normally. The game's log still reports its vanilla OpenGL backend.
+- Khronos validation layers and desktop screenshot automation were unavailable.
+  No in-game Vulkan replacement, live world capture or visual parity is claimed.
+
+## Next end-to-end gates
+
+1. Connect actual loaded world sections to native uploads with game texture/model
+   data and a version-specific window/surface bridge. Minecraft 26.3 uses SDL and
+   LWJGL 3.4.3-snapshot here; the standalone engine's GLFW/LWJGL 3.3.6 harness is not
+   a drop-in replacement for that window/runtime. Resolve this boundary explicitly.
+2. Implement model geometry, biome/light data and translucent rendering, then all
+   entity, block-entity, particle, weather and GUI/text paths before cancelling the
+   vanilla renderer. Preserve a runnable reference instance for visual comparisons.
+3. Execute real depth/shadow/lighting/post passes and shader-pack render-state,
+   ping-pong, custom-uniform, texture and unsupported-stage semantics.
+4. Integrate vanilla generation, NBT/region/packet loading, cross-chunk lighting,
+   server tracking and path queries with dependency/ownership correctness.
+5. Expand/version-test the remaining releases, exercise real legacy JVM/game
+   runtimes, perform mod coexistence checks and measure controlled performance.

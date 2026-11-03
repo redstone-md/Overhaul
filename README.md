@@ -49,6 +49,8 @@ before loading LWJGL: `-Dorg.lwjgl.system.stackSize=1024` and
   instanced batches, fence-backed frame rings and swapchain recreation.
 - Shader-pack source/include handling, explicit GLSL compatibility lowering,
   SPIR-V compilation, uniform layouts and versioned render-graph planning.
+- Real Vulkan draws of pinned Iris example programs with texture, uniform,
+  coordinate-conversion and blending checks.
 - Native graph image allocation and transitions with explicit pass callbacks.
 
 The cube mesher does not implement Minecraft's model bakery, texture atlas,
@@ -61,3 +63,5 @@ backing direct memory after collection.
 Loader builds are isolated under `platform-adapters/minecraft`; their diagnostic
 lifecycle hooks leave vanilla rendering active. A packaged diagnostic adapter is
 not a completed Vulkan renderer replacement. See the roadmap for remaining gates.
+All 11 pinned loader builds pass; see [validation evidence](docs/VALIDATION.md)
+and the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact limits.

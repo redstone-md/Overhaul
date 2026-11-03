@@ -8,6 +8,12 @@ Modern client adapters compose `core-common`, `vulkan-backend` and
 `shader-pipeline`. Dedicated server adapters do not load graphics native libraries.
 The engine modules never import Minecraft or loader classes.
 
+`vulkan-backend -> shader-pipeline -> core-common`; the renderer uses the same
+shader compiler and graphics-state builder for built-in and translated pack
+programs. This avoids maintaining separate native compilation or pipeline setup
+implementations. Java 8 adapters depend only on `core-common` and carry no graphics
+native libraries into a dedicated server. Build checks enforce those boundaries.
+
 `integration-tests` exercises the composed engine without asserting Minecraft
 integration. Each loader target has separate mappings, metadata and packaging.
 

@@ -1,0 +1,90 @@
+[
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:17.8155516Z",
+    "exitCode": 0,
+    "target": "fabric-1.16.5",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/fabric-1.16.5/libs/overhaul-fabric-1.16.5-0.1.0-SNAPSHOT.jar",
+    "sha256": "609677655cab78d9d521e5e932f469692268fbfa89d7bdccc7ee106169315bdc"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:22.1610608Z",
+    "exitCode": 0,
+    "target": "fabric-1.20.1",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/fabric-1.20.1/libs/overhaul-fabric-1.20.1-0.1.0-SNAPSHOT.jar",
+    "sha256": "8ac402c821c8dc3c8ec2d621b0d9eedef1b37356134b9daf5bee4034f216526f"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:26.0904989Z",
+    "exitCode": 0,
+    "target": "fabric-1.21.1",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/fabric-1.21.1/libs/overhaul-fabric-1.21.1-0.1.0-SNAPSHOT.jar",
+    "sha256": "922068216319fb7a75c3d70b988a26caa1e3e40015a84d8e8980fa561f736d6c"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:29.8509889Z",
+    "exitCode": 0,
+    "target": "fabric-26.3",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/fabric-26.3/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+    "sha256": "0c07b633d1ddaa4e2c40053d5ffeac223115790be273c0839d58951010e80993"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:31.8122683Z",
+    "exitCode": 0,
+    "target": "forge-1.12.2",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/forge-1.12.2/libs/overhaul-forge-1.12.2-0.1.0-SNAPSHOT.jar",
+    "sha256": "375ab61e518a02cc11acb64a44922be972e7dfe643f369f7dba93b7738725382"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:36.2395336Z",
+    "exitCode": 0,
+    "target": "forge-1.16.5",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/forge-1.16.5/libs/overhaul-forge-1.16.5-0.1.0-SNAPSHOT.jar",
+    "sha256": "e2d61959115c3ad58ee37c874c93eab8a3103cd7d543cf479f2bed544f6f93cf"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:40.5839804Z",
+    "exitCode": 0,
+    "target": "forge-1.20.1",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/forge-1.20.1/libs/overhaul-forge-1.20.1-0.1.0-SNAPSHOT.jar",
+    "sha256": "e316cb4dd3b1d87bf0289f8eb61282047daca648761f7fb73fe36499639a8f0b"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:44.3107401Z",
+    "exitCode": 0,
+    "target": "forge-1.21.1",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/forge-1.21.1/libs/overhaul-forge-1.21.1-0.1.0-SNAPSHOT.jar",
+    "sha256": "20a22462ed2eef1c4e8d1871a6688a034c123a930945556a9e02180dda43a546"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:48.8130107Z",
+    "exitCode": 0,
+    "target": "forge-26.3",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/forge-26.3/libs/overhaul-forge-26.3-0.1.0-SNAPSHOT.jar",
+    "sha256": "8d82fcb092aa615e1bb456e11529c1c30ecf0d6a1e4e3c9f2001900ab4f6c8f0"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:51.8524671Z",
+    "exitCode": 0,
+    "target": "neoforge-1.21.1",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/neoforge-1.21.1/libs/overhaul-neoforge-1.21.1-0.1.0-SNAPSHOT.jar",
+    "sha256": "58ca55e8408bfd380d6c4083d5f90a14aeffa1bb4e2d46efc42a86b0e6deca8c"
+  },
+  {
+    "verifiedAtUtc": "2026-11-03T15:46:56.4506316Z",
+    "exitCode": 0,
+    "target": "neoforge-26.3",
+    "sourceSha256": "a66298996e8f0e6fb767d77de657155a39cb0227f04beaef3100f42a45866972",
+    "artifact": "platform-adapters/minecraft/build/neoforge-26.3/libs/overhaul-neoforge-26.3-0.1.0-SNAPSHOT.jar",
+    "sha256": "b88cbdc732538d173c91e63e484f91310d54feef3144e355082b72697aff7590"
+  }
+]
