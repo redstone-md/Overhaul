@@ -6,6 +6,9 @@ import dev.overhaul.vulkan.ImageFormat;
 import dev.overhaul.vulkan.ImageRegion;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
+import dev.overhaul.minecraft.terrain.OverhaulSectionCompiler;
+import dev.overhaul.minecraft.terrain.TerrainCompilerAccess;
+import dev.overhaul.minecraft.terrain.TerrainDispatcherAccess;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -24,6 +27,8 @@ final class BackendSmokeProbe {
     private String scene,pendingScene,lastScreen,lastOverlay,capturedScreen,capturedOverlay;
     private int width,height,distinctPixels;
     private boolean captured,worldRequested;
+    private TerrainDispatcherAccess terrainDispatcher;
+    private OverhaulSectionCompiler terrainCompiler;
 
     BackendSmokeProbe(OverhaulDeviceBackend owner) {
         this.owner=owner;
@@ -40,6 +45,10 @@ final class BackendSmokeProbe {
         lastScreen=screen==null?"none":screen.getClass().getName();
         lastOverlay=overlay==null?"none":overlay.getClass().getName();
         boolean world=minecraft.level!=null;
+        if(world&&minecraft.levelRenderer.sectionRenderDispatcher() instanceof TerrainDispatcherAccess dispatcher
+                &&dispatcher.overhaul$sectionCompiler() instanceof TerrainCompilerAccess access) {
+            terrainDispatcher=dispatcher;terrainCompiler=access.overhaul$compiler();
+        }
         if (world&&!worldRequested) return;
         boolean title=screen instanceof TitleScreen;
         if (!minecraft.isGameLoadFinished()||overlay!=null||(world?(minecraft.player==null||screen!=null):screen==null)) { sceneFrames=0; return; }
@@ -102,6 +111,11 @@ final class BackendSmokeProbe {
         report.put("bufferStorageStatistics",owner.bufferStorage().snapshot());
         report.put("descriptorPoolStatistics",owner.descriptorPools().stats());
         report.put("attachmentPoolStatistics",owner.attachments().statistics());
+        if(terrainCompiler!=null) {
+            report.put("terrainCompilationStatistics",terrainCompiler.monitor().snapshot());
+            report.put("terrainWorkerStatistics",terrainDispatcher.overhaul$workerStatistics());
+            report.put("terrainActiveLeases",terrainCompiler.activeLeases());
+        }
         try {
             Files.createDirectories(directory);
             Files.writeString(directory.resolve("receipt.json"),new GsonBuilder().setPrettyPrinting().create().toJson(report));
