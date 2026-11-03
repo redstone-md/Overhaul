@@ -120,7 +120,8 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
         // native work and ownership registration happen during finishCompile on the render thread.
         PipelineCompileMetadata metadata=pipelineCompilations.get();
         if(metadata!=null&&(!metadata.name().equals(info.name())||info.shaders().stream().noneMatch(shader->
-                shader.module().type()==com.mojang.renderpearl.api.pipeline.ShaderType.FRAGMENT&&shader.name().equals(metadata.fragment()))))
+                shader.module().type()==com.mojang.renderpearl.api.pipeline.ShaderType.FRAGMENT&&shader.name().equals(metadata.fragment()))||info.shaders().stream().noneMatch(shader->
+                shader.module().type()==com.mojang.renderpearl.api.pipeline.ShaderType.VERTEX&&shader.name().equals(metadata.vertex()))))
             throw new IllegalStateException("Frontend pipeline compile metadata differs from the actual backend shader identity");
         return OverhaulPipeline.compile(this,info,metadata);
     }

@@ -44,10 +44,15 @@ public final class ModelVertexShaderSource implements ShaderSource {
         if(!supports(original))throw new UnsupportedOperationException("Uncertified model vertex program: "+original);
         return Identifier.fromNamespaceAndPath("overhaul",PREFIX+original.getNamespace()+"/"+original.getPath());
     }
+    /** Returns the exact original identity for an owned adapted program, without treating arbitrary paths as models. */
+    public static Identifier originalVertex(Identifier adapted){
+        if(adapted==null||!adapted.getNamespace().equals("overhaul")||!adapted.getPath().startsWith(PREFIX))return null;
+        String name=adapted.getPath().substring(PREFIX.length());int slash=name.indexOf('/');if(slash<1)return null;
+        Identifier original=Identifier.fromNamespaceAndPath(name.substring(0,slash),name.substring(slash+1));return supports(original)?original:null;
+    }
     @Override public String getShader(Identifier id,ShaderType type){
         if(type==ShaderType.VERTEX&&id.getNamespace().equals("overhaul")&&id.getPath().startsWith(PREFIX)){
-            String name=id.getPath().substring(PREFIX.length());int slash=name.indexOf('/');if(slash<1)throw new IllegalArgumentException("Malformed adapted vertex identifier");
-            Identifier original=Identifier.fromNamespaceAndPath(name.substring(0,slash),name.substring(slash+1));
+            Identifier original=originalVertex(id);if(original==null)throw new IllegalArgumentException("Malformed adapted vertex identifier");
             return adapt(original,source.getShader(original,type));
         }
         return source.getShader(id,type);

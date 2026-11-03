@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
  * fails rather than producing a shader with guessed Minecraft semantics.
  */
 public final class PackProgramTranslator {
+    private static final String BODY_MARKER="\n// OVERHAUL_COMPATIBILITY_BODY\n";
     private static final Pattern DECLARATION = Pattern.compile("\\b(uniform|attribute|varying)\\s+(\\w+)\\s+(\\w+)\\s*;");
     private static final Pattern BUILTIN = Pattern.compile("\\bgl_\\w+\\b");
     private static final Pattern FRAG_DATA = Pattern.compile("gl_FragData\\s*\\[\\s*([0-7])\\s*]");
@@ -33,6 +34,12 @@ public final class PackProgramTranslator {
 
     public TranslatedProgram translate(String vertex, String fragment) {
         return translate(vertex,fragment,CoordinateConvention.NATIVE_VULKAN);
+    }
+    /** Adapter declarations follow the generated descriptor/interface ABI and precede every original helper. */
+    public static String insertBodyPreamble(String translated,String declarations){
+        int offset=translated.indexOf(BODY_MARKER);
+        if(offset<0||offset!=translated.lastIndexOf(BODY_MARKER)||declarations.contains(BODY_MARKER))throw new IllegalArgumentException("Expected one authoritative translated shader body");
+        return translated.substring(0,offset)+"\n"+declarations+translated.substring(offset);
     }
 
     public TranslatedProgram translate(String vertex, String fragment, CoordinateConvention coordinates) {
@@ -179,7 +186,7 @@ public final class PackProgramTranslator {
             for (int location : outputs) prefix.append("layout(location=").append(location)
                     .append(") out vec4 overhaulColor").append(location).append(";\n");
         }
-        return prefix.append(body).toString();
+        return prefix.append(BODY_MARKER).append(body).toString();
     }
 
     private static UnsupportedShaderException unsupported(String message) { return new UnsupportedShaderException(message); }

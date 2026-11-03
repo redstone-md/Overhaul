@@ -25,12 +25,15 @@ record PassBindings(OverhaulPipeline pipeline,Object[] uniforms,Map<Integer,GpuB
         geometry(command,resources,attachments);
     }
     void geometry(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments){
+        geometry(command,resources,attachments,pipeline.vertexBindings());
+    }
+    void geometry(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments,java.util.List<dev.overhaul.vulkan.NativeGraphicsPipeline.Binding> expectedBindings){
         try(MemoryStack stack=MemoryStack.stackPush()){
-            for(var expected:pipeline.info().vertexBuffers()){
-                GpuBufferSlice slice=vertices.get(expected.bufferSlot());
-                if(slice==null)throw new IllegalStateException("Missing vertex buffer slot "+expected.bufferSlot());
+            for(var expected:expectedBindings){
+                GpuBufferSlice slice=vertices.get(expected.slot());
+                if(slice==null)throw new IllegalStateException("Missing vertex buffer slot "+expected.slot());
                 var buffer=resources.buffer(slice.buffer());PassDescriptors.checkRange(slice,buffer.size());
-                vkCmdBindVertexBuffers(command,expected.bufferSlot(),stack.longs(buffer.handle()),stack.longs(slice.offset()));
+                vkCmdBindVertexBuffers(command,expected.slot(),stack.longs(buffer.handle()),stack.longs(slice.offset()));
             }
             if(indices!=null)vkCmdBindIndexBuffer(command,resources.buffer(indices).handle(),0,indexType==IndexType.INT?VK_INDEX_TYPE_UINT32:VK_INDEX_TYPE_UINT16);
             int left=attachments.x,top=attachments.y,right=left+attachments.areaWidth,bottom=top+attachments.areaHeight;

@@ -13,7 +13,7 @@ public final class OverhaulGpuDevice extends FrontendGpuDevice {
     OverhaulGpuDevice(OverhaulDeviceBackend backend) { super(backend); this.backend=backend; }
     public NativeFrameResources nativeFrames(){backend.requireOpen();return backend;}
     @Override public CompletableFuture<CompiledRenderPipeline.Pending> compilePipeline(RenderPipeline pipeline,ShaderSource source,Executor executor){
-        PipelineCompileMetadata metadata=PipelineCompileMetadata.terrain(pipeline);
+        PipelineCompileMetadata metadata=PipelineCompileMetadata.capture(pipeline);
         return super.compilePipeline(pipeline,source,work->executor.execute(()->backend.compileWithMetadata(metadata,work)));
     }
     public CompletableFuture<String> awaitWorldCapture() { return backend.awaitWorldCapture(); }

@@ -46,7 +46,17 @@ public final class OwnedVertexShaderSource implements ShaderSource {
         try{includes.put(id,include);return include;}catch(RuntimeException|Error failure){include.close();throw failure;}
     }
     private String resource(Identifier id){
-        try(InputStream input=id.getNamespace().equals("overhaul")?OwnedVertexShaderSource.class.getResourceAsStream("/assets/overhaul/"+id.getPath()):resources.open(id)){
+        try{return read(id,id.getNamespace().equals("overhaul")?OwnedVertexShaderSource.class.getResourceAsStream("/assets/overhaul/"+id.getPath()):resources.open(id));}
+        catch(IOException failure){throw new IllegalStateException("Cannot read certified shader resource "+id,failure);}
+    }
+    /** Plain packaged code for native source adapters; this creates no callback/native include objects. */
+    public static String packagedInclude(String path){
+        if(path.startsWith("/")||path.contains(".."))throw new IllegalArgumentException("Invalid owned include path");
+        Identifier id=Identifier.fromNamespaceAndPath("overhaul","shaders/include/"+path);
+        return read(id,OwnedVertexShaderSource.class.getResourceAsStream("/assets/overhaul/"+id.getPath()));
+    }
+    private static String read(Identifier id,InputStream stream){
+        try(InputStream input=stream){
             if(input==null)throw new IOException("Missing shader resource "+id);
             byte[] bytes=input.readNBytes(2*1024*1024+1);if(bytes.length>2*1024*1024)throw new IOException("Shader resource exceeds bound: "+id);
             return new String(bytes,StandardCharsets.UTF_8);
