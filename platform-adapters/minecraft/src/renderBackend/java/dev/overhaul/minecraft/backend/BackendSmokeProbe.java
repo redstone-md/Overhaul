@@ -9,6 +9,8 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import dev.overhaul.minecraft.terrain.OverhaulSectionCompiler;
 import dev.overhaul.minecraft.terrain.TerrainCompilerAccess;
 import dev.overhaul.minecraft.terrain.TerrainDispatcherAccess;
+import dev.overhaul.minecraft.terrain.TerrainCullingAccess;
+import dev.overhaul.minecraft.terrain.TerrainCullingController;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -30,6 +32,8 @@ final class BackendSmokeProbe {
     private boolean captured,worldRequested;
     private TerrainDispatcherAccess terrainDispatcher;
     private OverhaulSectionCompiler terrainCompiler;
+    private TerrainCullingController terrainCulling;
+    private boolean terrainIndirectObserved;
 
     BackendSmokeProbe(OverhaulDeviceBackend owner) {
         this.owner=owner;
@@ -49,6 +53,8 @@ final class BackendSmokeProbe {
         if(world&&minecraft.levelRenderer.sectionRenderDispatcher() instanceof TerrainDispatcherAccess dispatcher
                 &&dispatcher.overhaul$sectionCompiler() instanceof TerrainCompilerAccess access) {
             terrainDispatcher=dispatcher;terrainCompiler=access.overhaul$compiler();
+            terrainIndirectObserved|=minecraft.levelRenderer.isChunkRenderingUsingMultiDrawIndirect();
+            terrainCulling=((TerrainCullingAccess)minecraft.levelRenderer).overhaul$culling();
         }
         if (world&&!worldRequested) return;
         boolean title=screen instanceof TitleScreen;
@@ -116,6 +122,9 @@ final class BackendSmokeProbe {
         report.put("captured",captured); report.put("closed",closed);
         report.put("capture","GPU surface source with presentation Y flip applied");
         report.put("submissionStatistics",owner.submissionStatistics());
+        report.put("nativeDrawStatistics",owner.drawStatistics());
+        report.put("terrainIndirectObserved",terrainIndirectObserved);
+        if(terrainCulling!=null)report.put("terrainCullingStatistics",terrainCulling.snapshot());
         report.put("bufferStorageStatistics",owner.bufferStorage().snapshot());
         report.put("descriptorPoolStatistics",owner.descriptorPools().stats());
         report.put("attachmentPoolStatistics",owner.attachments().statistics());

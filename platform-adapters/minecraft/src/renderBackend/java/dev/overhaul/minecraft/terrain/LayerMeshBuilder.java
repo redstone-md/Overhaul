@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import dev.overhaul.core.memory.DirectSlabPool;
+import dev.overhaul.core.culling.TerrainGeometryBuilder;
 import net.minecraft.client.renderer.SectionBufferBuilderPack;
 import net.minecraft.client.renderer.block.BlockQuadOutput;
 import net.minecraft.client.renderer.block.FluidRenderer;
@@ -21,12 +22,13 @@ import java.util.Objects;
 public final class LayerMeshBuilder implements AutoCloseable {
     private final SectionBufferBuilderPack pack;
     private final DirectSlabPool pool;
+    private final TerrainGeometryBuilder geometry=new TerrainGeometryBuilder();
     private final Map<ChunkSectionLayer,TerrainVertexConsumer> layers=new EnumMap<>(ChunkSectionLayer.class);
     private boolean finished,closed;
 
     public LayerMeshBuilder(SectionBufferBuilderPack pack,DirectSlabPool pool){this.pack=Objects.requireNonNull(pack);this.pool=Objects.requireNonNull(pool);}
     public VertexConsumer output(ChunkSectionLayer layer){
-        requireOpen();return layers.computeIfAbsent(layer,key->new TerrainVertexConsumer(pool,key.vertexFormat(),source->copy(key,source)));
+        requireOpen();return layers.computeIfAbsent(layer,key->new TerrainVertexConsumer(pool,key.vertexFormat(),source->copy(key,source),geometry,key==ChunkSectionLayer.SOLID));
     }
     public BlockQuadOutput blockOutput(boolean forceOpaque){
         requireOpen();return(x,y,z,quad,instance)->output(forceOpaque?ChunkSectionLayer.SOLID:quad.materialInfo().layer()).putBlockBakedQuad(x,y,z,quad,instance);
@@ -49,7 +51,9 @@ public final class LayerMeshBuilder implements AutoCloseable {
                 completed.put(layer,mesh);
                 if(layer.translucent())transparency=mesh.sortQuads(pack.buffer(layer),sorting);
             }
-            results.renderedLayers.putAll(completed);results.transparencyState=transparency;finished=true;
+            if((Object)results instanceof TerrainGeometryAccess access)access.overhaul$geometry(geometry.build());
+            results.renderedLayers.putAll(completed);results.transparencyState=transparency;
+            finished=true;
         }catch(RuntimeException|Error failure){closed=true;for(MeshData mesh:completed.values())try{mesh.close();}catch(RuntimeException error){failure.addSuppressed(error);}throw failure;}
         finally{closeWriters();}
     }
