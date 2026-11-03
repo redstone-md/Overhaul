@@ -101,7 +101,7 @@ tasks.register('verifySourceSize') {
     group = 'verification'
     description = 'Enforces the repository limit of fewer than 500 lines per source file.'
     def sources = fileTree(rootDir) {
-        include '**/*.java', '**/*.gradle', '**/*.glsl', '**/*.vert', '**/*.frag', '**/*.comp'
+        include '**/*.java', '**/*.gradle', '**/*.glsl', '**/*.vert', '**/*.frag', '**/*.comp', '**/*.vsh', '**/*.fsh', '**/*.ps1'
         exclude '**/build/**', '**/.gradle/**'
     }
     inputs.files(sources)
