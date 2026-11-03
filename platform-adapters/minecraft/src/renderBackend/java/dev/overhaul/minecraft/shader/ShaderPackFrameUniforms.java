@@ -22,14 +22,15 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
     private final float[] originalProjection=new float[16];
     private final float[] modelViewProjection=new float[16],normal=new float[9];
     private final Matrix4f matrix=new Matrix4f();
+    private final ShaderPackEnvironmentUniforms environment=new ShaderPackEnvironmentUniforms();
     private LevelRenderState state;
-    private Minecraft minecraft;
     private int width,height,frame;
     private float frameTime,counter,near;
     private double previousX,previousY,previousZ;
     private boolean initialized;
     void capture(Minecraft minecraft,LevelRenderState state,int width,int height,float[] nativeProjection){
-        this.minecraft=minecraft;this.state=state;this.width=width;this.height=height;
+        this.state=state;this.width=width;this.height=height;
+        environment.capture(minecraft,state);
         long now=System.nanoTime();frameTime=(float)((now-previousTime)*1e-9);previousTime=now;counter=(float)(((now-started)*1e-9)%3600);
         System.arraycopy(nativeProjection,0,projection,0,16);
         // The world uses reversed Vulkan Z. The imported depth is 1-z; reconstruct it with normal GL clip Z.
@@ -57,7 +58,6 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
             case "frameTimeCounter"->values.setFloat(name,counter);
             case "near"->values.setFloat(name,near);
             case "far"->values.setFloat(name,state.cameraRenderState.depthFar);
-            case "rainStrength"->values.setFloat(name,minecraft.level.getRainLevel(state.worldPartialTicks));
             case "cameraPosition"->{var position=state.cameraRenderState.pos;values.setVector(name,(float)position.x,(float)position.y,(float)position.z);}
             case "previousCameraPosition"->values.setVector(name,(float)previousX,(float)previousY,(float)previousZ);
             case "fogColor"->{var color=state.cameraRenderState.fogData.color;values.setVector(name,color.x(),color.y(),color.z());}
@@ -76,7 +76,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
             case "overhaulTextureMatrix0"->values.setMatrix(name,4,IDENTITY);
             case "overhaulTextureMatrix1"->values.setMatrix(name,4,program.scene()?LIGHTMAP_MATRIX:IDENTITY);
             case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
-            default->throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());
+            default->{if(!environment.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
         }
     }
     void complete(){
