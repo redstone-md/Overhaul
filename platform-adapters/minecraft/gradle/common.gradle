@@ -2,6 +2,7 @@ ext.targetName = providers.gradleProperty('target').getOrElse('fabric-26.3')
 ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetName]
 ext.set('loom.platform', target.loader)
 def sectionQueries = ['1.20.1', '1.21.1', '26.3'].contains(target.minecraft)
+def chunkGeneration = ['1.21.1', '26.3'].contains(target.minecraft)
 group = 'dev.overhaul'
 def sharedProperties = new Properties()
 file('../../gradle.properties').withInputStream { sharedProperties.load(it) }
@@ -38,6 +39,8 @@ if (target.tier != 'legacy') {
     sourceSets.main.java.srcDir "src/${target.loader}/java"
     sourceSets.main.java.srcDir target.minecraft == '26.3' ? 'src/unobfuscated/java' : 'src/mapped/java'
     if (sectionQueries) sourceSets.main.java.srcDir 'src/sectionQueries/java'
+    if (chunkGeneration) sourceSets.main.java.srcDir 'src/chunkGeneration/java'
+    if (target.minecraft == '1.21.1') sourceSets.main.java.srcDir 'src/generation121/java'
     if (providers.gradleProperty('worldSmoke').isPresent()) {
         if (targetName != 'fabric-26.3') throw new GradleException('World smoke currently requires fabric-26.3')
         sourceSets.main.java.srcDir 'src/worldSmoke/java'
@@ -163,8 +166,11 @@ tasks.named('processResources') {
         def config = new File(destinationDir, 'overhaul.mixins.json')
         def json = new groovy.json.JsonSlurper().parse(config)
         def queryMixins = ['EntitySectionStorageMixin']
+        if (chunkGeneration) queryMixins += 'RandomStateGenerationMixin'
+        if (target.minecraft == '1.21.1') queryMixins += ['ChunkMapGeneration121Mixin', 'MinecraftServerGeneration121Mixin',
+                'ChunkBiomeGeneration121Mixin', 'NoiseTerrainGeneration121Mixin']
         if (target.minecraft == '26.3') queryMixins += ['ChunkMapParseMixin', 'MinecraftServerChunkParseMixin', 'ChunkMapLightingMixin',
-                'ChunkMapGenerationMixin', 'RandomStateGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin',
+                'ChunkMapGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin',
                 'NodeEvaluatorMixin']
         json.mixins = (json.mixins + queryMixins).unique()
         config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
