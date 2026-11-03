@@ -14,6 +14,8 @@ public final class UniformBlock {
         data = ByteBuffer.allocateDirect(bindings.uniformBytes()).order(ByteOrder.nativeOrder());
     }
 
+    public ProgramBindings bindings() { return bindings; }
+
     public void setFloat(String name, float value) {
         var uniform = require(name,"float"); data.putFloat(uniform.byteOffset(),value);
     }

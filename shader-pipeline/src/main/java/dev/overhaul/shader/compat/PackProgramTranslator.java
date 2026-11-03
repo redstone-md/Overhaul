@@ -59,7 +59,7 @@ public final class PackProgramTranslator {
             layout.put(uniform.getKey(), new ProgramBindings.Uniform(type, offset, size));
             offset += size;
         }
-        ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations);
+        ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes);
         return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings),
                 rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings),bindings,coordinates);
     }
