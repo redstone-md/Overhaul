@@ -46,3 +46,25 @@ Use encapsulated objects for stateful ownership and small immutable values for
 cross-thread messages. Share mechanisms once; keep version policy in adapters.
 Keep source files below 500 lines. No global mutable engine singleton, guessed
 version routing, or silent compatibility fallback may replace explicit contracts.
+
+## Baked-model integration
+
+The version adapter copies actual game quads into immutable `ModelSnapshot`
+values with a double-precision section origin. `ModelMesher` packs owned 32-byte
+vertices and layer index ranges into a slab. Native upload completes before the
+source lease returns. Sorting retains only the translucent index scratch and
+writes only that range; opaque and cutout index data remain resident.
+
+The current 26.3 capture invokes the game's tessellator on the world owner to
+preserve model/tint/AO/light semantics. It is an extraction tracer, not the final
+off-thread tessellation replacement. Its development probe copies the live atlas
+and lightmap through game GPU callbacks before passing owned bytes to the worker.
+It never hands game textures, models or a live world object to that worker.
+
+The 26.3 window is created through
+`com.mojang.renderpearl.api.device.GpuBackend.createWindow`; its renderer consumes
+the RenderPearl `GpuDevice` API. The new SDL `SurfaceProvider` supplies native
+surface ownership but is not itself that game device implementation. A Vulkan
+window must be selected before creation; borrowing an existing OpenGL SDL window
+is rejected. Selecting Minecraft's built-in Vulkan backend would not prove that
+Overhaul's renderer has replaced the game's rendering implementation.

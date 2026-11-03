@@ -1,0 +1,58 @@
+{
+  "verifiedAtUtc": "2026-11-03T16:10:08.3242284Z",
+  "sourceCommit": "b2cd9763be7bfa0640ddbf188aa83a9c4e67fde0",
+  "command": ".\\gradlew.bat -p platform-adapters/minecraft -Ptarget=fabric-26.3 -PworldSmoke -PmodelSmoke verifyWorldSmoke --console=plain --no-configuration-cache",
+  "image": "world-model-2026-11-03.png",
+  "imageSha256": "315d278d075742fdf574b8bf3d40d3fe81f7508dfc533aac3acde3c60f5ace8a",
+  "backendJarSha256": "13d3f35a26ecbbc50922daf1fca4f8c04fb951ce790a0e5183520045c8a28639",
+  "shaderJarSha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0",
+  "receipt": {
+    "status": "PASS",
+    "world": "overhaul-smoke-25ccf01e-4054-4b51-b50b-11d3d998d3d7",
+    "seed": 424242,
+    "revision": 2,
+    "indices": 6,
+    "retiredLeases": 0,
+    "additionalProbe": "source=ClientLevel,bakedModels=true,quads=283,cutout=9,translucent=5,nonCube=19,indices=1698,coveredPixels=132868,worker=overhaul-model-smoke-0,VulkanDevice=NVIDIA GeForce RTX 5070,sourceLeases=0,atlas=2048x2048,lightmap=16x16,validationLayers=false,gameRendererReplaced=false",
+    "fixturePlacementThread": "Server thread",
+    "clientFixtureStatesVerified": 5,
+    "fixtures": [
+      {
+        "block": "minecraft:oak_slab",
+        "x": 2,
+        "y": 4,
+        "z": 4,
+        "state": "Block{minecraft:oak_slab}[type=bottom,waterlogged=false]"
+      },
+      {
+        "block": "minecraft:glass",
+        "x": 4,
+        "y": 4,
+        "z": 4,
+        "state": "Block{minecraft:glass}"
+      },
+      {
+        "block": "minecraft:dandelion",
+        "x": 6,
+        "y": 4,
+        "z": 4,
+        "state": "Block{minecraft:dandelion}"
+      },
+      {
+        "block": "minecraft:oak_stairs",
+        "x": 8,
+        "y": 4,
+        "z": 4,
+        "state": "Block{minecraft:oak_stairs}[facing=north,half=bottom,shape=straight,waterlogged=false]"
+      },
+      {
+        "block": "minecraft:oak_leaves",
+        "x": 10,
+        "y": 4,
+        "z": 4,
+        "state": "Block{minecraft:oak_leaves}[distance=7,persistent=true,waterlogged=false]"
+      }
+    ],
+    "failure": ""
+  }
+}

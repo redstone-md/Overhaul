@@ -20,6 +20,7 @@ Java 17 bytecode as appropriate; loader targets have their own runtime requireme
 $env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-25.0.3.9-hotspot'
 .\gradlew.bat build
 .\gradlew.bat :integration-tests:nativeTest
+.\gradlew.bat :vulkan-backend:sdlVulkanSmoke
 .\gradlew.bat :vulkan-backend:vulkanSmoke --args="--present --output build/verification/triangle.ppm"
 ```
 
@@ -52,9 +53,15 @@ before loading LWJGL: `-Dorg.lwjgl.system.stackSize=1024` and
 - Real Vulkan draws of pinned Iris example programs with texture, uniform,
   coordinate-conversion and blending checks.
 - Native graph image allocation and transitions with explicit pass callbacks.
+- Pooled baked-model vertices with real atlas/lightmap sampling, cutout discard
+  and translucent sorting that uploads only changed translucent indices.
 
-The cube mesher does not implement Minecraft's model bakery, texture atlas,
-transparent blocks or biome shading. Emissive lighting is not the vanilla
+The cube mesher is separate from the new baked-model path. A Fabric 26.3
+development smoke captures actual baked geometry, final tint/AO, atlas and
+lightmap, then draws those assets through Vulkan on a worker. See the
+[captured result](docs/evidence/world-model-2026-11-03.png). Its extraction still
+uses Minecraft's tessellator, and the game window remains on OpenGL.
+Emissive lighting is not the vanilla
 skylight/lighting engine. The deferred graph still needs actual scene lighting,
 shadow and post-processing passes. Shader-pack support remains a defined subset.
 Direct slabs are reusable within their fixed budget; the JVM reclaims the pool's
@@ -65,3 +72,16 @@ lifecycle hooks leave vanilla rendering active. A packaged diagnostic adapter is
 not a completed Vulkan renderer replacement. See the roadmap for remaining gates.
 All 11 pinned loader builds pass; see [validation evidence](docs/VALIDATION.md)
 and the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact limits.
+
+To reproduce the isolated live-world model check:
+
+```powershell
+.\gradlew.bat :vulkan-backend:jar :shader-pipeline:jar
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PworldSmoke -PmodelSmoke verifyWorldSmoke --no-configuration-cache
+```
+
+It creates a uniquely named development world inside this workspace, verifies
+server-to-client block fixtures, renders their captured assets, then saves and
+disconnects normally. Development drivers use separate build directories and are
+excluded from normal loader jars. The optional `-sdl34.jar` surface adapter is
+packaged separately and requires a runtime with matching LWJGL 3.4.3 bindings.

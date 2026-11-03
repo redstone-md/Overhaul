@@ -64,6 +64,33 @@ blocks and skylight are outside this diagnostic path. Missing neighbor chunks
 defer capture; sampling never requests chunk loading. The legacy hook currently
 tracks lifecycle only and does not capture world sections.
 
+## Real-world and model smoke
+
+```powershell
+.\gradlew.bat :vulkan-backend:jar :shader-pipeline:jar
+.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PworldSmoke -PmodelSmoke verifyWorldSmoke --no-configuration-cache
+```
+
+This development-only driver creates a uniquely named flat test world, places
+five real blocks on the integrated-server thread and waits for matching client
+packet states. It verifies live capture/revision/unload, then captures actual
+baked quads and copies the game's block atlas and lightmap before dispatching
+owned data to a worker for Vulkan upload/draw/readback. It saves, disconnects and
+stops normally, writing the receipt to `run/fabric-26.3` and images under
+`run/fabric-26.3/overhaul-model-smoke`.
+
+Omit `-PmodelSmoke` for the world/worker-only test. Normal target builds use the
+`nosmoke` factory; world/model builds select separate source variants and output
+directories. Development world creation and native probe classes are excluded
+from normal adapter jars. The model probe adds COPY_SRC usage to its development
+lightmap solely for readback. It leaves the game's onscreen renderer active.
+
+The current baked-model capture preserves the game's tessellation, tint, AO and
+light on the owner thread. Packing/native draw run on a bounded worker. Replacing
+the original tessellator, fluids, special block entities and continuous scene
+updates remain required work. Vertex UV/light coordinates use UNORM16, normals
+use SNORM8 and cutoff uses UNORM8; full scene parity is not established.
+
 ## Server boundary
 
 Common server mixins attach a cooperative work queue to the server's own thread.

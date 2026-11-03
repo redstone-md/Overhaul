@@ -84,10 +84,10 @@ Performance claims require measurements, not implementation intent.
 
 ## Next end-to-end gates
 
-1. Connect actual loaded world sections to native uploads with game texture/model
-   data and a version-specific window/surface bridge. Minecraft 26.3 uses SDL and
-   LWJGL 3.4.3-snapshot here; the standalone engine's GLFW/LWJGL 3.3.6 harness is not
-   a drop-in replacement for that window/runtime. Resolve this boundary explicitly.
+1. Promote the now-verified live-world model/texture upload tracer into the actual
+   game window/backend. The SDL surface provider and isolated LWJGL 3.4.3 runtime
+   pass native tests; the 26.3 game still needs an Overhaul implementation of its
+   RenderPearl device/command/resource boundary before window creation.
 2. Implement model geometry, biome/light data and translucent rendering, then all
    entity, block-entity, particle, weather and GUI/text paths before cancelling the
    vanilla renderer. Preserve a runnable reference instance for visual comparisons.
@@ -97,3 +97,20 @@ Performance claims require measurements, not implementation intent.
    server tracking and path queries with dependency/ownership correctness.
 5. Expand/version-test the remaining releases, exercise real legacy JVM/game
    runtimes, perform mod coexistence checks and measure controlled performance.
+
+## Live-world/model checkpoint: 2026-11-03
+
+- The actual integrated server and client now run a disposable world, verify five
+  server-placed block states through client packets and capture the live section.
+- The adapter extracts 283 baked quads, including 19 non-cube, nine cutout and five
+  translucent quads. Its real block atlas and lightmap reach a bounded worker.
+- Overhaul draws those assets through Vulkan, verifies repeatable pixels after
+  source slab overwrite and saves a 512x512 image. World unload returns all leases
+  and the game saves/disconnects/stops normally.
+- Baked-model unit/native checks cover UV/light/tint packing, alpha holes, sorting,
+  camera precision and partial index writes. The engine now has 48 unit tests and
+  eight native integration tests, all passing.
+- All 11 normal loader targets were refreshed and their 22 tests/receipts pass.
+  World/model smoke sources and output directories are isolated from normal jars.
+- This proves an actual game-asset-to-Overhaul-Vulkan path. It does not prove that
+  the game's onscreen renderer, entity domains or full shader packs are replaced.
