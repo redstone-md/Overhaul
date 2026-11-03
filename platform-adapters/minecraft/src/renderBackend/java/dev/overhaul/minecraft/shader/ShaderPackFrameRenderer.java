@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.backend.OverhaulGpuDevice;
 import dev.overhaul.minecraft.backend.ShaderPackSceneState;
+import dev.overhaul.minecraft.shadow.ShadowCasterAccess;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
@@ -23,8 +24,8 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
     private final float[] projection=new float[16];
     private final ShaderPackFrameUniforms uniforms=new ShaderPackFrameUniforms();
     private ShaderPackSceneState scenes;
-    private Object dimension,world;
-    private String configuration="";
+    private CompiledShaderPack activePack;
+    private ShaderPackConfiguration configuration;
     private int width,height;
     private boolean installed,prepared,captured,closed;
     public ShaderPackFrameRenderer(Minecraft minecraft){this.minecraft=minecraft;}
@@ -34,22 +35,20 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
     public void beginWorld(){
         requireOpen();
         RenderTarget target=minecraft.gameRenderer.mainRenderTarget();LevelRenderState state=minecraft.gameRenderer.gameRenderState().levelRenderState;
-        String requested=System.getProperty("overhaul.shaderPack","").trim();if(requested.isEmpty()){invalidate();return;}
+        var nextConfiguration=ShaderPackConfiguration.capture(minecraft);if(!nextConfiguration.configured()){invalidate();return;}
         if(!(RenderSystem.getDevice() instanceof OverhaulGpuDevice device))throw new IllegalStateException("A shader pack requires the owned Vulkan backend");
         if(minecraft.level==null||captured||!prepared)throw new IllegalStateException("Shader-pack frame lacks its world/projection or is already captured");
         var resources=device.nativeFrames();scenes=resources.shaderPacks();var key=minecraft.level.dimension();
-        String options=System.getProperty("overhaul.shaderPackOptions","");String macros=System.getProperty("overhaul.shaderPackDefines","");
-        String nextConfiguration=requested+"\n"+options+"\n"+macros;
-        if(!installed||world!=minecraft.level||width!=target.width||height!=target.height||!key.equals(dimension)||!configuration.equals(nextConfiguration)){
-            Path path=minecraft.gameDirectory.toPath().resolve(requested).normalize();
+        if(!installed||width!=target.width||height!=target.height||!nextConfiguration.equals(configuration)){
+            Path path=minecraft.gameDirectory.toPath().resolve(nextConfiguration.requested()).normalize();
             try(ShaderPackSource source=ShaderPackSource.open(path);ShadercCompiler compiler=new ShadercCompiler()){
-                Map<String,String> definitions=definitions(macros);Map<String,Boolean> selected=options(options);
+                Map<String,String> definitions=definitions(nextConfiguration.defines());Map<String,Boolean> selected=options(nextConfiguration.options());
                 CompiledShaderPack pack=CompiledShaderPack.compileForDimension(source,key.identifier().toString(),selected,definitions,compiler);
-                scenes.install(pack,target.width,target.height,compiler);installed=true;
-                width=target.width;height=target.height;dimension=key;world=minecraft.level;configuration=nextConfiguration;uniforms.resetHistory();
+                scenes.install(pack,target.width,target.height,compiler,nextConfiguration);activePack=pack;installed=true;
+                width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+path,failure);}
         }
-        uniforms.capture(minecraft,state,target.width,target.height,projection);var fog=state.cameraRenderState.fogData.color;
+        uniforms.capture(minecraft,state,target.width,target.height,projection,activePack.shadow());var fog=state.cameraRenderState.fogData.color;
         scenes.begin(target.getColorTextureView(),target.getDepthTextureView(),new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),uniforms);captured=true;prepared=false;
     }
     public void render(RenderTarget target,LevelRenderState state){
@@ -73,7 +72,14 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
         }return result;
     }
     public void abort(){invalidate();}
-    public void invalidate(){requireOpen();try{if(scenes!=null)scenes.clear();}finally{prepared=captured=false;installed=false;dimension=null;world=null;configuration="";uniforms.resetHistory();}}
+    public void invalidate(){
+        requireOpen();
+        try{if(scenes!=null)scenes.clear();}
+        finally{
+            prepared=captured=false;installed=false;activePack=null;configuration=null;uniforms.resetHistory();
+            if(minecraft.levelRenderer instanceof ShadowCasterAccess shadows)shadows.overhaul$releaseShadows();
+        }
+    }
     private void requireOpen(){if(Thread.currentThread()!=owner||closed)throw new IllegalStateException("Shader-pack renderer is closed or accessed outside its owner");}
     @Override public void close(){if(closed)return;requireOpen();invalidate();closed=true;}
 }

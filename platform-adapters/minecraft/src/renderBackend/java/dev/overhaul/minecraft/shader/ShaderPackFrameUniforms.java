@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.shader;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.PackGraphRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
@@ -23,14 +24,16 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
     private final float[] modelViewProjection=new float[16],normal=new float[9];
     private final Matrix4f matrix=new Matrix4f();
     private final ShaderPackEnvironmentUniforms environment=new ShaderPackEnvironmentUniforms();
+    private final ShaderPackShadowUniforms shadow=new ShaderPackShadowUniforms();
     private LevelRenderState state;
     private int width,height,frame;
     private float frameTime,counter,near;
     private double previousX,previousY,previousZ;
     private boolean initialized;
-    void capture(Minecraft minecraft,LevelRenderState state,int width,int height,float[] nativeProjection){
+    void capture(Minecraft minecraft,LevelRenderState state,int width,int height,float[] nativeProjection,PackShadowSettings shadowSettings){
         this.state=state;this.width=width;this.height=height;
         environment.capture(minecraft,state);
+        shadow.capture(minecraft,state,shadowSettings);
         long now=System.nanoTime();frameTime=(float)((now-previousTime)*1e-9);previousTime=now;counter=(float)(((now-started)*1e-9)%3600);
         System.arraycopy(nativeProjection,0,projection,0,16);
         // The world uses reversed Vulkan Z. The imported depth is 1-z; reconstruct it with normal GL clip Z.
@@ -76,7 +79,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms {
             case "overhaulTextureMatrix0"->values.setMatrix(name,4,IDENTITY);
             case "overhaulTextureMatrix1"->values.setMatrix(name,4,program.scene()?LIGHTMAP_MATRIX:IDENTITY);
             case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
-            default->{if(!environment.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
+            default->{if(!shadow.fill(name,values)&&!environment.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
         }
     }
     void complete(){

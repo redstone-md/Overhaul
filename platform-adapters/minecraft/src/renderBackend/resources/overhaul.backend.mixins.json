@@ -6,7 +6,9 @@
   "client": [
     "PreferredGraphicsApiMixin", "SectionCompilerMixin", "SectionDispatcherMixin", "AsyncSectionCompileMixin",
     "LevelTerrainMixin", "SectionGeometryMixin", "CompiledGeometryMixin", "TerrainCullingMixin", "TerrainProjectionMixin",
-    "ShaderReloadMixin", "ShaderPackFrameMixin", "PackWorldPassMixin", "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin",
+    "ShaderReloadMixin", "ShaderPackFrameMixin", "PackWorldPassMixin",
+    "ShadowViewAreaMixin", "ShadowLevelExtractorMixin", "ShadowFeatureDispatcherMixin", "ShadowLevelRendererMixin",
+    "ParticleStorageAccess", "QuadParticleStateMixin", "InstancedParticleRendererMixin",
     "WeatherGeometryMixin", "InstancedWeatherRendererMixin", "ModelCubeCaptureMixin", "InstancedModelRendererMixin",
     "RenderTypeSetupAccess", "RenderSetupOitAccess", "ModelPartStructureAccess",
     "SubmitStorageDomainMixin", "SubmitCollectionDomainMixin", "ModelSubmitDomainMixin", "EntitySubmitDomainMixin",

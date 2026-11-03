@@ -37,6 +37,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private final PassAttachments attachments;
     private final PassDescriptors descriptors;
     private final ShaderPackSceneGeneration scene;
+    private final boolean shadow;
     private final ScenePackDescriptors sceneDescriptors;
     private final Map<CompiledShaderPack.Program,PassAttachments> sceneAttachments=new LinkedHashMap<>();
     private PassAttachments ordinaryLoading;
@@ -62,7 +63,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private dev.overhaul.vulkan.FrameRing.Submission submission;
 
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
-        this.owner=owner;owner.requireOpen();descriptors=new PassDescriptors(owner);scene=owner.shaderPacks().capture();sceneDescriptors=scene==null?null:new ScenePackDescriptors(owner);
+        this.owner=owner;owner.requireOpen();shadow=owner.shaderPacks().isShadowCapture();descriptors=new PassDescriptors(owner);scene=owner.shaderPacks().capture();sceneDescriptors=scene==null?null:new ScenePackDescriptors(owner);
         try{if(scene!=null)retain(scene);attachments=new PassAttachments(owner,descriptor,this::retain,scene);}
         catch(RuntimeException|Error failure){releasePins();throw failure;}
     }
@@ -110,10 +111,10 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         var active=pipeline.activeUniforms();
         for(int slot=active.nextSetBit(0);slot>=0;slot=active.nextSetBit(slot+1)){
             if(uniforms[slot]==null)throw new IllegalStateException("Missing uniform "+pipeline.uniforms().get(slot).name());
-            if(uniforms[slot] instanceof TextureViewAndSampler pair){var view=owner.texture(pair.view());if(attachments.overlaps(view))throw new UnsupportedOperationException("Attachment feedback requires separate resource versions");sampled.add(view);}
+            if(uniforms[slot] instanceof TextureViewAndSampler pair){var view=owner.texture(pair.view());if(!shadow&&attachments.overlaps(view))throw new UnsupportedOperationException("Attachment feedback requires separate resource versions");sampled.add(view);}
         }
         var state=new PassBindings(pipeline,uniforms,vertices,indices,indexType,constants,scissor);
-        var selected=sceneProgram(state);if(selected!=null)for(var expected:scene.pipeline(pipeline,selected).code.inputs.bindings()){
+        var selected=sceneProgram(state);if(selected!=null)for(var expected:replacement(state,selected).code.inputs.bindings()){
             var source=state.vertices().get(expected.slot());if(source==null)throw new IllegalStateException("Missing scene vertex buffer slot "+expected.slot());PassDescriptors.checkRange(source,owner.buffer(source.buffer()).size());
         }
         return state;
@@ -196,7 +197,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         var active=state.pipeline().activeUniforms();
         for(int slot=active.nextSetBit(0);slot>=0;slot=active.nextSetBit(slot+1))if(state.uniforms()[slot] instanceof GpuBufferSlice slice)readBuffer(slice.buffer(),slice.offset(),slice.length());
         var selected=sceneProgram(state);
-        if(selected!=null)for(var expected:scene.pipeline(state.pipeline(),selected).code.inputs.bindings()){
+        if(selected!=null)for(var expected:replacement(state,selected).code.inputs.bindings()){
             GpuBufferSlice slice=state.vertices().get(expected.slot());readBuffer(slice.buffer(),slice.offset(),slice.length());
         }else for(var expected:state.pipeline().info().vertexBuffers()){
             GpuBufferSlice slice=state.vertices().get(expected.bufferSlot());readBuffer(slice.buffer(),slice.offset(),slice.length());
@@ -221,7 +222,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
             attachments.begin(command,transitions);
             try{for(Command entry:commands){if(entry.bindings()!=null)entry.bindings().bind(command,owner,attachments,descriptors);entry.draw().accept(command);}}
             finally{vkCmdEndRenderPass(command);}
-        }else recordScene(command);
+        }else if(shadow)recordShadows(command);else recordScene(command);
         recordingSucceeded=true;
     }
     private void recordScene(VkCommandBuffer command){
@@ -245,7 +246,25 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
             }
         }finally{if(current!=null)vkCmdEndRenderPass(command);}
     }
-    private CompiledShaderPack.Program sceneProgram(PassBindings state){return scene!=null&&attachments.hasColor(scene.color())?scene.select(state.pipeline()):null;}
+    private ScenePackPipeline replacement(PassBindings state,CompiledShaderPack.Program selected){return shadow?scene.shadowPipeline(state.pipeline()):scene.pipeline(state.pipeline(),selected);}
+    private void recordShadows(VkCommandBuffer command){
+        PassAttachments current=null;ScenePackPipeline currentPipeline=null;
+        try{
+            for(Command entry:commands){
+                if(entry.bindings()==null){if(current!=null){vkCmdEndRenderPass(command);current=null;}entry.draw().accept(command);continue;}
+                var state=entry.bindings();var selected=sceneProgram(state);if(selected==null)continue;
+                var pipeline=scene.shadowPipeline(state.pipeline());
+                var desired=sceneAttachments.computeIfAbsent(selected,program->scene.shadowAttachments(program,attachments.resourceSources()));
+                if(current!=desired||currentPipeline!=pipeline){
+                    if(current!=null){vkCmdEndRenderPass(command);current=null;}
+                    scene.sampleTransitions(command,pipeline,state,desired,transitions);
+                    desired.begin(command,transitions);current=desired;currentPipeline=pipeline;
+                }
+                pipeline.bind(command,state,desired,descriptors,sceneDescriptors);entry.draw().accept(command);
+            }
+        }finally{if(current!=null)vkCmdEndRenderPass(command);}
+    }
+    private CompiledShaderPack.Program sceneProgram(PassBindings state){return shadow?scene.shadowProgram(state.pipeline()):scene!=null&&attachments.hasColor(scene.color())?scene.select(state.pipeline()):null;}
     /** Called only after the encoder's native queue submission succeeds. */
     public void complete(){
         owner.requireOwner();if(closed||!recordingSucceeded||complete)throw new IllegalStateException("Invalid render-pass completion");

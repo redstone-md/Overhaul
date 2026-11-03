@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.overhaul.minecraft.terrain.TerrainCullingAccess;
 import dev.overhaul.minecraft.terrain.TerrainCullingController;
+import dev.overhaul.minecraft.shadow.ShadowCasterAccess;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.renderer.DynamicGpuData;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -35,15 +36,16 @@ public abstract class TerrainCullingMixin implements TerrainCullingAccess {
     @Override public TerrainCullingController overhaul$culling(){return overhaul$culling;}
     @Inject(method={"prepareChunkRenders","prepareChunkRendersIndirect"},at=@At("HEAD"))
     private void overhaul$prepare(Matrix4fc view,boolean sorted,CallbackInfoReturnable<ChunkSectionsToRender> callback){
-        overhaul$culling.prepare(view,levelRenderState.cameraRenderState);
+        if(((ShadowCasterAccess)this).overhaul$shadowSections()==null)overhaul$culling.prepare(view,levelRenderState.cameraRenderState);
     }
     @ModifyExpressionValue(method="extractSectionDrawGroups",at=@At(value="FIELD",target="Lnet/minecraft/client/renderer/LevelRenderer;visibleSections:Lit/unimi/dsi/fastutil/objects/ObjectArrayList;"))
     private ObjectArrayList<SectionRenderDispatcher.RenderSection> overhaul$filter(ObjectArrayList<SectionRenderDispatcher.RenderSection> original){
-        return overhaul$culling.filter(original,sectionRenderDispatcher,optionsRenderState.chunkSectionFadeInTime);
+        var shadow=((ShadowCasterAccess)this).overhaul$shadowSections();
+        return shadow!=null?shadow:overhaul$culling.filter(original,sectionRenderDispatcher,optionsRenderState.chunkSectionFadeInTime);
     }
     @WrapOperation(method="extractSectionDrawGroups",at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection;getSectionMesh()Lnet/minecraft/client/renderer/chunk/SectionMesh;"))
     private SectionMesh overhaul$mesh(SectionRenderDispatcher.RenderSection section,Operation<SectionMesh> original){
-        return overhaul$culling.mesh(section,original.call(section));
+        var mesh=original.call(section);return ((ShadowCasterAccess)this).overhaul$shadowSections()!=null?mesh:overhaul$culling.mesh(section,mesh);
     }
     @WrapMethod(method="extractSectionDrawGroups")
     private int overhaul$scope(boolean sorted,List<DynamicGpuData.ChunkSectionInfo> infos,Map<?,?> groups,Operation<Integer> original){
