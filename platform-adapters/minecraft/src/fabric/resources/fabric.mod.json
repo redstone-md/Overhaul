@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "overhaul",
+  "version": "${version}",
+  "name": "overhaul",
+  "description": "Experimental engine adapters; Vulkan renderer integration is under development.",
+  "environment": "*",
+  "entrypoints": {"main": ["dev.overhaul.minecraft.fabric.OverhaulFabric"]},
+  "mixins": ["overhaul.mixins.json"],
+  "depends": {"fabricloader": ">=${loaderVersion}", "minecraft": "${minecraft}"}
+}

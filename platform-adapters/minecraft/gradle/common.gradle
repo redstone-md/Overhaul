@@ -1,0 +1,127 @@
+ext.targetName = providers.gradleProperty('target').getOrElse('fabric-26.3')
+ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetName]
+ext.set('loom.platform', target.loader)
+group = 'dev.overhaul'
+version = '0.1.0-SNAPSHOT'
+layout.buildDirectory = file("build/${targetName}")
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://maven.neoforged.net/releases/' }
+    maven { url = 'https://libraries.minecraft.net/' }
+}
+
+apply plugin: 'java'
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = target.java as int
+}
+sourceSets.main.java.srcDirs = ['../src/main/java', '../../core-common/src/main/java']
+if (target.tier != 'legacy') {
+    sourceSets.main.java.srcDir 'src/common/java'
+    sourceSets.main.java.srcDir "src/${target.loader}/java"
+    sourceSets.main.java.srcDir target.minecraft == '26.3' ? 'src/unobfuscated/java' : 'src/mapped/java'
+    sourceSets.main.resources.srcDirs = ['src/common/resources', "src/${target.loader}/resources"]
+} else {
+    sourceSets.main.java.srcDir 'src/legacy/java'
+    sourceSets.main.resources.srcDirs = ['src/legacy/resources']
+}
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    if (target.tier != 'legacy') testImplementation 'org.ow2.asm:asm:9.8'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+if (target.tier != 'legacy') sourceSets.test.java.srcDirs = ['src/test/java']
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    systemProperty 'overhaul.loader', target.loader
+    // ForgeGradle7 exposes main outputs through its jar/variant pipeline.
+    dependsOn tasks.named('jar')
+    classpath += files(tasks.named('jar').flatMap { it.archiveFile })
+    // The descriptor test reads game class files; ModDevGradle omits them from default test runtime.
+    classpath += sourceSets.main.compileClasspath
+}
+tasks.withType(JavaExec).configureEach {
+    if (providers.gradleProperty('diagnostics').isPresent() || providers.gradleProperty('smokeClient').isPresent()) {
+        systemProperty 'overhaul.diagnostics.enable', 'true'
+    }
+    if (providers.gradleProperty('smokeClient').isPresent()) {
+        def requested = providers.gradleProperty('smokeClient').get()
+        systemProperty 'overhaul.diagnostics.stopAfterTicks', requested.empty ? '200' : requested
+    }
+}
+tasks.named('processResources') {
+    inputs.properties(version: project.version, minecraft: target.minecraft, loaderVersion: target.loaderVersion)
+    filesMatching(['fabric.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml', 'mcmod.info', 'overhaul.mixins.json']) {
+        expand(version: project.version, minecraft: target.minecraft, loaderVersion: target.loaderVersion,
+                compatibility: "JAVA_${target.java}")
+    }
+    filesMatching('overhaul.mixins.json') {
+        if (target.loader != 'forge' || target.minecraft == '26.3') {
+            filter { line -> line.contains('"refmap"') ? null : line }
+        }
+    }
+}
+tasks.named('jar') {
+    archiveBaseName = "overhaul-${target.loader}-${target.minecraft}"
+    manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)
+    if (target.loader == 'forge' && target.tier != 'legacy') {
+        manifest.attributes('MixinConfigs': 'overhaul.mixins.json')
+    }
+}
+
+tasks.register('verifyAdapterJar') {
+    group = 'verification'
+    description = 'Checks packaged adapter metadata, bytecode target, and native isolation.'
+}
+afterEvaluate {
+    def artifactTask = tasks.findByName('remapJar') ?: tasks.named('jar').get()
+    tasks.named('verifyAdapterJar') {
+        dependsOn artifactTask
+        inputs.file artifactTask.archiveFile
+        doLast {
+            new java.util.jar.JarFile(artifactTask.archiveFile.get().asFile).withCloseable { jar ->
+                def entries = jar.entries().toList()
+                def forbidden = entries.find { it.name.startsWith('org/lwjgl/') || it.name.startsWith('dev/overhaul/vulkan/') }
+                if (forbidden) throw new GradleException("Server-safe adapter bundled native code: ${forbidden.name}")
+                def metadata = target.tier == 'legacy' ? 'mcmod.info' : target.loader == 'fabric' ? 'fabric.mod.json' :
+                        target.loader == 'neoforge' ? 'META-INF/neoforge.mods.toml' : 'META-INF/mods.toml'
+                if (jar.getEntry(metadata) == null) throw new GradleException("Missing ${metadata}")
+                if (target.tier != 'legacy') {
+                    def mixins
+                    jar.getInputStream(jar.getEntry('overhaul.mixins.json')).withCloseable { stream ->
+                        mixins = new groovy.json.JsonSlurper().parse(stream)
+                    }
+                    def prefix = mixins.package.replace('.', '/') + '/'
+                    def allowed = ((mixins.mixins ?: []) + (mixins.client ?: []) + (mixins.server ?: []))
+                            .collect { prefix + it.replace('.', '/') }
+                    def invalid = entries.find { entry -> entry.name.startsWith(prefix) && entry.name.endsWith('.class') &&
+                            !allowed.any { type -> entry.name == type + '.class' || entry.name.startsWith(type + '$') } }
+                    if (invalid) throw new GradleException("Normal class is inside reserved Mixin package: ${invalid.name}")
+                }
+                for (entry in entries.findAll { it.name.endsWith('.class') }) {
+                    jar.getInputStream(entry).withCloseable { stream ->
+                        def data = new DataInputStream(stream)
+                        if (data.readInt() != (0xCAFEBABE as int)) throw new GradleException("Invalid class ${entry.name}")
+                        data.readUnsignedShort()
+                        if (data.readUnsignedShort() > (target.java as int) + 44) {
+                            throw new GradleException("Wrong Java bytecode target: ${entry.name}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    tasks.named('check') { dependsOn 'verifyAdapterJar' }
+}

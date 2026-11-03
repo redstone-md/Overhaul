@@ -1,0 +1,26 @@
+plugins {
+    id 'dev.architectury.loom' version '1.17.493' apply false
+}
+apply from: 'gradle/common.gradle'
+apply plugin: 'dev.architectury.loom'
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    mappings loom.officialMojangMappings()
+    if (target.loader == 'fabric') {
+        modImplementation "net.fabricmc:fabric-loader:${target.loaderVersion}"
+    } else {
+        forge "net.minecraftforge:forge:${target.minecraft}-${target.loaderVersion}"
+        compileOnly 'org.spongepowered:mixin:0.8.7'
+        annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
+    }
+}
+
+loom {
+    runs { configureEach { runDir "run/${targetName}" } }
+    mixin {
+        useLegacyMixinAp = target.loader == 'forge'
+        if (target.loader == 'forge') defaultRefmapName = 'overhaul.refmap.json'
+    }
+    if (target.loader == 'forge') forge { mixinConfig 'overhaul.mixins.json' }
+}

@@ -5,6 +5,6 @@ public final class AdapterBootstrap {
     private AdapterBootstrap() { }
     public static void initialize(String loader) {
         java.util.logging.Logger.getLogger("overhaul").info("Overhaul "+loader
-                +" adapter loaded; lifecycle integration active, renderer replacement under development");
+                +" adapter loaded; lifecycle hooks registered, renderer replacement under development");
     }
 }

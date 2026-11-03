@@ -1,0 +1,13 @@
+{
+  "fabric-1.16.5": {"loader":"fabric","minecraft":"1.16.5","loaderVersion":"0.20.1","java":8,"script":"build-loom.gradle","tier":"blaze3d"},
+  "fabric-1.20.1": {"loader":"fabric","minecraft":"1.20.1","loaderVersion":"0.20.1","java":17,"script":"build-loom.gradle","tier":"blaze3d"},
+  "fabric-1.21.1": {"loader":"fabric","minecraft":"1.21.1","loaderVersion":"0.20.1","java":21,"script":"build-loom.gradle","tier":"modern"},
+  "fabric-26.3": {"loader":"fabric","minecraft":"26.3","loaderVersion":"0.20.1","java":25,"script":"build-fabric-modern.gradle","tier":"modern"},
+  "forge-1.12.2": {"loader":"forge","minecraft":"1.12.2","loaderVersion":"14.23.5.2860","java":8,"script":"build-legacy.gradle","tier":"legacy"},
+  "forge-1.16.5": {"loader":"forge","minecraft":"1.16.5","loaderVersion":"36.2.42","java":8,"script":"build-loom.gradle","tier":"blaze3d"},
+  "forge-1.20.1": {"loader":"forge","minecraft":"1.20.1","loaderVersion":"47.4.10","java":17,"script":"build-loom.gradle","tier":"blaze3d"},
+  "forge-1.21.1": {"loader":"forge","minecraft":"1.21.1","loaderVersion":"52.1.21","java":21,"script":"build-loom.gradle","tier":"modern"},
+  "forge-26.3": {"loader":"forge","minecraft":"26.3","loaderVersion":"66.1.5","java":25,"script":"build-forge-modern.gradle","tier":"modern"},
+  "neoforge-1.21.1": {"loader":"neoforge","minecraft":"1.21.1","loaderVersion":"21.1.219","java":21,"script":"build-neoforge.gradle","tier":"modern"},
+  "neoforge-26.3": {"loader":"neoforge","minecraft":"26.3","loaderVersion":"26.3.0.101","java":25,"script":"build-neoforge.gradle","tier":"modern"}
+}

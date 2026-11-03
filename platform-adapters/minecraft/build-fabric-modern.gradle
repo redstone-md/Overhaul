@@ -1,0 +1,11 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.18.2'
+}
+apply from: 'gradle/common.gradle'
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    implementation "net.fabricmc:fabric-loader:${target.loaderVersion}"
+}
+
+loom { runs { configureEach { getRunDirectory().set(file("run/${targetName}")) } } }

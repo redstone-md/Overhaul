@@ -1,0 +1,21 @@
+plugins { id 'java' }
+apply from: 'gradle/common.gradle'
+
+// This target never links Minecraft methods and needs no redistributed game jar.
+// Its post-deobfuscation CoreMod uses the verified stable_39-1.12 SRG method names.
+dependencies {
+    compileOnly('net.minecraftforge:forge:1.12.2-14.23.5.2860:universal') { transitive = false }
+    compileOnly('net.minecraft:launchwrapper:1.12') { transitive = false }
+    compileOnly 'org.ow2.asm:asm:5.2'
+    compileOnly 'org.ow2.asm:asm-tree:5.2'
+    testImplementation 'org.ow2.asm:asm:5.2'
+    testImplementation 'org.ow2.asm:asm-tree:5.2'
+    testImplementation('net.minecraft:launchwrapper:1.12') { transitive = false }
+}
+sourceSets.test.java.srcDirs = ['src/legacyTest/java']
+tasks.named('jar') {
+    manifest.attributes(
+        'FMLCorePlugin': 'dev.overhaul.minecraft.legacy.OverhaulCorePlugin',
+        'FMLCorePluginContainsFMLMod': 'true',
+        'ForceLoadAsMod': 'true')
+}

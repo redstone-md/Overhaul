@@ -1,0 +1,19 @@
+plugins { id 'net.minecraftforge.gradle' version '7.0.17' }
+apply from: 'gradle/common.gradle'
+
+// ForgeGradle7 syntax is pinned from Forge26.3-66.1.5's official MDK.
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+}
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${target.minecraft}-${target.loaderVersion}")
+}
+minecraft {
+    runs {
+        configureEach { workingDir = layout.projectDirectory.dir("run/${targetName}") }
+        register('client')
+        register('server') { args '--nogui' }
+    }
+}

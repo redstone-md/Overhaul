@@ -1,0 +1,10 @@
+[
+  {
+    "modid": "overhaul",
+    "name": "overhaul",
+    "description": "Experimental legacy lifecycle adapter; Vulkan replacement is under development.",
+    "version": "${version}",
+    "mcversion": "${minecraft}",
+    "dependencies": []
+  }
+]

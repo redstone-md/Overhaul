@@ -1,0 +1,14 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+[[mods]]
+modId="overhaul"
+version="${version}"
+displayName="overhaul"
+description='''Experimental engine adapter; renderer replacement is under development.'''
+[[dependencies.overhaul]]
+modId="minecraft"
+mandatory=true
+versionRange="[${minecraft}]"
+ordering="NONE"
+side="BOTH"
