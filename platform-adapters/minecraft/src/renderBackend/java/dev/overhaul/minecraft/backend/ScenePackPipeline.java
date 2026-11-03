@@ -50,22 +50,25 @@ final class ScenePackPipeline implements AutoCloseable {
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     void update(){generation.fill(program,values);if(uniforms!=null){upload.clear();values.copyTo(upload);upload.flip();uniforms.write(upload);}}
-    boolean needsDepthRefresh(){return code.bindings.samplers().keySet().stream().anyMatch(name->{int index=dev.overhaul.shader.pack.PackRenderTargets.depthIndex(name);return index==0||index==2;});}
+    boolean needsDepthRefresh(){return program.stage()!=CompiledShaderPack.Stage.SHADOW&&code.bindings.samplers().keySet().stream().anyMatch(name->{int index=dev.overhaul.shader.pack.PackRenderTargets.depthIndex(name);return index==0||index==2;});}
     NativeGraphicsPipeline variant(PassAttachments attachments){
         Formats key=new Formats(attachments.colorFormats(),attachments.depthFormat());NativeGraphicsPipeline result=variants.get(key);if(result!=null)return result;
         var stages=List.of(new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",code.vertex.directBuffer()),new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",code.fragment.directBuffer()));
         int count=Math.max(key.colors().size(),original.info().colorTargetStates().size());
         var baseline=OverhaulPipelineState.describe(original.info(),stages,descriptorLayout,java.util.Collections.nCopies(count,VK_FORMAT_UNDEFINED),key.depth());
+        boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOW;
         List<NativeGraphicsPipeline.Color> colors=new ArrayList<>();
         for(int location=0;location<program.code().framebuffer().colorTargets().size();location++){
             int target=program.code().framebuffer().colorTargets().get(location);
             var inherited=baseline.colors().get(location<original.info().colorTargetStates().size()?location:0);
-            boolean explicit=program.state().blends().containsKey("*")||program.state().blends().containsKey("colortex"+target);
-            var selected=explicit?PackGraphRuntime.colorState(program.state(),target):inherited;
-            colors.add(new NativeGraphicsPipeline.Color(selected.blend(),selected.sourceRgb(),selected.destinationRgb(),selected.operationRgb(),selected.sourceAlpha(),selected.destinationAlpha(),selected.operationAlpha(),target<0?0:inherited.writeMask()));
+            boolean explicit=program.state().blends().containsKey("*")||program.state().blends().containsKey((shadow?"shadowcolor":"colortex")+target);
+            var selected=explicit||shadow?(shadow?PackGraphRuntime.shadowColorState(program.state(),target):PackGraphRuntime.colorState(program.state(),target)):inherited;
+            int mask=shadow?VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT:inherited.writeMask();
+            colors.add(new NativeGraphicsPipeline.Color(selected.blend(),selected.sourceRgb(),selected.destinationRgb(),selected.operationRgb(),selected.sourceAlpha(),selected.destinationAlpha(),selected.operationAlpha(),target<0?0:mask));
         }
+        var depth=shadow?new NativeGraphicsPipeline.Depth(true,true,VK_COMPARE_OP_LESS_OR_EQUAL,0,0):baseline.depth();
         result=new NativeGraphicsPipeline(original.owner().context(),attachments.renderPass,new NativeGraphicsPipeline.Description(stages,code.inputs.bindings(),code.inputs.attributes(),
-                new long[]{descriptorLayout,original.descriptorLayout()},code.normals?4:0,baseline.topology(),baseline.polygonMode(),baseline.cullMode(),baseline.frontFace(),baseline.depth(),colors,true,0,0));
+                new long[]{descriptorLayout,original.descriptorLayout()},code.normals?4:0,baseline.topology(),baseline.polygonMode(),baseline.cullMode(),baseline.frontFace(),depth,colors,true,0,0));
         variants.put(key,result);return result;
     }
     void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors gameDescriptors,ScenePackDescriptors packDescriptors){

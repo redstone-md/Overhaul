@@ -17,13 +17,14 @@ abstract class SceneVertexInputs {
     record Storage(int slot,int strideWords,int positionWords){}
     final OverhaulPipeline original;
     final PipelineCompileMetadata metadata;
+    final boolean shadow;
     private final Map<Integer,NativeGraphicsPipeline.Binding> bindings=new LinkedHashMap<>();
     private final List<NativeGraphicsPipeline.Attribute> attributes=new ArrayList<>();
     private List<NativeGraphicsPipeline.Binding> compiledBindings;
     private List<NativeGraphicsPipeline.Attribute> compiledAttributes;
     private Storage storage;
-    SceneVertexInputs(OverhaulPipeline original){this.original=original;metadata=original.compileMetadata();if(metadata==null)throw new UnsupportedShaderException("Scene pipeline lacks copied source/input metadata");metadata.requireScene();}
-    static SceneVertexInputs create(OverhaulPipeline original){return original.compileMetadata().family()==PipelineCompileMetadata.Family.TERRAIN?new TerrainSceneInputs(original):new EntitySceneInputs(original);}
+    SceneVertexInputs(OverhaulPipeline original,boolean shadow){this.original=original;this.shadow=shadow;metadata=original.compileMetadata();if(metadata==null)throw new UnsupportedShaderException("Scene pipeline lacks copied source/input metadata");if(shadow)metadata.requireSource();else metadata.requireScene();}
+    static SceneVertexInputs create(OverhaulPipeline original,boolean shadow){return original.compileMetadata().family()==PipelineCompileMetadata.Family.TERRAIN?new TerrainSceneInputs(original,shadow):new EntitySceneInputs(original,shadow);}
     Sources sources(CompiledShaderPack.Sources sources){return new Sources(sources.vertex(),sources.fragment());}
     String fragment(String source){return source;}
     abstract Decoder decode(ProgramBindings bindings,int storageBinding,boolean activeNormal);

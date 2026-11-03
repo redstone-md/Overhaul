@@ -48,8 +48,9 @@ record PipelineCompileMetadata(String name,String vertex,String fragment,Family 
         return new PipelineCompileMetadata(pipeline.getLocation().toString(),vertex.toString(),fragment.toString(),family,model,definitions.values(),definitions.flags(),inputs,domain,error);
     }
     boolean defined(String name){return defines.containsKey(name)||flags.contains(name);}
+    void requireSource(){if(domainError!=null)throw new UnsupportedShaderException(domainError);}
     void requireScene(){
-        if(domainError!=null)throw new UnsupportedShaderException(domainError);
+        requireSource();
         if(family==Family.ENTITY&&defined("GLINT"))throw new UnsupportedShaderException("Combined entity foil requires an explicit shader-pack armor-glint material route");
     }
     Input input(int slot){for(Input input:inputs)if(input.slot()==slot)return input;throw new UnsupportedShaderException("Missing scene vertex binding: "+slot);}

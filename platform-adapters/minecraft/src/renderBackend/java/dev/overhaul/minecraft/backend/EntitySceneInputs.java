@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 /** Plain and owned-instance model streams expose the same CPU-posed, quantized material inputs. */
 final class EntitySceneInputs extends SceneVertexInputs {
     private final EntityMaterialInputs material=new EntityMaterialInputs();
-    EntitySceneInputs(OverhaulPipeline original){super(original);}
+    EntitySceneInputs(OverhaulPipeline original,boolean shadow){super(original,shadow);}
     @Override Sources sources(CompiledShaderPack.Sources source){
         var result=material.prepare(super.sources(source),true,metadata.family()==PipelineCompileMetadata.Family.ENTITY&&metadata.defined("DISSOLVE"));
         if(material.overlay()&&overlayEnabled())result=new Sources("uniform sampler2D "+EntityMaterialInputs.OVERLAY_SAMPLER+";\n"+result.vertex(),result.fragment());
@@ -57,7 +57,7 @@ final class EntitySceneInputs extends SceneVertexInputs {
         String aliases="#define overhaulModelView overhaulGameModelView\n#define overhaulModelViewInverse inverse(overhaulGameModelView)\n"
                 +"#define overhaulProjection overhaulSceneProjection()\n#define overhaulProjectionInverse inverse(overhaulSceneProjection())\n#define overhaulModelViewProjection (overhaulSceneProjection()*overhaulGameModelView)\n"
                 +"#define overhaulNormalMatrix transpose(inverse(mat3(overhaulGameModelView)))\n";
-        if(metadata.family()==PipelineCompileMetadata.Family.ENTITY&&(metadata.defined("APPLY_TEXTURE_MATRIX")||metadata.defined("GLINT")))aliases+="#define overhaulTextureMatrix0 overhaulGameTextureMatrix\n";
+        if(metadata.family()==PipelineCompileMetadata.Family.ENTITY&&(metadata.defined("APPLY_TEXTURE_MATRIX")||!shadow&&metadata.defined("GLINT")))aliases+="#define overhaulTextureMatrix0 overhaulGameTextureMatrix\n";
         return blocks+aliases;
     }
     private boolean overlayEnabled(){return metadata.family()==PipelineCompileMetadata.Family.ENTITY&&!metadata.defined("NO_OVERLAY");}

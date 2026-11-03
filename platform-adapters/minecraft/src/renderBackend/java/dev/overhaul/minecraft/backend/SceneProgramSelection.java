@@ -17,7 +17,7 @@ final class SceneProgramSelection {
             Map.entry("gbuffers_water","gbuffers_terrain"),Map.entry("gbuffers_entities","gbuffers_textured_lit"),Map.entry("gbuffers_entities_translucent","gbuffers_entities"),
             Map.entry("gbuffers_spidereyes","gbuffers_textured"),Map.entry("gbuffers_block","gbuffers_terrain"),Map.entry("gbuffers_block_translucent","gbuffers_block"));
     private final Map<String,CompiledShaderPack.Program> programs=new LinkedHashMap<>();
-    SceneProgramSelection(CompiledShaderPack pack){for(var program:pack.programs())if(program.scene())programs.put(baseName(program),program);}
+    SceneProgramSelection(CompiledShaderPack pack){for(var program:pack.programs())if(program.stage()==CompiledShaderPack.Stage.GBUFFER)programs.put(baseName(program),program);}
     boolean hasScene(){return !programs.isEmpty();}
     CompiledShaderPack.Program select(OverhaulPipeline pipeline){
         var metadata=pipeline.compileMetadata();if(metadata==null||metadata.flags().stream().anyMatch(name->name.startsWith("OIT_"))||metadata.defines().keySet().stream().anyMatch(name->name.startsWith("OIT_")))return null;
@@ -30,7 +30,7 @@ final class SceneProgramSelection {
         while(name!=null){var program=programs.get(name);if(program!=null){metadata.requireScene();return program;}name=FALLBACKS.get(name);}return null;
     }
     static String baseName(CompiledShaderPack.Program program){return program.name().substring(program.name().lastIndexOf('/')+1);}
-    private static boolean transparent(OverhaulPipeline pipeline){
+    static boolean transparent(OverhaulPipeline pipeline){
         if(pipeline.info().colorTargetStates().isEmpty()||pipeline.info().colorTargetStates().getFirst()==null)return false;
         var blend=pipeline.info().colorTargetStates().getFirst().blendFunction().orElse(null);if(blend==null)return false;
         return blend.color().op()!=BlendOp.ADD||blend.alpha().op()!=BlendOp.ADD||blend.color().sourceFactor()!=BlendFactor.ONE||blend.color().destFactor()!=BlendFactor.ZERO||blend.alpha().sourceFactor()!=BlendFactor.ONE||blend.alpha().destFactor()!=BlendFactor.ZERO;

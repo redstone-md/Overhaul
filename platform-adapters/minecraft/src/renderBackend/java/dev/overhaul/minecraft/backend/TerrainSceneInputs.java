@@ -6,7 +6,7 @@ import java.util.Map;
 
 /** The original BLOCK28 quad stream retains integer chunk subtraction and first-instance addressing. */
 final class TerrainSceneInputs extends SceneVertexInputs {
-    TerrainSceneInputs(OverhaulPipeline original){super(original);}
+    TerrainSceneInputs(OverhaulPipeline original,boolean shadow){super(original,shadow);}
     @Override Decoder decode(ProgramBindings bindings,int storageBinding,boolean activeNormal){
         boolean reconstruct=activeNormal&&!hasField("Normal");
         if(reconstruct&&!original.owner().context().shaderDrawParameters())throw new UnsupportedShaderException("Quad normal reconstruction requires shader draw parameters");
