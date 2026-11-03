@@ -30,7 +30,8 @@ public final class PackGraphRuntime implements AutoCloseable {
     private final Map<CompiledShaderPack.Program,PackFullscreenPass> passes=new LinkedHashMap<>();
     private final int width,height;
     private PackGraphImages images;
-    private GpuSampler sampler,depthSampler;
+    private GpuSampler sampler,depthSampler,mipSampler;
+    private final PackMipmaps mipmaps;
     private PackFullscreenPass depthPass;
     private boolean initialized,closed;
     private final boolean scene;
@@ -40,6 +41,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,boolean bindTerrainScene){
         this.context=context;this.pack=pack;this.width=width;this.height=height;context.requireOwner();
+        mipmaps=new PackMipmaps(context);
         scene=pack.programs().stream().anyMatch(CompiledShaderPack.Program::scene);
         for(var program:pack.programs())if(program.scene()&&(!bindTerrainScene||!program.name().endsWith("gbuffers_terrain"))||!program.scene()&&program.stage()!=CompiledShaderPack.Stage.DEFERRED
                 &&program.stage()!=CompiledShaderPack.Stage.COMPOSITE&&program.stage()!=CompiledShaderPack.Stage.FINAL)
@@ -49,6 +51,9 @@ public final class PackGraphRuntime implements AutoCloseable {
             sampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
                     SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,0,1,SamplerSettings.Compare.NONE));
             depthSampler=allocator.createSampler(SamplerSettings.nearest());
+            if(pack.targets().targets().values().stream().anyMatch(PackRenderTargets.Target::mipmapped))
+                mipSampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.LINEAR,
+                        SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,31,1,SamplerSettings.Compare.NONE));
             for(var program:pack.programs()){
                 if(program.scene())continue;
                 var outputs=outputs(swaps.route(program));int passWidth=0,passHeight=0;List<Integer> formats=new ArrayList<>();
@@ -84,17 +89,20 @@ public final class PackGraphRuntime implements AutoCloseable {
         try{
             for(var entry:passes.entrySet()){
                 var program=entry.getKey();var routing=swaps.route(program);
-                Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();
+                for(int index:new java.util.TreeSet<>(program.mipmaps()))mipmaps.generate(plan,images.levels.get(swaps.current(index)));
+                Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();Map<String,Long> sampleModes=new LinkedHashMap<>();
                 for(String samplerName:program.code().descriptors().samplers().keySet()){
                     var color=routing.samplers().get(samplerName);GpuImageView image=color==null?
-                            PackRenderTargets.depthIndex(samplerName)==0?images.depth:frame.textures().get(samplerName):images.colors.get(color);
+                            PackRenderTargets.depthIndex(samplerName)==0?images.depth:frame.textures().get(samplerName):
+                            program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color);
                     if(image==null)throw new UnsupportedShaderException("Unbound shader-pack sampler: "+samplerName+" in "+program.name());
                     String name=plan.read(image);samples.put(samplerName,name);uses.put(name,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE);
+                    sampleModes.put(samplerName,color!=null&&program.mipmaps().contains(color.color())?mipSampler.handle():sampler.handle());
                 }
                 List<String> outputs=new ArrayList<>();for(GpuImageView image:outputs(routing)){
                     String name=image==null?null:plan.write(image);outputs.add(name);if(name!=null)uses.put(name,VulkanRenderGraph.Usage.COLOR_WRITE);
                 }
-                PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampler.handle()));
+                PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampleModes,sampler.handle()));
                 swaps.complete(program);finalWritten|=routing.finalOutput();
             }
             blit(plan,finalWritten?images.output:images.colors.get(swaps.current(0)),frame.color(),false,"export-scene-color");
@@ -165,6 +173,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     @Override public void close(){
         context.requireOwner();if(closed)return;List<PackFullscreenPass> reverse=new ArrayList<>(passes.values());Collections.reverse(reverse);
         for(var pass:reverse)pass.close();passes.clear();if(depthPass!=null){depthPass.close();depthPass=null;}
-        if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}closed=true;
+        if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(mipSampler!=null){mipSampler.close();mipSampler=null;}
+        if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}closed=true;
     }
 }

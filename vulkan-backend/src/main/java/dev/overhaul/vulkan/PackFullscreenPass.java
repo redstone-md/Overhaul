@@ -85,12 +85,15 @@ final class PackFullscreenPass implements AutoCloseable {
     }
     void upload(){if(uniforms!=null){upload.clear();values.copyTo(upload);upload.flip();uniforms.write(upload);}}
     void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,long sampler){
+        record(pass,outputs,samples,Map.of(),sampler);
+    }
+    void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,Map<String,Long> samplers,long sampler){
         try(MemoryStack stack=MemoryStack.stackPush()){
             var writes=VkWriteDescriptorSet.calloc(samples.size()+(uniforms==null?0:1),stack);int slot=0;
             if(uniforms!=null)writes.get(slot++).sType$Default().dstSet(set).dstBinding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.handle()).range(uniforms.size()));
             for(var sample:samples.entrySet())writes.get(slot++).sType$Default().dstSet(set).dstBinding(program.code().descriptors().samplers().get(sample.getKey())).descriptorCount(1)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).pImageInfo(VkDescriptorImageInfo.calloc(1,stack).sampler(sampler).imageView(pass.image(sample.getValue()).view()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).pImageInfo(VkDescriptorImageInfo.calloc(1,stack).sampler(samplers.getOrDefault(sample.getKey(),sampler)).imageView(pass.image(sample.getValue()).view()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
             vkUpdateDescriptorSets(context.device(),writes,null);
             List<Long> views=new ArrayList<>();for(String output:outputs)if(output!=null)views.add(pass.image(output).view());
             Long framebuffer=framebuffers.get(views);

@@ -3,6 +3,7 @@ package dev.overhaul.shader.pack;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 
@@ -13,7 +14,8 @@ public final class PackRenderTargets {
     public record Color(float red,float green,float blue,float alpha){
         public Color{if(!Float.isFinite(red)||!Float.isFinite(green)||!Float.isFinite(blue)||!Float.isFinite(alpha))throw invalid("Nonfinite target clear color");}
     }
-    public record Target(int index,Format format,boolean clear,Color color,boolean fogColor,String width,String height){
+    public record Target(int index,Format format,boolean clear,Color color,boolean fogColor,String width,String height,boolean mipmapped){
+        public Target(int index,Format format,boolean clear,Color color,boolean fogColor,String width,String height){this(index,format,clear,color,fogColor,width,height,false);}
         public int width(int viewport){return dimension(width,viewport);}
         public int height(int viewport){return dimension(height,viewport);}
     }
@@ -23,6 +25,17 @@ public final class PackRenderTargets {
     public Map<Integer,Target> targets(){return targets;}
     public static String stripDirectives(String source){return DIRECTIVE.matcher(source).replaceAll("");}
     static boolean hasDirective(String source){return DIRECTIVE.matcher(source).find();}
+    /** Mipmap requests belong to the declaring pass, unlike persistent attachment formats/clear state. */
+    public static Set<Integer> mipmapTargets(String source){
+        Map<Integer,Boolean> states=new TreeMap<>();var matcher=DIRECTIVE.matcher(source.replaceAll("(?m)//.*$",""));
+        while(matcher.find())if(matcher.group(3).equals("MipmapEnabled")){
+            if(!matcher.group(1).equals("bool"))throw invalid("Mipmap directive requires const bool");
+            String value=matcher.group(4).trim();if(!value.equals("true")&&!value.equals("false"))throw invalid("Mipmap directive requires a literal boolean");
+            int index=colorIndex(matcher.group(2));boolean enabled=Boolean.parseBoolean(value);Boolean prior=states.putIfAbsent(index,enabled);
+            if(prior!=null&&prior!=enabled)throw invalid("Conflicting mipmap directives in one program: "+matcher.group(2));
+        }
+        var enabled=new java.util.TreeSet<Integer>();for(var entry:states.entrySet())if(entry.getValue())enabled.add(entry.getKey());return Set.copyOf(enabled);
+    }
     public static int colorIndex(String sampler){
         if(sampler.matches("colortex(?:[0-9]|1[0-5])"))return Integer.parseInt(sampler.substring(8));
         for(int index=0;index<ALIASES.length;index++)if(ALIASES[index].equals(sampler))return index;
@@ -41,12 +54,15 @@ public final class PackRenderTargets {
         private final ShaderPackProperties properties;
         private final Map<String,String> directives=new LinkedHashMap<>();
         private final Map<Integer,Boolean> used=new TreeMap<>();
+        private final Set<Integer> mipmapped=new java.util.HashSet<>();
         private boolean legacyDepth;
         public Builder(ShaderPackProperties properties){this.properties=properties;}
         public void scan(String source){
+            mipmapped.addAll(mipmapTargets(source));
             // Pack constants in block comments are metadata; line-commented constants are disabled.
             String text=source.replaceAll("(?m)//.*$","");var matcher=DIRECTIVE.matcher(text);
             while(matcher.find()){
+                if(matcher.group(3).equals("MipmapEnabled")){used.put(colorIndex(matcher.group(2)),true);continue;}
                 String key=colorIndex(matcher.group(2))+matcher.group(3),value=matcher.group(4).trim();
                 String prior=directives.putIfAbsent(key,value);
                 if(prior!=null&&!prior.equals(value))throw invalid("Conflicting pack target directive: "+matcher.group(2)+matcher.group(3));
@@ -64,12 +80,11 @@ public final class PackRenderTargets {
                 Format format;String raw=directives.getOrDefault(index+"Format",index==1&&legacyDepth?"RGBA32F":"RGBA8");
                 try{format=Format.valueOf(raw.equals("RGBA")?"RGBA8":raw);}catch(IllegalArgumentException failure){throw invalid("Unsupported colortex format: "+raw);}
                 boolean clear=bool(directives.getOrDefault(index+"Clear","true"));
-                if(bool(directives.getOrDefault(index+"MipmapEnabled","false")))throw invalid("Mipmapped pack targets require per-pass mip generation");
                 String[] size=properties.values().getOrDefault("size.buffer.colortex"+index,"1.0 1.0").split("\\s+");
                 if(size.length!=2)throw invalid("Target size requires width and height");dimension(size[0],1024);dimension(size[1],1024);
                 String rawColor=directives.get(index+"ClearColor");boolean fog=index==0&&rawColor==null;
                 Color color=rawColor==null?(index==1?new Color(1,1,1,1):new Color(0,0,0,0)):color(rawColor);
-                result.put(index,new Target(index,format,clear,color,fog,size[0],size[1]));
+                result.put(index,new Target(index,format,clear,color,fog,size[0],size[1],mipmapped.contains(index)));
             }
             return new PackRenderTargets(result);
         }

@@ -13,7 +13,10 @@ import java.util.Map;
 /** Immutable executable pack generation. Compilation never mutates the currently installed generation. */
 public final class CompiledShaderPack {
     public enum Stage { BEGIN,SHADOW,SHADOWCOMPOSITE,PREPARE,GBUFFER,DEFERRED,COMPOSITE,FINAL }
-    public record Program(String name,Stage stage,int ordinal,ShaderPackProgram code,ShaderPackProperties.ProgramState state) {
+    public record Program(String name,Stage stage,int ordinal,ShaderPackProgram code,ShaderPackProperties.ProgramState state,java.util.Set<Integer> mipmaps) {
+        public Program(String name,Stage stage,int ordinal,ShaderPackProgram code,ShaderPackProperties.ProgramState state){this(name,stage,ordinal,code,state,java.util.Set.of());}
+        public Program{mipmaps=java.util.Set.copyOf(mipmaps);for(int index:mipmaps)if(index<0||index>15)throw new IllegalArgumentException("Invalid mipmap color target");
+            if(!mipmaps.isEmpty()&&(stage==Stage.GBUFFER||stage==Stage.SHADOW))throw new UnsupportedShaderException("Mipmap requests require a composite-style program: "+name);}
         public boolean scene(){return stage==Stage.GBUFFER||stage==Stage.SHADOW;}
     }
     public record Sources(String vertex,String fragment){}
@@ -49,7 +52,7 @@ public final class CompiledShaderPack {
             ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
                     discovered.state().alphaTest().orElse(null));
             targets.use(code);
-            programs.add(new Program(discovered.name(),stage,ordinal(name),code,discovered.state()));
+            programs.add(new Program(discovered.name(),stage,ordinal(name),code,discovered.state(),PackRenderTargets.mipmapTargets(fragment)));
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");

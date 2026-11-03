@@ -118,7 +118,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
     private void bind(RenderGraph.Resource resource,GpuImageView view,int flags){
         GpuImage image=view.image();
         if(image.context()!=context)throw new IllegalArgumentException("Foreign graph image: "+resource.name());
-        if(view.mipCount()!=1||view.layerCount()!=1)throw new IllegalArgumentException("Graph attachments require one mip and layer: "+resource.name());
+        if((view.mipCount()!=1||view.layerCount()!=1)&&flags!=VK_IMAGE_USAGE_SAMPLED_BIT)throw new IllegalArgumentException("Multiple graph subresources require sampling-only usage: "+resource.name());
         if(image.format().vkFormat()!=format(resource.format())||image.width(view.baseMip())!=resource.width()
                 ||image.height(view.baseMip())!=resource.height())throw new IllegalArgumentException("Imported image does not match its graph declaration: "+resource.name());
         image.requireUsage(flags);bindings.put(resource.name(),view);
@@ -131,7 +131,8 @@ public final class VulkanRenderGraph implements AutoCloseable {
                 var a=uses.get(first);var b=uses.get(second);
                 if(!a.getValue().writes&&!b.getValue().writes)continue;
                 GpuImageView left=bindings.get(a.getKey()),right=bindings.get(b.getKey());
-                if(left.image()==right.image()&&left.baseMip()==right.baseMip()&&left.baseLayer()==right.baseLayer())
+                if(left.image()==right.image()&&left.baseMip()<right.baseMip()+right.mipCount()&&right.baseMip()<left.baseMip()+left.mipCount()
+                        &&left.baseLayer()<right.baseLayer()+right.layerCount()&&right.baseLayer()<left.baseLayer()+left.layerCount())
                     throw new IllegalArgumentException("Physical image feedback requires separate ping-pong targets in pass "+pass.name());
             }
         }
@@ -217,9 +218,13 @@ public final class VulkanRenderGraph implements AutoCloseable {
 
     private static void transition(VkCommandBuffer command,GpuImageView view,Usage next,List<GpuImage.LayoutChange> changes) {
         GpuImage image=view.image();view.handle();
-        int previous=image.layout(view.baseMip(),view.baseLayer());
-        if(previous==VK_IMAGE_LAYOUT_UNDEFINED&&!next.writes)throw new IllegalStateException("Graph reads an uninitialized physical image");
-        if(previous!=next.layout||next.writes)changes.add(image.recordTransition(command,view.baseMip(),1,view.baseLayer(),1,next.layout));
+        boolean changed=next.writes;
+        for(int layer=view.baseLayer();layer<view.baseLayer()+view.layerCount();layer++)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++){
+            int previous=image.layout(mip,layer);
+            if(previous==VK_IMAGE_LAYOUT_UNDEFINED&&!next.writes)throw new IllegalStateException("Graph reads an uninitialized physical image");
+            changed|=previous!=next.layout;
+        }
+        if(changed)changes.add(image.recordTransition(command,view.baseMip(),view.mipCount(),view.baseLayer(),view.layerCount(),next.layout));
     }
 
     private static int format(RenderGraph.Format format) {

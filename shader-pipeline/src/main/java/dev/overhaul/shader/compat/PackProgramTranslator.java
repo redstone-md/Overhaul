@@ -25,6 +25,11 @@ public final class PackProgramTranslator {
             Map.entry("vec2",8), Map.entry("vec3",12), Map.entry("vec4",16),
             Map.entry("ivec2",8), Map.entry("ivec3",12), Map.entry("ivec4",16),
             Map.entry("mat2",32), Map.entry("mat3",48), Map.entry("mat4",64));
+    private static final Map<String,String> TEXTURE_FUNCTIONS = Map.ofEntries(
+            Map.entry("texture2D","texture"),Map.entry("texture2DProj","textureProj"),
+            Map.entry("texture2DLod","textureLod"),Map.entry("texture2DProjLod","textureProjLod"),
+            Map.entry("texture2DLodARB","textureLod"),Map.entry("texture2DProjLodARB","textureProjLod"),
+            Map.entry("texture2DGradARB","textureGrad"),Map.entry("texture2DProjGradARB","textureProjGrad"));
 
     public TranslatedProgram translate(String vertex, String fragment) {
         return translate(vertex,fragment,CoordinateConvention.NATIVE_VULKAN);
@@ -137,7 +142,8 @@ public final class PackProgramTranslator {
         for (String sampler : samplers.keySet()) {
             body = body.replaceAll("\\b" + Pattern.quote(sampler) + "\\b", "overhaulSampler_" + sampler);
         }
-        body = body.replaceAll("\\btexture2D\\b", "texture").replaceAll("\\bgl_VertexID\\b", "gl_VertexIndex")
+        for(var function:TEXTURE_FUNCTIONS.entrySet())body=body.replaceAll("\\b"+function.getKey()+"\\b",function.getValue());
+        body = body.replaceAll("\\bgl_VertexID\\b", "gl_VertexIndex")
                 .replaceAll("\\bgl_InstanceID\\b", "gl_InstanceIndex");
         StringBuilder prefix = new StringBuilder("#version 450\n");
         if (!uniforms.isEmpty()) {
