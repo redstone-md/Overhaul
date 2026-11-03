@@ -12,7 +12,7 @@ import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
 import static dev.overhaul.vulkan.VulkanException.check;
 
-/** FIFO presentation with frame-owned acquire semaphores and image-owned presentation semaphores. */
+/** Surface-selected presentation with frame-owned acquire and image-owned presentation semaphores. */
 public final class SwapchainPresenter implements AutoCloseable {
     private final VulkanContext context;
     private final FrameRing frames;
@@ -32,15 +32,21 @@ public final class SwapchainPresenter implements AutoCloseable {
     private int manualCursor,manualSlot;
     private int manualIndex=-1;
     private boolean manualBlitted;
+    private SwapchainPresentMode requestedPresentMode=SwapchainPresentMode.FIFO;
+    private SwapchainPresentMode activePresentMode;
 
     public SwapchainPresenter(VulkanContext context, int width, int height) {
+        this(context,width,height,SwapchainPresentMode.FIFO);
+    }
+
+    public SwapchainPresenter(VulkanContext context,int width,int height,SwapchainPresentMode presentMode) {
         this.context = context;
         if (context.surface() == 0) throw new IllegalArgumentException("presentation requires a surface");
         frames = new FrameRing(context, acquired.length);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             createSemaphores(acquired, stack);
             createSemaphores(manualAcquire,stack);
-            resize(width, height);
+            configure(width,height,presentMode);
         } catch (RuntimeException | Error failure) {
             close();
             throw failure;
@@ -48,8 +54,17 @@ public final class SwapchainPresenter implements AutoCloseable {
     }
 
     public void resize(int requestedWidth, int requestedHeight) {
+        configure(requestedWidth,requestedHeight,requestedPresentMode);
+    }
+
+    /** Recreates WSI state when the viewport or requested presentation policy changes. */
+    public void configure(int requestedWidth,int requestedHeight,SwapchainPresentMode presentMode) {
         requireOpen();
+        java.util.Objects.requireNonNull(presentMode,"present mode");
+        if(!SwapchainPresentMode.supported(context).contains(presentMode))throw new IllegalArgumentException("Unsupported surface presentation mode: "+presentMode);
+        requestedPresentMode=presentMode;
         if (requestedWidth < 1 || requestedHeight < 1) { suspended = true; needsResize = true; return; }
+        if(!suspended&&!needsResize&&swapchain!=0&&width==requestedWidth&&height==requestedHeight&&activePresentMode==presentMode)return;
         abandonManualAcquire();
         context.waitIdle();
         frames.drain();
@@ -85,14 +100,19 @@ public final class SwapchainPresenter implements AutoCloseable {
             VkSwapchainCreateInfoKHR info = VkSwapchainCreateInfoKHR.calloc(stack).sType$Default()
                 .surface(context.surface()).minImageCount(imageCount).imageFormat(format).imageColorSpace(colorSpace)
                 .imageArrayLayers(1).imageUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT).imageSharingMode(VK_SHARING_MODE_EXCLUSIVE)
-                .preTransform(capabilities.currentTransform()).compositeAlpha(alpha).presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                .preTransform(capabilities.currentTransform()).compositeAlpha(alpha).presentMode(presentMode.nativeValue())
                 .clipped(true).oldSwapchain(swapchain);
             info.imageExtent().set(nextWidth, nextHeight);
             LongBuffer pointer = stack.mallocLong(1);
-            check(vkCreateSwapchainKHR(context.device(), info, null, pointer), "vkCreateSwapchainKHR");
             long previous = swapchain;
+            // Passing oldSwapchain retires it even when replacement creation fails.
+            // Never pass that retired handle to a later configuration attempt.
+            swapchain=VK_NULL_HANDLE;
+            int created;
+            try{created=vkCreateSwapchainKHR(context.device(),info,null,pointer);}
+            finally{if(previous!=VK_NULL_HANDLE)vkDestroySwapchainKHR(context.device(),previous,null);}
+            check(created,"vkCreateSwapchainKHR");
             swapchain = pointer.get(0);
-            if (previous != 0) vkDestroySwapchainKHR(context.device(), previous, null);
             destroySemaphores(finished);
             check(vkGetSwapchainImagesKHR(context.device(), swapchain, count, null), "swapchain image count");
             LongBuffer handles = stack.mallocLong(count.get(0));
@@ -110,6 +130,7 @@ public final class SwapchainPresenter implements AutoCloseable {
             }
             width = nextWidth;
             height = nextHeight;
+            activePresentMode=presentMode;
             suspended = false;
             needsResize = false;
         } catch (RuntimeException | Error failure) {
@@ -321,6 +342,9 @@ public final class SwapchainPresenter implements AutoCloseable {
 
     public int width() { requireOpen(); return width; }
     public int height() { requireOpen(); return height; }
+    public SwapchainPresentMode presentMode(){
+        requireOpen();if(swapchain==VK_NULL_HANDLE)throw new IllegalStateException("Surface has no active swapchain");return activePresentMode;
+    }
     public boolean needsResize() { requireOpen(); return needsResize; }
     /** Nonzero-timeout native frame-fence wait invocations, not a duration or a count of actual stalls. */
     public long blockingWaitCalls(){context.requireOwner();return frames.blockingWaitCalls();}
