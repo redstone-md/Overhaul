@@ -31,7 +31,7 @@ final class AsyncSmoke {
                  new float[] {-0.5f, 0, 0, 0.5f, 0, 0}).build();
              GpuBatch gpu = renderer.uploadBatch(packet)) {
             AsyncRenderer.RenderedFrame first = null;
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 45; i++) {
                 org.lwjgl.glfw.GLFW.glfwPollEvents();
                 AsyncRenderer.RenderedFrame frame = renderer.submit(gpu, identity);
                 if (first == null) first = frame;
@@ -56,10 +56,13 @@ final class AsyncSmoke {
             org.lwjgl.glfw.GLFW.glfwSetWindowSize(window, 192, 160);
             org.lwjgl.glfw.GLFW.glfwPollEvents();
             presenter.resize(192, 160);
-            if (!renderer.submit(gpu, identity).presentTo(presenter))
-                throw new IllegalStateException("scaled geometry presentation failed after resize");
-            System.out.println("GPU instanced geometry -> swapchain blit: 5 frames; resize/scaling "
-                + presenter.width() + "x" + presenter.height() + "; no CPU image readback");
+            for (int i = 0; i < 17; i++) {
+                org.lwjgl.glfw.GLFW.glfwPollEvents();
+                if (!renderer.submit(gpu, identity).presentTo(presenter))
+                    throw new IllegalStateException("scaled geometry presentation failed after resize");
+            }
+            System.out.println("Semaphore-driven GPU presentation: 45 frames + 17 after resize/scaling "
+                + presenter.width() + "x" + presenter.height() + "; no CPU image readback or per-present queue idle");
         }
     }
 
@@ -67,7 +70,9 @@ final class AsyncSmoke {
         AtomicInteger retired = new AtomicInteger();
         try (GpuAllocator allocator = new GpuAllocator(context)) {
             List<GpuBuffer> destinations = new ArrayList<>();
+            FrameRing.Submission afterClose;
             try (FrameRing ring = new FrameRing(context, 3)) {
+                if (ring.submit(FrameRing.Frame::cancel) != null) throw new IllegalStateException("cancelled frame was submitted");
                 for (int i = 0; i < 11; i++) {
                     GpuBuffer staging = allocator.hostBuffer(256, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
                     ByteBuffer pattern = ByteBuffer.allocate(256);
@@ -104,9 +109,11 @@ final class AsyncSmoke {
                     throw new IllegalStateException("recording failure swallowed");
                 } catch (IllegalArgumentException expected) { }
                 if (rolledBack.get() != 1) throw new IllegalStateException("failed recording cleanup differs");
-                ring.submit(frame -> frame.retireAfterFence(retired::incrementAndGet));
+                afterClose = ring.submit(frame -> frame.retireAfterFence(retired::incrementAndGet));
             }
             if (retired.get() != 12) throw new IllegalStateException("ring close did not retire pending work");
+            afterClose.await();
+            if (!afterClose.isComplete()) throw new IllegalStateException("completed receipt lost after ring close");
             for (GpuBuffer destination : destinations) destination.close();
         }
         System.out.println("Frame ring: 11 transfers across 3 slots verified; fence retirement, rollback and close verified");

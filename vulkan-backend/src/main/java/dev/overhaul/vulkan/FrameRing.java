@@ -47,10 +47,18 @@ public final class FrameRing implements AutoCloseable {
                 .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)), "frame command begin");
             recorder.accept(frame);
             frame.active = false;
+            if (frame.cancelled) {
+                if (!frame.retirements.isEmpty()) throw new IllegalStateException("cancelled frame cannot retire resources");
+                check(vkResetCommandPool(context.device(), slot.pool, 0), "cancelled frame reset");
+                return null;
+            }
             slot.retirements = frame.retirements;
             check(vkEndCommandBuffer(slot.command), "frame command end");
             check(vkResetFences(context.device(), slot.fence), "frame fence reset");
             VkSubmitInfo info = VkSubmitInfo.calloc(stack).sType$Default().pCommandBuffers(stack.pointers(slot.command));
+            if (frame.waitSemaphore != 0) info.waitSemaphoreCount(1).pWaitSemaphores(stack.longs(frame.waitSemaphore))
+                .pWaitDstStageMask(stack.ints(frame.waitStage));
+            if (frame.signalSemaphore != 0) info.pSignalSemaphores(stack.longs(frame.signalSemaphore));
             check(vkQueueSubmit(context.queue(), info, slot.fence), "frame queue submit");
             slot.pending = true;
             slot.sequence = ++submitted;
@@ -136,16 +144,39 @@ public final class FrameRing implements AutoCloseable {
         private final VkCommandBuffer command;
         private final List<AutoCloseable> retirements = new ArrayList<>();
         private boolean active = true;
+        private boolean cancelled;
+        private long waitSemaphore;
+        private int waitStage;
+        private long signalSemaphore;
 
         private Frame(int slot, VkCommandBuffer command) { this.slot = slot; this.command = command; }
         public int slot() { requireActive(); return slot; }
         public VkCommandBuffer command() { requireActive(); return command; }
+        /** The caller owns semaphore lifetime until the submission fence completes. */
+        public void waitFor(long semaphore, int destinationStage) {
+            requireActive();
+            if (semaphore == 0 || destinationStage == 0 || waitSemaphore != 0)
+                throw new IllegalArgumentException("one non-null semaphore wait with a nonzero stage is required");
+            waitSemaphore = semaphore; waitStage = destinationStage;
+        }
+        public void signal(long semaphore) {
+            requireActive();
+            if (semaphore == 0 || signalSemaphore != 0) throw new IllegalArgumentException("one non-null semaphore signal is required");
+            signalSemaphore = semaphore;
+        }
+        /** For an unsuccessful acquire: no queue work, semaphore operation or retirement may be pending. */
+        public void cancel() {
+            requireActive();
+            if (waitSemaphore != 0 || signalSemaphore != 0 || !retirements.isEmpty())
+                throw new IllegalStateException("cancel must precede semaphore and resource registration");
+            cancelled = true;
+        }
         public void retireAfterFence(AutoCloseable resource) {
             requireActive(); retirements.add(Objects.requireNonNull(resource, "resource"));
         }
         private void requireActive() {
             requireOpen();
-            if (!active) throw new IllegalStateException("frame recording scope expired");
+            if (!active || cancelled) throw new IllegalStateException("frame recording scope expired or cancelled");
         }
     }
 
@@ -156,17 +187,23 @@ public final class FrameRing implements AutoCloseable {
         public long sequence() { return sequence; }
         public int slot() { return slot; }
         public void await() {
-            requireOpen();
+            context.requireOwner();
+            if (closed) {
+                if (sequence <= completed) return;
+                throw new IllegalStateException("closed frame ring has incomplete work");
+            }
             if (sequence > completed) awaitSlot(slots[slot]);
             else if (slots[slot].sequence == sequence) awaitSlot(slots[slot]);
         }
         public boolean isComplete() {
-            requireOpen();
+            context.requireOwner();
+            if (closed) return sequence <= completed;
             poll();
             return sequence <= completed;
         }
         public void retireAfterFence(AutoCloseable resource) {
-            requireOpen();
+            context.requireOwner();
+            if (closed && sequence > completed) throw new IllegalStateException("closed frame ring has incomplete work");
             Objects.requireNonNull(resource, "resource");
             if (sequence <= completed) {
                 List<AutoCloseable> immediate = new ArrayList<>(); immediate.add(resource); retire(immediate);

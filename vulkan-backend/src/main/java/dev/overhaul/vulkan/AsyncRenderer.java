@@ -106,6 +106,7 @@ public final class AsyncRenderer implements AutoCloseable {
         if (!batches.contains(batch) || batch.retired) throw new IllegalArgumentException("batch is retired or belongs to another renderer");
         FrameRing.Submission submission = ring.submit(frame -> {
             Target target = targets[frame.slot()];
+            target.awaitPresentation();
             target.camera.write(transform);
             IndexedPass.begin(frame.command(), target.color, target.camera, pipeline);
             recordDraws(frame.command(), batch);
@@ -181,11 +182,10 @@ public final class AsyncRenderer implements AutoCloseable {
         public long sequence() { return submission.sequence(); }
         public void await() { requireOpen(); submission.await(); }
         public boolean isComplete() { requireOpen(); return submission.isComplete(); }
-        /** GPU image presentation; this initial surface path waits for rendering and presentation. */
+        /** Queues a GPU blit and presentation without waiting for the render fence on this call. */
         public boolean presentTo(SwapchainPresenter presenter) {
             Target target = currentTarget();
-            submission.await();
-            return presenter.presentImage(context, target.color);
+            return presenter.presentImage(context, target.color, completion -> target.presentation = completion);
         }
 
         private Target currentTarget() {
@@ -208,12 +208,17 @@ public final class AsyncRenderer implements AutoCloseable {
         private final CameraUniform camera;
         private GpuBuffer readback;
         private long sequence;
+        private FrameRing.Submission presentation;
         private Target(int width, int height) {
             color = new ColorTarget(context, width, height);
             try { camera = new CameraUniform(context, allocator); }
             catch (RuntimeException | Error failure) { color.close(); throw failure; }
         }
+        private void awaitPresentation() {
+            if (presentation != null) { presentation.await(); presentation = null; }
+        }
         @Override public void close() {
+            awaitPresentation();
             if (readback != null) readback.close();
             camera.close(); color.close();
         }
