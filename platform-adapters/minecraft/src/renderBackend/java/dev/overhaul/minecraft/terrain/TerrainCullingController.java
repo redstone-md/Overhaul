@@ -4,6 +4,7 @@ import dev.overhaul.core.culling.ConservativeProjection;
 import dev.overhaul.core.culling.SoftwareDepthBuffer;
 import dev.overhaul.core.culling.TerrainGeometry;
 import dev.overhaul.core.culling.PerspectiveEye;
+import dev.overhaul.minecraft.shader.ShaderResourceGate;
 import dev.overhaul.core.culling.ProjectionPrecision;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Minecraft;
@@ -39,7 +40,7 @@ public final class TerrainCullingController {
         }
     }
     private final Thread owner=Thread.currentThread();
-    private final TerrainShaderSafety shaders=new TerrainShaderSafety();
+    private final ShaderResourceGate shaders=new ShaderResourceGate("/overhaul-terrain-shaders.properties");
     private final SoftwareDepthBuffer depth=new SoftwareDepthBuffer(160,90);
     private final IdentityHashMap<SectionRenderDispatcher.RenderSection,Entry> frame=new IdentityHashMap<>();
     private final Set<Long> previouslyHidden=new HashSet<>();
