@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** The ordinary world frame owns capture, execution, reload invalidation and resource closure. */
 @Mixin(GameRenderer.class)
@@ -43,6 +44,8 @@ public abstract class ShaderPackFrameMixin {
             try{if(overhaul$shaderPack!=null)overhaul$shaderPack.abort();}catch(RuntimeException cleanup){failure.addSuppressed(cleanup);}throw failure;
         }
     }
+    @Inject(method="useImprovedTransparency",at=@At("RETURN"),cancellable=true)
+    private void overhaul$packOwnsWorldTransparency(CallbackInfoReturnable<Boolean> callback){if(overhaul$shaderPack!=null&&overhaul$shaderPack.worldActive())callback.setReturnValue(false);}
     @Inject(method={"onResourceManagerReload","setLevel","resetData"},at=@At("HEAD"))
     private void overhaul$reloadPack(CallbackInfo callback){if(overhaul$shaderPack!=null)overhaul$shaderPack.invalidate();}
     @Inject(method="close",at=@At("HEAD"))

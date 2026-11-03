@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import static org.lwjgl.vulkan.VK10.*;
 
 /** Actual scene-image deferred/composite execution. Scene-program replacement requires a separately bound geometry path. */
@@ -33,19 +34,25 @@ public final class PackGraphRuntime implements AutoCloseable {
     private GpuSampler sampler,depthSampler,mipSampler;
     private final PackMipmaps mipmaps;
     private PackFullscreenPass depthPass;
-    private boolean initialized,closed;
+    private boolean initialized,closed,frameBegun,opaqueComplete;
     private final boolean scene;
 
     public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler){
         this(context,allocator,pack,width,height,compiler,false);
     }
     public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,boolean bindTerrainScene){
+        this(context,allocator,pack,width,height,compiler,bindTerrainScene?Set.of("gbuffers_terrain"):Set.of());
+    }
+    /** The adapter supplies only program names for which it binds actual geometry draws. */
+    public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Set<String> boundScenePrograms){
         this.context=context;this.pack=pack;this.width=width;this.height=height;context.requireOwner();
+        boundScenePrograms=Set.copyOf(boundScenePrograms);
         mipmaps=new PackMipmaps(context);
         scene=pack.programs().stream().anyMatch(CompiledShaderPack.Program::scene);
-        for(var program:pack.programs())if(program.scene()&&(!bindTerrainScene||!program.name().endsWith("gbuffers_terrain"))||!program.scene()&&program.stage()!=CompiledShaderPack.Stage.DEFERRED
-                &&program.stage()!=CompiledShaderPack.Stage.COMPOSITE&&program.stage()!=CompiledShaderPack.Stage.FINAL)
+        for(var program:pack.programs())if(program.scene()&&(program.stage()==CompiledShaderPack.Stage.SHADOW||!boundScenePrograms.contains(program.name().substring(program.name().lastIndexOf('/')+1))))
             throw new UnsupportedShaderException("Game scene geometry is not bound to shader-pack stage: "+program.name());
+        for(var program:pack.programs())if(program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE)
+            throw new UnsupportedShaderException("Shadow images are not bound to shader-pack stage: "+program.name());
         try{
             images=new PackGraphImages(allocator,pack.targets(),width,height);
             sampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
@@ -65,49 +72,84 @@ public final class PackGraphRuntime implements AutoCloseable {
                 if(passWidth==0)throw new UnsupportedShaderException("Fullscreen pass has no active color attachment: "+program.name());
                 passes.put(program,new PackFullscreenPass(context,allocator,program,formats,passWidth,passHeight));
             }
-            boolean needsDepth=pack.programs().stream().anyMatch(program->program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackRenderTargets.depthIndex(name)==0));
+            boolean needsDepth=pack.programs().stream().anyMatch(program->program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackRenderTargets.depthIndex(name)>=0));
             if(needsDepth)depthPass=new PackFullscreenPass(context,allocator,depthProgram(compiler),List.of(VK_FORMAT_R32_SFLOAT),width,height);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
-    public void render(ImmediateCommands lane,Frame frame,Uniforms uniforms){
-        requireOpen();validateFrame(frame);int[] prior=swaps.snapshot();
-        for(var entry:passes.entrySet()){uniforms.fill(entry.getKey(),entry.getValue().values);entry.getValue().upload();}
-        PackFrameGraph plan=new PackFrameGraph();
-        if(!scene)for(var entry:images.colors.entrySet()){
-            var target=pack.targets().targets().get(entry.getKey().color());if(!initialized||target.clear())clear(plan,entry.getValue(),target.fogColor()?frame.fog():target.color());
-        }
-        clear(plan,images.output,new PackRenderTargets.Color(0,0,0,0));
-        if(!scene)blit(plan,frame.color(),images.colors.get(swaps.current(0)),false,"import-scene-color");
-        if(depthPass!=null){
-            if(frame.depth()==null)throw new UnsupportedShaderException("depthtex0 requires the real scene depth view");
-            clear(plan,images.depth,new PackRenderTargets.Color(1,1,1,1));
-            String input=plan.read(frame.depth()),output=plan.write(images.depth);
-            plan.pass("import-scene-depth",Map.of(input,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE,output,VulkanRenderGraph.Usage.COLOR_WRITE),
-                    pass->depthPass.record(pass,List.of(output),Map.of("inputDepth",input),depthSampler.handle()));
-        }
-        boolean finalWritten=false;
+    /** Runs only before world capture; temporal buffers retain their contents unless their clear directive requests it. */
+    public void beginFrame(ImmediateCommands lane,Frame frame,Uniforms uniforms){
+        requireOpen();validateFrame(frame);if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
+        int[] prior=swaps.snapshot();PackFrameGraph plan=new PackFrameGraph();
+        clearTargets(plan,frame.fog());
+        if(!initialized){clear(plan,images.depth,new PackRenderTargets.Color(1,1,1,1));clear(plan,images.opaqueDepth,new PackRenderTargets.Color(1,1,1,1));}
         try{
-            for(var entry:passes.entrySet()){
-                var program=entry.getKey();var routing=swaps.route(program);
-                for(int index:new java.util.TreeSet<>(program.mipmaps()))mipmaps.generate(plan,images.levels.get(swaps.current(index)));
-                Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();Map<String,Long> sampleModes=new LinkedHashMap<>();
-                for(String samplerName:program.code().descriptors().samplers().keySet()){
-                    var color=routing.samplers().get(samplerName);GpuImageView image=color==null?
-                            PackRenderTargets.depthIndex(samplerName)==0?images.depth:frame.textures().get(samplerName):
-                            program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color);
-                    if(image==null)throw new UnsupportedShaderException("Unbound shader-pack sampler: "+samplerName+" in "+program.name());
-                    String name=plan.read(image);samples.put(samplerName,name);uses.put(name,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE);
-                    sampleModes.put(samplerName,color!=null&&program.mipmaps().contains(color.color())?mipSampler.handle():sampler.handle());
-                }
-                List<String> outputs=new ArrayList<>();for(GpuImageView image:outputs(routing)){
-                    String name=image==null?null:plan.write(image);outputs.add(name);if(name!=null)uses.put(name,VulkanRenderGraph.Usage.COLOR_WRITE);
-                }
-                PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampleModes,sampler.handle()));
-                swaps.complete(program);finalWritten|=routing.finalOutput();
-            }
-            blit(plan,finalWritten?images.output:images.colors.get(swaps.current(0)),frame.color(),false,"export-scene-color");
-            try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}initialized=true;
+            recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.BEGIN,CompiledShaderPack.Stage.PREPARE),frame.textures());
+            execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;
         }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
+    }
+    /** Executes after all opaque writes are submitted and before any classic translucent geometry is captured. */
+    public void afterOpaque(ImmediateCommands lane,Frame frame,Uniforms uniforms){
+        requireOpen();validateFrame(frame);if(!frameBegun)throw new IllegalStateException("Begin the shader-pack frame before the opaque boundary");
+        if(opaqueComplete)return;int[] prior=swaps.snapshot();PackFrameGraph plan=new PackFrameGraph();
+        try{
+            if(!scene)blit(plan,frame.color(),images.colors.get(swaps.current(0)),false,"import-opaque-color");
+            importDepth(plan,frame,images.depth,"import-opaque-depth");importDepth(plan,frame,images.opaqueDepth,"retain-opaque-depth");
+            recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.DEFERRED),frame.textures());
+            if(!scene)blit(plan,images.colors.get(swaps.current(0)),frame.color(),false,"export-deferred-color");
+            execute(plan,lane);opaqueComplete=true;
+        }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
+    }
+    /** Completes the world frame after transparency. Standalone callers retain a synchronous all-phases entry point. */
+    public void render(ImmediateCommands lane,Frame frame,Uniforms uniforms){
+        requireOpen();validateFrame(frame);
+        if(!frameBegun)beginFrame(lane,frame,uniforms);if(!opaqueComplete)afterOpaque(lane,frame,uniforms);
+        int[] prior=swaps.snapshot();PackFrameGraph plan=new PackFrameGraph();
+        try{
+            clear(plan,images.output,new PackRenderTargets.Color(0,0,0,0));
+            if(!scene)blit(plan,frame.color(),images.colors.get(swaps.current(0)),false,"import-translucent-color");
+            importDepth(plan,frame,images.depth,"import-world-depth");
+            boolean finalWritten=recordPasses(plan,uniforms,Set.of(CompiledShaderPack.Stage.COMPOSITE,CompiledShaderPack.Stage.FINAL),frame.textures());
+            blit(plan,finalWritten?images.output:images.colors.get(swaps.current(0)),frame.color(),false,"export-scene-color");
+            execute(plan,lane);frameBegun=false;opaqueComplete=false;
+        }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
+    }
+    private void clearTargets(PackFrameGraph plan,PackRenderTargets.Color fog){
+        for(var entry:images.colors.entrySet()){
+            var target=pack.targets().targets().get(entry.getKey().color());if(!initialized||target.clear())clear(plan,entry.getValue(),target.fogColor()?fog:target.color());
+        }
+    }
+    private void importDepth(PackFrameGraph plan,Frame frame,GpuImageView target,String name){
+        if(depthPass==null)return;
+        if(frame.depth()==null)throw new UnsupportedShaderException("Pack depth samplers require the real scene depth view");
+        String input=plan.read(frame.depth()),output=plan.write(target);
+        plan.pass(name,Map.of(input,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE,output,VulkanRenderGraph.Usage.COLOR_WRITE),
+                pass->depthPass.record(pass,List.of(output),Map.of("inputDepth",input),depthSampler.handle()));
+    }
+    private boolean recordPasses(PackFrameGraph plan,Uniforms uniforms,Set<CompiledShaderPack.Stage> stages,Map<String,GpuImageView> textures){
+        boolean finalWritten=false;
+        for(var entry:passes.entrySet()){
+            var program=entry.getKey();if(!stages.contains(program.stage()))continue;
+            uniforms.fill(program,entry.getValue().values);entry.getValue().upload();var routing=swaps.route(program);
+            for(int index:new java.util.TreeSet<>(program.mipmaps()))mipmaps.generate(plan,images.levels.get(swaps.current(index)));
+            Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();Map<String,Long> sampleModes=new LinkedHashMap<>();
+            for(String samplerName:program.code().descriptors().samplers().keySet()){
+                var color=routing.samplers().get(samplerName);int depth=PackRenderTargets.depthIndex(samplerName);
+                GpuImageView image=color!=null?(program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color)):
+                        depth==1?images.opaqueDepth:depth>=0?images.depth:textures.get(samplerName);
+                if(image==null)throw new UnsupportedShaderException("Unbound shader-pack sampler: "+samplerName+" in "+program.name());
+                String name=plan.read(image);samples.put(samplerName,name);uses.put(name,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE);
+                sampleModes.put(samplerName,color!=null&&program.mipmaps().contains(color.color())?mipSampler.handle():sampler.handle());
+            }
+            List<String> outputs=new ArrayList<>();for(GpuImageView image:outputs(routing)){
+                String name=image==null?null:plan.write(image);outputs.add(name);if(name!=null)uses.put(name,VulkanRenderGraph.Usage.COLOR_WRITE);
+            }
+            PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampleModes,sampler.handle()));
+            swaps.complete(program);finalWritten|=routing.finalOutput();
+        }
+        return finalWritten;
+    }
+    private void execute(PackFrameGraph plan,ImmediateCommands lane){
+        if(!plan.operations.isEmpty())try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}
     }
     public boolean hasSceneProgram(){return scene;}
     public long samplerHandle(){requireOpen();return sampler.handle();}
@@ -116,10 +158,10 @@ public final class PackGraphRuntime implements AutoCloseable {
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */
     public void beginScene(ImmediateCommands lane,PackRenderTargets.Color fog){
         requireOpen();if(!scene)throw new IllegalStateException("Pack has no scene programs");PackFrameGraph plan=new PackFrameGraph();
-        for(var entry:images.colors.entrySet()){
-            var target=pack.targets().targets().get(entry.getKey().color());if(!initialized||target.clear())clear(plan,entry.getValue(),target.fogColor()?fog:target.color());
-        }
-        if(!plan.operations.isEmpty())try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}initialized=true;
+        if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
+        if(passes.keySet().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.BEGIN||program.stage()==CompiledShaderPack.Stage.PREPARE))
+            throw new IllegalStateException("Use beginFrame to bind uniforms for pre-scene pack programs");
+        clearTargets(plan,fog);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;
     }
     public static NativeGraphicsPipeline.Color colorState(ShaderPackProperties.ProgramState state,int target){return PackPipelineState.color(state,target);}
     private List<GpuImageView> outputs(PackTargetSwaps.Routing routing){
@@ -130,7 +172,8 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(frame.color().image().context()!=context||frame.color().image().width(frame.color().baseMip())!=width||frame.color().image().height(frame.color().baseMip())!=height)
             throw new IllegalArgumentException("Pack frame color differs from runtime dimensions/device");
         if((frame.color().image().format().aspectMask()&VK_IMAGE_ASPECT_COLOR_BIT)==0)throw new IllegalArgumentException("Pack color input must be a color image");
-        if(frame.depth()!=null&&frame.depth().image().context()!=context)throw new IllegalArgumentException("Pack depth belongs to another device");
+        if(frame.depth()!=null&&(frame.depth().image().context()!=context||frame.depth().image().width(frame.depth().baseMip())!=width
+                ||frame.depth().image().height(frame.depth().baseMip())!=height))throw new IllegalArgumentException("Pack depth differs from frame dimensions/device");
         for(GpuImageView image:frame.textures().values())if(image.image().context()!=context)throw new IllegalArgumentException("Pack sampler belongs to another device");
     }
     private static void clear(PackFrameGraph plan,GpuImageView target,PackRenderTargets.Color color){

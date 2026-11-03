@@ -28,14 +28,21 @@ public final class ShaderPackSceneState implements AutoCloseable {
         var lane=owner.commands();framePins=new BackendPins(owner,color,depth);
         try{
             frame=new PackGraphRuntime.Frame(owner.texture(color),depth==null?null:owner.texture(depth),fog,Map.of());
-            if(generation.scene()&&generation.color().image().format()!=frame.color().image().format())throw new IllegalArgumentException("Terrain colortex0 must preserve the game color format for ordinary image transfers");
-            generation.begin(lane,fog,uniforms);active=generation.scene();
+            if(generation.scene()&&(generation.color().image().format()!=frame.color().image().format()
+                    ||generation.color().image().width(0)!=frame.color().image().width(frame.color().baseMip())
+                    ||generation.color().image().height(0)!=frame.color().image().height(frame.color().baseMip())))throw new IllegalArgumentException("Scene colortex0 must preserve game color format/extent for ordinary image transfers");
+            generation.begin(lane,frame,uniforms);active=generation.scene();
         }catch(RuntimeException|Error failure){framePins.close();framePins=null;frame=null;throw failure;}
     }
     public void finish(){
         owner.requireOpen();if(framePins==null)throw new IllegalStateException("Shader-pack frame was not captured");
         try{var lane=owner.commands();active=false;generation.finish(lane,frame);}
         finally{active=false;framePins.close();framePins=null;frame=null;}
+    }
+    public boolean isWorldFrameActive(){owner.requireOwner();return framePins!=null;}
+    public void afterOpaque(){
+        owner.requireOpen();if(framePins==null)throw new IllegalStateException("Opaque boundary outside a captured shader-pack world frame");
+        generation.afterOpaque(owner.commands(),frame);
     }
     GpuImageView redirect(GpuImageView original){
         if(!active||original.image()!=frame.color().image())return original;

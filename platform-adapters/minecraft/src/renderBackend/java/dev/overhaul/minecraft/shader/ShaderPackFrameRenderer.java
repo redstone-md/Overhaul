@@ -57,6 +57,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
         if(!captured)throw new IllegalStateException("Shader-pack projection was not captured before world rendering");
         try{scenes.finish();uniforms.complete();}finally{captured=false;}
     }
+    public boolean worldActive(){return !closed&&Thread.currentThread()==owner&&captured;}
     private static Map<String,Boolean> options(String text){
         Map<String,Boolean> result=new LinkedHashMap<>();for(var entry:definitions(text).entrySet()){
             if(!entry.getValue().equals("true")&&!entry.getValue().equals("false"))throw new IllegalArgumentException("Shader-pack options require true/false values");

@@ -14,7 +14,7 @@ final class PackGraphImages implements AutoCloseable {
     final Map<PackTargetSwaps.Target,List<GpuImageView>> levels=new LinkedHashMap<>();
     final Map<PackTargetSwaps.Target,GpuImageView> sampling=new LinkedHashMap<>();
     private final List<GpuImage> owned=new ArrayList<>();
-    final GpuImageView output,depth;
+    final GpuImageView output,depth,opaqueDepth;
     PackGraphImages(GpuAllocator allocator,PackRenderTargets targets,int width,int height){
         try{
             for(var target:targets.targets().values())for(int side=0;side<2;side++){
@@ -26,6 +26,7 @@ final class PackGraphImages implements AutoCloseable {
             }
             output=create(allocator,ImageFormat.RGBA8_UNORM,width,height);
             depth=create(allocator,ImageFormat.R32_SFLOAT,width,height);
+            opaqueDepth=create(allocator,ImageFormat.R32_SFLOAT,width,height);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     private GpuImageView create(GpuAllocator allocator,ImageFormat format,int width,int height){

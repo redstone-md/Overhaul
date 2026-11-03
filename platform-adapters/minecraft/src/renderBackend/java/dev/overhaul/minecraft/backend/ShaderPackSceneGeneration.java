@@ -29,8 +29,6 @@ final class ShaderPackSceneGeneration extends BackendResource {
     ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler){
         super(owner);this.pack=pack;program=pack.programs().stream().filter(CompiledShaderPack.Program::scene).findFirst().orElse(null);
         try{
-            if(program!=null)for(var target:pack.targets().targets().values())if(target.width(width)!=width||target.height(height)!=height)
-                throw new UnsupportedShaderException("Scene attachments must match the actual game frame extent");
             runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,true);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
@@ -38,9 +36,10 @@ final class ShaderPackSceneGeneration extends BackendResource {
     CompiledShaderPack.Program program(){return program;}
     boolean scene(){return program!=null;}
     GpuImageView color(){requireNativeAlive();return runtime.color(0);}
-    void begin(ImmediateCommands lane,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms){
-        requireOpen();this.uniforms=uniforms;if(scene())runtime.beginScene(lane,fog);for(var pipeline:terrain.values())pipeline.update();
+    void begin(ImmediateCommands lane,PackGraphRuntime.Frame frame,PackGraphRuntime.Uniforms uniforms){
+        requireOpen();this.uniforms=uniforms;runtime.beginFrame(lane,frame,uniforms);for(var pipeline:terrain.values())pipeline.update();
     }
+    void afterOpaque(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.afterOpaque(lane,frame,uniforms);}
     void finish(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.render(lane,frame,uniforms);}
     void fill(UniformBlock block){uniforms.fill(program,block);}
     boolean terrain(OverhaulPipeline pipeline){
