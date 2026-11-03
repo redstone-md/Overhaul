@@ -131,7 +131,7 @@ public final class VulkanContext implements AutoCloseable {
             deviceInfo.pEnabledFeatures(VkPhysicalDeviceFeatures.calloc(stack)
                 .multiDrawIndirect(multiDrawIndirect).drawIndirectFirstInstance(indirectFirstInstance)
                 .samplerAnisotropy(supported.samplerAnisotropy()).fillModeNonSolid(supported.fillModeNonSolid())
-                .independentBlend(supported.independentBlend()));
+                .independentBlend(supported.independentBlend()).logicOp(supported.logicOp()));
             deviceInfo.pNext(VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default()
                 .shaderDrawParameters(draw.shaderDrawParameters()).address());
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc(stack);
@@ -139,7 +139,7 @@ public final class VulkanContext implements AutoCloseable {
             capabilities = new DeviceCapabilities(supported.samplerAnisotropy(), supported.fillModeNonSolid(),
                 supported.independentBlend(), draw.shaderDrawParameters(), supported.samplerAnisotropy()
                 ? properties.limits().maxSamplerAnisotropy() : 1f, properties.limits().maxImageDimension2D(),
-                properties.limits().maxImageArrayLayers(), properties.limits().maxColorAttachments());
+                properties.limits().maxImageArrayLayers(), properties.limits().maxColorAttachments(),supported.logicOp());
             if (presentationEnabled) deviceInfo.ppEnabledExtensionNames(stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME)));
             check(vkCreateDevice(physicalDevice, deviceInfo, null, pointer), "vkCreateDevice");
             device = new VkDevice(pointer.get(0), physicalDevice, deviceInfo);
@@ -241,6 +241,7 @@ public final class VulkanContext implements AutoCloseable {
     public boolean samplerAnisotropy(){return capabilities().samplerAnisotropy();}
     public boolean fillModeNonSolid(){return capabilities().fillModeNonSolid();}
     public boolean independentBlend(){return capabilities().independentBlend();}
+    public boolean logicOp(){return capabilities().logicOp();}
     public boolean shaderDrawParameters(){return capabilities().shaderDrawParameters();}
     public boolean vertexAttributeDivisor(){requireOwner();return false;}
     public void waitIdle() { requireOwner(); check(vkDeviceWaitIdle(device), "vkDeviceWaitIdle"); }
