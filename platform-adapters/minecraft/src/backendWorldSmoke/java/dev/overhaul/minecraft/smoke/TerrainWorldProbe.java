@@ -20,11 +20,12 @@ import java.util.concurrent.CompletableFuture;
 
 /** End-to-end mutations exercise ordinary worker compilation, installed meshes, reload and native presentation. */
 public final class TerrainWorldProbe implements WorldSmokeProbe {
-    private enum Phase { INITIAL,EDIT,CAPTURE,RELOAD,OCCLUSION,DONE }
+    private enum Phase { INITIAL,EDIT,CAPTURE,RELOAD,OCCLUSION,PARTICLES,DONE }
     private final Thread owner=Thread.currentThread();
     private final CompletableFuture<String> result=new CompletableFuture<>();
     private final TerrainFixtures fixtures=new TerrainFixtures();
     private final TerrainOcclusionProbe occlusion=new TerrainOcclusionProbe();
+    private final ParticleWorldProbe particles=new ParticleWorldProbe();
     private final List<Map<String,Object>> checkpoints=new ArrayList<>();
     private final List<OverhaulSectionCompiler> retired=new ArrayList<>();
     private final long[] sections={SectionPos.asLong(0,0,0),SectionPos.asLong(1,0,0)};
@@ -81,6 +82,9 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
                 attachCompiler();beginEdit(3);
             } else if(phase==Phase.OCCLUSION) {
                 occlusion.tick();
+                if(work.isDone()){work.join();work=particles.capture(minecraft,null);phase=Phase.PARTICLES;lastProgress=System.nanoTime();}
+            } else if(phase==Phase.PARTICLES) {
+                particles.tick();
                 if(work.isDone()){work.join();phase=Phase.DONE;writeReceipt("CAPTURED");result.complete("backend=Overhaul Vulkan;terrainStages="+checkpoints.size()+";"+imageEvidence);}
             }
         } catch(RuntimeException failure) {
@@ -169,6 +173,7 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
         requireOwner();
         if(checkpoints.size()!=4||fixtures.placements()!=3||!result.isDone()||result.isCompletedExceptionally())throw new IllegalStateException("Terrain scenarios are incomplete");
         occlusion.disconnected();
+        particles.disconnected();
         Map<String,Long> workers=dispatcher.overhaul$workerStatistics();
         for(String key:List.of("terrainActiveTasks","terrainWorkerPending","terrainWorkerPumps"))if(workers.get(key)!=0)throw new IllegalStateException("Terrain workers remain after disconnect: "+workers);
         if(compiler.activeLeases()!=0||retired.stream().anyMatch(old->old.activeLeases()!=0))throw new IllegalStateException("Terrain page leases remain after unload");
@@ -196,5 +201,5 @@ public final class TerrainWorldProbe implements WorldSmokeProbe {
         catch(IOException failure){throw new IllegalStateException("Cannot write terrain smoke receipt",failure);}
     }
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Terrain smoke belongs to the client owner");}
-    @Override public void close(){requireOwner();occlusion.close();if(!result.isDone())result.completeExceptionally(new IllegalStateException("Terrain smoke closed before completion"));}
+    @Override public void close(){requireOwner();particles.close();occlusion.close();if(!result.isDone())result.completeExceptionally(new IllegalStateException("Terrain smoke closed before completion"));}
 }

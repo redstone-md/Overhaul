@@ -28,6 +28,9 @@ tasks.register('backendNativeTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform { includeTags 'backend-native' }
     systemProperty 'org.lwjgl.util.DebugAllocator', 'true'
+    // Minecraft's process-owned RenderSystem cannot be initialized again after shutdown.
+    forkEvery = 1
+    maxParallelForks = 1
 }
 tasks.named('processResources') {
     doLast {
@@ -43,6 +46,7 @@ tasks.register('prepareBackendSmoke') {
         if (providers.gradleProperty('worldSmoke').isPresent()) {
             delete file("run/${targetName}/overhaul-terrain-smoke-latest.json")
             delete file("run/${targetName}/overhaul-occlusion-smoke-latest.json")
+            delete file("run/${targetName}/overhaul-particle-smoke-latest.json")
         }
     }
 }
@@ -103,6 +107,27 @@ tasks.register('verifyBackendSmoke') {
                         || observation.frame != stage.culling.frames
                         || observation.lastMeshStart != stage.targetCompileStart || stage.targetCompileStart <= stage.finalClientStateBarrier) {
                     throw new GradleException("Occlusion did not observe the final coherent mesh: ${stage}")
+                }
+            }
+            def particleFile = file("run/${targetName}/overhaul-particle-smoke-latest.json")
+            if (!particleFile.isFile()) throw new GradleException('Missing ordinary particle receipt')
+            def particles = new groovy.json.JsonSlurper().parse(particleFile)
+            if (particles.status != 'PASS' || particles.stages*.stage != ['particles-normal','particles-oit','particles-reloaded']
+                    || !receipt.particleStatistics.closed || !receipt.particleStatistics.pipelineCacheClosed
+                    || receipt.particleStatistics.pendingGroups != 0 || receipt.particleStatistics.pipelineGenerations < 2) {
+                throw new GradleException("Ordinary particle stages or resource lifetime failed: ${particles}")
+            }
+            particles.stages.each { stage ->
+                def before = stage.before
+                def after = stage.after
+                def improved = stage.stage != 'particles-normal'
+                if (!after.eligible || stage.spawnedFlame != 64 || stage.spawnedEndRod != 64
+                        || stage.improvedTransparency != improved || after.maxLayerInstances < 64
+                        || after.preparedParticles - before.preparedParticles < 128
+                        || after.preparedInstanceBytes - before.preparedInstanceBytes != 56 * (after.preparedParticles - before.preparedParticles)
+                        || after.normalCalls <= before.normalCalls || after.fallbackGroups != before.fallbackGroups
+                        || (improved ? after.oitCalls <= before.oitCalls : after.oitCalls != before.oitCalls)) {
+                    throw new GradleException("Ordinary particle path did not execute the required instance groups: ${stage}")
                 }
             }
         }
