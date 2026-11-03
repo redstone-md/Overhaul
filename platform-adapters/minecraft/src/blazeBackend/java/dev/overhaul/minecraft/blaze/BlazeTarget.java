@@ -6,6 +6,7 @@ import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.ImageFormat;
 import dev.overhaul.vulkan.ImmediateCommands;
 import dev.overhaul.vulkan.VulkanContext;
+import dev.overhaul.vulkan.FrameRing;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import static dev.overhaul.vulkan.VulkanException.check;
@@ -18,6 +19,8 @@ public final class BlazeTarget implements AutoCloseable {
     private GpuImage color, depth;
     private GpuImageView colorView, depthView;
     private long renderPass, framebuffer;
+    private BlazeQueue queue;
+    private boolean closing;
 
     public BlazeTarget(VulkanContext context, GpuAllocator allocator, ImmediateCommands commands, int width, int height, boolean useDepth) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("Empty framebuffer");
@@ -55,12 +58,17 @@ public final class BlazeTarget implements AutoCloseable {
         }
     }
 
-    void prepare(ImmediateCommands commands){commands.transition(color,0,0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);if(depth!=null)commands.transition(depth,0,0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);}
+    void attach(BlazeQueue queue){if(this.queue!=null&&this.queue!=queue)throw new IllegalStateException("Framebuffer belongs to another graphics lane");this.queue=queue;}
+    void prepare(VkCommandBuffer command,BlazeImageUse images){
+        images.transition(command,colorView,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        if(depthView!=null)images.transition(command,depthView,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
     void begin(VkCommandBuffer command,MemoryStack stack){
         var begin=VkRenderPassBeginInfo.calloc(stack).sType$Default().renderPass(renderPass).framebuffer(framebuffer);
         begin.renderArea().extent().set(width,height);vkCmdBeginRenderPass(command,begin,VK_SUBPASS_CONTENTS_INLINE);
     }
     void clear(ImmediateCommands commands,int mask,BlazeDrawState.Snapshot raster,BlazeDrawState.Clear values){
+        if(closing)throw new IllegalStateException("Framebuffer is closed");
         if((mask&~(0x4000|0x100|0x400))!=0)throw new UnsupportedOperationException("Unknown framebuffer clear mask");
         boolean colorClear=(mask&0x4000)!=0&&raster.color().writeMask()!=0;
         boolean depthClear=(mask&0x100)!=0&&depth!=null&&raster.depth().write();
@@ -68,19 +76,32 @@ public final class BlazeTarget implements AutoCloseable {
         int x=raster.scissor()?Math.max(0,raster.sx()):0,y=raster.scissor()?Math.max(0,raster.sy()):0;
         long right=raster.scissor()?Math.min(width,(long)raster.sx()+raster.sw()):width,top=raster.scissor()?Math.min(height,(long)raster.sy()+raster.sh()):height;
         if((!colorClear&&!depthClear)||right<=x||top<=y)return;
-        prepare(commands);
-        commands.submit(command->{try(MemoryStack stack=MemoryStack.stackPush()){
+        BlazeImageUse images=new BlazeImageUse();
+        BlazeQueue.Operation operation=new BlazeQueue.Operation(){
+            @Override public void record(VkCommandBuffer command){prepare(command,images);try(MemoryStack stack=MemoryStack.stackPush()){
             begin(command,stack);var clears=VkClearAttachment.calloc((colorClear?1:0)+(depthClear?1:0),stack);int index=0;
             if(colorClear)clears.get(index++).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(0).clearValue().color().float32(0,values.r()).float32(1,values.g()).float32(2,values.b()).float32(3,values.a());
             if(depthClear)clears.get(index).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).clearValue().depthStencil().depth(values.depth());
             var rect=VkClearRect.calloc(1,stack).baseArrayLayer(0).layerCount(1);rect.rect().offset().set(x,y);rect.rect().extent().set((int)(right-x),(int)(top-y));
             vkCmdClearAttachments(command,clears,rect);vkCmdEndRenderPass(command);
-        }});
+            }}
+            @Override public void submitted(FrameRing.Submission submission){images.submitted(submission);}
+            @Override public void close(){images.close();}
+        };
+        if(queue!=null)queue.add(operation,0);
+        else{
+            // Compatibility for an externally constructed target before registration.
+            try(operation){commands.submit(operation::record);images.complete();}
+        }
     }
     public GpuImage color(){return color;}public GpuImage depth(){return depth;}public GpuImageView colorView(){return colorView;}
     public GpuImageView depthView(){return depthView;}
     public int width(){return width;}public int height(){return height;}long renderPass(){return renderPass;}long framebuffer(){return framebuffer;}
     @Override public void close(){
+        if(closing)return;closing=true;
+        if(queue!=null)queue.retire(this::destroy);else destroy();
+    }
+    private void destroy(){
         if(framebuffer!=0){vkDestroyFramebuffer(context.device(),framebuffer,null);framebuffer=0;}
         if(renderPass!=0){vkDestroyRenderPass(context.device(),renderPass,null);renderPass=0;}
         if(depthView!=null){depthView.close();depthView=null;}if(colorView!=null){colorView.close();colorView=null;}

@@ -34,6 +34,6 @@ public final class BlazeFramebufferBlit {
     }
     private static void copy(BlazeRenderer owner,GpuImage source,ImageRegion from,GpuImage target,ImageRegion to){
         if(source==target)throw new UnsupportedOperationException("Overlapping/self framebuffer copy requires explicit temporary storage");
-        owner.commands().copyImage(source,from,target,to);
+        owner.copyImage(source,from,target,to);
     }
 }

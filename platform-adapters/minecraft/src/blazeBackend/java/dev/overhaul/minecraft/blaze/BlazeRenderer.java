@@ -15,6 +15,8 @@ import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK10.*;
 
 /** The single owner of native resources for one selected no-API game window. */
@@ -27,6 +29,10 @@ public final class BlazeRenderer implements AutoCloseable {
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
     private GpuAllocator allocator;
     private ImmediateCommands commands;
+    private BlazeQueue queue;
+    private BlazeBufferPool hostStorage,geometryStorage;
+    private BlazeDescriptors descriptors;
+    private BlazeTransfers transfers;
     private BlazePrograms programs;
     private BlazeTextures textures;
     private SwapchainPresenter presenter;
@@ -36,14 +42,25 @@ public final class BlazeRenderer implements AutoCloseable {
     private SwapchainPresentMode mode=SwapchainPresentMode.FIFO;
     private Runnable windowConstructionCleanup;
     private boolean windowReady;
+    private int maximumUniformRange;
 
     public BlazeRenderer(long glfwNoApiWindow,int width,int height){
         windowHandle=glfwNoApiWindow;
         context=VulkanContext.openWindowed(glfwNoApiWindow);
         try{
             allocator=new GpuAllocator(context);commands=new ImmediateCommands(context);
-            programs=new BlazePrograms(this::forgetProgram);textures=new BlazeTextures(context,allocator,commands);
+            queue=new BlazeQueue(context);
+            try(MemoryStack stack=MemoryStack.stackPush()){
+                var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
+                int alignment=Math.toIntExact(Math.max(4,Math.max(properties.limits().nonCoherentAtomSize(),properties.limits().minUniformBufferOffsetAlignment())));
+                maximumUniformRange=properties.limits().maxUniformBufferRange();
+                hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT,2*1024*1024,128L*1024*1024,alignment);
+                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,16);
+            }
+            descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage);
+            programs=new BlazePrograms(this::forgetProgram);textures=new BlazeTextures(context,allocator,commands,queue,transfers);
             backBuffer=new BlazeTarget(context,allocator,commands,Math.max(1,width),Math.max(1,height),true);
+            backBuffer.attach(queue);
             presenter=new SwapchainPresenter(context,width,height);this.width=width;this.height=height;
             state.viewport(0,0,Math.max(0,width),Math.max(0,height));
         }catch(RuntimeException|Error failure){try{close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
@@ -51,7 +68,11 @@ public final class BlazeRenderer implements AutoCloseable {
 
     public VulkanContext context(){requireOpen();return context;}
     public GpuAllocator allocator(){requireOpen();return allocator;}
-    public ImmediateCommands commands(){requireOpen();return commands;}
+    /** Explicit immediate callers are ordering boundaries; ordinary draws/uploads use the queued lane. */
+    public ImmediateCommands commands(){requireOpen();queue.flush();return commands;}
+    BlazeBufferPool hostStorage(){requireOpen();return hostStorage;}
+    BlazeDescriptors descriptors(){requireOpen();return descriptors;}
+    int maximumUniformRange(){return maximumUniformRange;}
     public BlazePrograms programs(){requireOpen();return programs;}
     public BlazeTextures textures(){requireOpen();return textures;}
     public BlazeDrawState drawState(){requireOpen();return state;}
@@ -71,8 +92,8 @@ public final class BlazeRenderer implements AutoCloseable {
         if(failure instanceof RuntimeException)throw(RuntimeException)failure;if(failure instanceof Error)throw(Error)failure;
     }
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
-    public BlazeMesh newMesh(){requireOpen();BlazeMesh mesh=new BlazeMesh(allocator,commands,meshes::remove);meshes.add(mesh);return mesh;}
-    public int registerTarget(BlazeTarget target){int id=nextHandle();targets.put(id,target);return id;}
+    public BlazeMesh newMesh(){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,meshes::remove);meshes.add(mesh);return mesh;}
+    public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
     public void unregisterTarget(int id){requireOpen();targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
     public BlazeTarget currentTarget(){return target(drawTarget);}
     public BlazeTarget readTarget(){return target(readTarget);}
@@ -92,11 +113,10 @@ public final class BlazeRenderer implements AutoCloseable {
     }
     public void draw(BlazeMesh mesh){draw(mesh,programs.activeSnapshot());}
     public void clear(int mask){requireOpen();currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
+    public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){
         requireOpen();if(mesh.state().indexCount()==0)return;BlazeTarget target=currentTarget();
-        try(BlazePass pass=new BlazePass(this,target,mesh,shader,state.snapshot())){
-            target.prepare(commands);commands.submit(pass::record);
-        }
+        queue.add(new BlazePass(this,target,mesh,shader,state.snapshot()),0);
     }
 
     NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program,MeshData.DrawState mesh,
@@ -105,7 +125,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
         PipelineKey key=new PipelineKey(program,mesh.format(),mesh.mode(),draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.depth()!=null);
         NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return existing;
-        if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();entry.getValue().close();oldest.remove();}
+        if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
         var description=new NativeGraphicsPipeline.Description(List.of(
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",program.fragment().directBuffer())),
@@ -116,7 +136,8 @@ public final class BlazeRenderer implements AutoCloseable {
         try{pipelines.put(key,pipeline);return pipeline;}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
     }
     public void forgetProgram(BlazeProgramCompiler.Program program){
-        requireOpen();var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){entry.getValue().close();iterator.remove();}}
+        requireOpen();var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
+        if(descriptors!=null)descriptors.forget(program);
     }
     private static int topology(VertexFormat.Mode mode){return switch(mode){
         case QUADS,LINES,TRIANGLES->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;case TRIANGLE_STRIP->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -127,28 +148,32 @@ public final class BlazeRenderer implements AutoCloseable {
 
     public void resize(int width,int height){
         requireOpen();if(width<0||height<0)throw new IllegalArgumentException("Negative window size");
-        presenter.configure(width,height,mode);this.width=width;this.height=height;
+        queue.flush();presenter.configure(width,height,mode);this.width=width;this.height=height;
         if(width>0&&height>0&&(backBuffer.width()!=width||backBuffer.height()!=height)){
-            BlazeTarget next=new BlazeTarget(context,allocator,commands,width,height,true);backBuffer.close();backBuffer=next;
+            BlazeTarget next=new BlazeTarget(context,allocator,commands,width,height,true);next.attach(queue);backBuffer.close();backBuffer=next;
         }
     }
     public void presentMode(boolean vsync){
         requireOpen();var supported=SwapchainPresentMode.supported(context);
         mode=vsync?SwapchainPresentMode.FIFO:supported.contains(SwapchainPresentMode.IMMEDIATE)?SwapchainPresentMode.IMMEDIATE:
                 supported.contains(SwapchainPresentMode.MAILBOX)?SwapchainPresentMode.MAILBOX:SwapchainPresentMode.FIFO;
-        presenter.configure(width,height,mode);
+        queue.flush();presenter.configure(width,height,mode);
     }
-    public void present(){requireOpen();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImage(backBuffer.colorView(),true);presenter.presentAcquired();}}
+    public void present(){requireOpen();queue.flush();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Blaze3D device is closed");}
     @Override public void close(){
         if(closed)return;
         Throwable failure=null;
+        if(queue!=null)failure=release(queue::drain,failure);
         failure=release(context::waitIdle,failure);
         for(BlazeMesh mesh:new ArrayList<>(meshes))failure=release(mesh::close,failure);
         for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();
         for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
         if(backBuffer!=null)failure=release(backBuffer::close,failure);if(presenter!=null)failure=release(presenter::close,failure);
+        if(descriptors!=null)failure=release(descriptors::close,failure);
+        if(geometryStorage!=null)failure=release(geometryStorage::close,failure);if(hostStorage!=null)failure=release(hostStorage::close,failure);
+        if(queue!=null)failure=release(queue::close,failure);
         if(commands!=null)failure=release(commands::close,failure);if(allocator!=null)failure=release(allocator::close,failure);
         failure=release(context::close,failure);closed=true;
         if(failure instanceof RuntimeException)throw(RuntimeException)failure;if(failure instanceof Error)throw(Error)failure;

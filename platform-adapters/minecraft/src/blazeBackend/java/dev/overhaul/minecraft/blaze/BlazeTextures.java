@@ -22,6 +22,8 @@ public final class BlazeTextures implements AutoCloseable {
     private final VulkanContext context;
     private final GpuAllocator allocator;
     private final ImmediateCommands commands;
+    private final BlazeQueue queue;
+    private final BlazeTransfers transfers;
     private final Map<Integer,BlazeTexture> textures=new HashMap<>();
     private final BlazePixelStore pixels=new BlazePixelStore();
     private final int[] bindings=new int[32];
@@ -30,14 +32,18 @@ public final class BlazeTextures implements AutoCloseable {
     private int proxyWidth,proxyHeight,proxyInternal;
     private boolean closed;
     public BlazeTextures(VulkanContext context,GpuAllocator allocator,ImmediateCommands commands){
-        this.context=context;this.allocator=allocator;this.commands=commands;
-        if(allocator.context()!=context||commands.context()!=context)throw new IllegalArgumentException("Texture dependencies belong to different devices");
-        textures.put(0,new BlazeTexture(allocator));
+        this(context,allocator,commands,null,null);
     }
-    public int generate(){requireOpen();int id=nextId();textures.put(id,new BlazeTexture(allocator));return id;}
+    BlazeTextures(VulkanContext context,GpuAllocator allocator,ImmediateCommands commands,BlazeQueue queue,BlazeTransfers transfers){
+        this.context=context;this.allocator=allocator;this.commands=commands;
+        this.queue=queue;this.transfers=transfers;
+        if(allocator.context()!=context||commands.context()!=context)throw new IllegalArgumentException("Texture dependencies belong to different devices");
+        textures.put(0,new BlazeTexture(allocator,queue,transfers));
+    }
+    public int generate(){requireOpen();int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers));return id;}
     public int borrow(GpuImageView view){
         requireOpen();if(view.image().context()!=context||view.layerCount()!=1)throw new IllegalArgumentException("Foreign or layered borrowed texture");
-        int id=nextId();textures.put(id,new BlazeTexture(allocator,view));return id;
+        int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,view));return id;
     }
     private int nextId(){if(next<=0)throw new IllegalStateException("Texture namespace exhausted");return next++;}
     public void delete(int id){
@@ -72,7 +78,7 @@ public final class BlazeTextures implements AutoCloseable {
         }else{
             var image=texture.image();if(texture.mip(level)>=image.mipLevels()||image.width(texture.mip(level))!=width||image.height(texture.mip(level))!=height||texture.internal!=internal)
                 throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
-            commands.clearColor(image,texture.mip(level),texture.layer(),0,0,0,texture.channels==4?0:1);
+            clearColor(image,texture.mip(level),texture.layer(),0,0,0,texture.channels==4?0:1);
             texture.define(level);
         }
         if(input!=null)upload(target,level,0,0,width,height,format,type,MemoryUtil.memByteBuffer(input));
@@ -91,10 +97,10 @@ public final class BlazeTextures implements AutoCloseable {
         if(source.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel source is truncated");
         int storage=texture.image().format().bytesPerPixel();
         if(type==GL_UNSIGNED_BYTE&&texture.channels==storage&&BlazePixels.components(format)==storage&&format!=GL_BGRA&&format!=GL_BGR&&layout.stride()>=(long)width*storage){
-            var direct=source.slice();direct.position(layout.offset());direct.limit(layout.bytes());commands.upload(texture.image(),area,direct.slice(),layout.stride());return;
+            var direct=source.slice();direct.position(layout.offset());direct.limit(layout.bytes());uploadImage(texture.image(),area,direct.slice(),layout.stride());return;
         }
         ByteBuffer converted=BlazePixels.unpack(source,layout,width,height,format,type,texture.channels,storage);
-        try{commands.upload(texture.image(),area,converted,0);}finally{MemoryUtil.memFree(converted);}
+        try{uploadImage(texture.image(),area,converted,0);}finally{MemoryUtil.memFree(converted);}
     }
     public void download(int target,int level,int format,int type,long address){
         target(target);var texture=current();if(!texture.defined(level))throw new IllegalStateException("Texture mip is not defined");var image=texture.image();int mip=texture.mip(level);
@@ -120,18 +126,18 @@ public final class BlazeTextures implements AutoCloseable {
     private void transfer(GpuImage image,ImageRegion region,int format,int type,ByteBuffer destination){
         if(image.format().isDepth()!=(format==GL_DEPTH_COMPONENT))throw new UnsupportedOperationException("Pixel transfer aspect does not match source image");
         var layout=pixels.layout(true,region.width(),region.height(),BlazePixels.bytes(format,type));
-        var bytes=commands.readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().bytesPerPixel(),destination,layout,region.width(),region.height(),format,type);
+        var bytes=immediate().readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().bytesPerPixel(),destination,layout,region.width(),region.height(),format,type);
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
         target(target);if(width==0||height==0)return;var texture=current();
         var from=readImage(source,GL_RGBA);var to=texture.image();var destination=region(texture,level,xOffset,yOffset,width,height);
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
         var area=new ImageRegion(0,0,x,y,width,height);
-        if(from.format()==to.format()&&texture.channels==4){commands.copyImage(from,area,to,destination);return;}
-        var bytes=commands.readback(from,area,0);int stride=Math.multiplyExact(width,4),size=Math.multiplyExact(stride,height);
+        if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
+        var bytes=immediate().readback(from,area,0);int stride=Math.multiplyExact(width,4),size=Math.multiplyExact(stride,height);
         var layout=new BlazePixelStore.Layout(stride,0,size);
         var converted=BlazePixels.unpack(bytes,layout,width,height,GL_RGBA,GL_UNSIGNED_BYTE,texture.channels,to.format().bytesPerPixel());
-        try{commands.upload(to,destination,converted,0);}finally{MemoryUtil.memFree(converted);}
+        try{uploadImage(to,destination,converted,0);}finally{MemoryUtil.memFree(converted);}
     }
     public int levelParameter(int target,int level,int name){
         requireOpen();
@@ -153,15 +159,15 @@ public final class BlazeTextures implements AutoCloseable {
     public Sampled resolveBound(int unit){return sampled(boundId(unit));}
     private Sampled sampled(int id){
         var texture=texture(id);if(!texture.complete())texture=incomplete();var view=texture.view();
-        for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)if(view.image().layout(mip,view.baseLayer())!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        if(queue==null)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)if(view.image().layout(mip,view.baseLayer())!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             commands.transition(view.image(),mip,view.baseLayer(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         return new Sampled(view,texture.sampler());
     }
     private BlazeTexture current(){requireOpen();return texture(bindings[active]);}
     private BlazeTexture incomplete(){
         if(incomplete==null){
-            var created=new BlazeTexture(allocator);
-            try{created.allocate(GL_RGBA,1,1,1,commands);commands.clearColor(created.image(),0,0,0,0,0,1);incomplete=created;}
+            var created=new BlazeTexture(allocator,queue,transfers);
+            try{created.allocate(GL_RGBA,1,1,1,commands);clearColor(created.image(),0,0,0,0,0,1);incomplete=created;}
             catch(RuntimeException|Error failure){try{created.close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
         }
         return incomplete;
@@ -185,6 +191,9 @@ public final class BlazeTextures implements AutoCloseable {
         }
     }
     private BlazeTexture texture(int id){var texture=textures.get(id);if(texture==null)throw new IllegalStateException("No allocated owned texture is bound: "+id);return texture;}
+    private ImmediateCommands immediate(){if(queue!=null)queue.flush();return commands;}
+    private void uploadImage(GpuImage image,ImageRegion area,ByteBuffer bytes,int pitch){if(transfers!=null)transfers.upload(image,area,bytes,pitch);else commands.upload(image,area,bytes,pitch);}
+    private void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){if(transfers!=null)transfers.clearColor(image,mip,layer,r,g,b,a);else commands.clearColor(image,mip,layer,r,g,b,a);}
     private void target(int value){requireOpen();if(value!=GL_TEXTURE_2D)throw new UnsupportedOperationException("Only owned 2D textures are supported");}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Texture registry is closed");}
     @Override public void close(){

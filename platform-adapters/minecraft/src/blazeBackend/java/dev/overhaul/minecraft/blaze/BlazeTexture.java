@@ -9,6 +9,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /** Owns storage/sampling state or a borrowed render-target view, never both. */
 final class BlazeTexture implements AutoCloseable {
     private final GpuAllocator allocator;
+    private final BlazeQueue queue;
+    private final BlazeTransfers transfers;
     private GpuImage image;
     private GpuImageView view,borrowed;
     private GpuSampler sampler;
@@ -17,8 +19,8 @@ final class BlazeTexture implements AutoCloseable {
     private int base,max=1000;
     private float minLod=-1000,maxLod=1000;
     int channels=4,internal=GL_RGBA;
-    BlazeTexture(GpuAllocator allocator){this.allocator=allocator;}
-    BlazeTexture(GpuAllocator allocator,GpuImageView borrowed){this(allocator);this.borrowed=borrowed;min=mag=GL_NEAREST;wrapS=wrapT=GL_CLAMP_TO_EDGE;max=borrowed.mipCount()-1;if(borrowed.image().format().isDepth()){internal=36012;channels=1;}}
+    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers){this.allocator=allocator;this.queue=queue;this.transfers=transfers;}
+    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,GpuImageView borrowed){this(allocator,queue,transfers);this.borrowed=borrowed;min=mag=GL_NEAREST;wrapS=wrapT=GL_CLAMP_TO_EDGE;max=borrowed.mipCount()-1;if(borrowed.image().format().isDepth()){internal=36012;channels=1;}}
     boolean borrowed(){return borrowed!=null;}
     GpuImage image(){return borrowed!=null?borrowed.image():java.util.Objects.requireNonNull(image,"Texture has no allocated image");}
     int mip(int relative){return Math.addExact(relative,borrowed==null?0:borrowed.baseMip());}
@@ -41,10 +43,13 @@ final class BlazeTexture implements AutoCloseable {
         GpuImage next=allocator.createImage(format,width,height,levels,1,
                 VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         try{
-            for(int level=0;level<levels;level++)commands.clearColor(next,level,0,0,0,0,count==4?0:1);
-        }catch(RuntimeException|Error failure){next.close();throw failure;}
-        try{releaseSampling();if(image!=null)image.close();}
-        catch(RuntimeException|Error failure){try{next.close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
+            for(int level=0;level<levels;level++){
+                if(transfers!=null)transfers.clearColor(next,level,0,0,0,0,count==4?0:1);
+                else commands.clearColor(next,level,0,0,0,0,count==4?0:1);
+            }
+        }catch(RuntimeException|Error failure){retire(next);throw failure;}
+        try{releaseSampling();if(image!=null)retire(image);}
+        catch(RuntimeException|Error failure){try{retire(next);}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
         image=next;this.internal=internal;channels=count;defined=new boolean[levels];
         if(defineAll)java.util.Arrays.fill(defined,true);else defined[0]=true;
     }
@@ -52,15 +57,15 @@ final class BlazeTexture implements AutoCloseable {
     void parameter(int name,float value){
         if(!Float.isFinite(value))throw new IllegalArgumentException("Nonfinite texture parameter");
         switch(name){
-            case GL_TEXTURE_MIN_FILTER->{int selected=integer(value);if(selected!=GL_NEAREST&&selected!=GL_LINEAR&&(selected<GL_NEAREST_MIPMAP_NEAREST||selected>GL_LINEAR_MIPMAP_LINEAR))throw unsupported(name);min=selected;}
-            case GL_TEXTURE_MAG_FILTER->{int selected=integer(value);if(selected!=GL_NEAREST&&selected!=GL_LINEAR)throw unsupported(name);mag=selected;}
-            case GL_TEXTURE_WRAP_S->{address(integer(value));wrapS=integer(value);}
-            case GL_TEXTURE_WRAP_T->{address(integer(value));wrapT=integer(value);}
-            case GL_TEXTURE_BASE_LEVEL->{if(value<0)throw unsupported(name);base=integer(value);}
-            case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);max=integer(value);}
-            case GL_TEXTURE_MIN_LOD->minLod=value;
-            case GL_TEXTURE_MAX_LOD->maxLod=value;
-            case GL_TEXTURE_LOD_BIAS->{if(value!=0)throw unsupported(name);}
+            case GL_TEXTURE_MIN_FILTER->{int selected=integer(value);if(selected!=GL_NEAREST&&selected!=GL_LINEAR&&(selected<GL_NEAREST_MIPMAP_NEAREST||selected>GL_LINEAR_MIPMAP_LINEAR))throw unsupported(name);if(min==selected)return;min=selected;}
+            case GL_TEXTURE_MAG_FILTER->{int selected=integer(value);if(selected!=GL_NEAREST&&selected!=GL_LINEAR)throw unsupported(name);if(mag==selected)return;mag=selected;}
+            case GL_TEXTURE_WRAP_S->{int selected=integer(value);address(selected);if(wrapS==selected)return;wrapS=selected;}
+            case GL_TEXTURE_WRAP_T->{int selected=integer(value);address(selected);if(wrapT==selected)return;wrapT=selected;}
+            case GL_TEXTURE_BASE_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(base==selected)return;base=selected;}
+            case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(max==selected)return;max=selected;}
+            case GL_TEXTURE_MIN_LOD->{if(minLod==value)return;minLod=value;}
+            case GL_TEXTURE_MAX_LOD->{if(maxLod==value)return;maxLod=value;}
+            case GL_TEXTURE_LOD_BIAS->{if(value!=0)throw unsupported(name);return;}
             default->throw unsupported(name);
         }
         releaseSampling();
@@ -88,6 +93,7 @@ final class BlazeTexture implements AutoCloseable {
     private static SamplerSettings.Address address(int mode){return switch(mode){case GL_REPEAT->SamplerSettings.Address.REPEAT;case GL_CLAMP_TO_EDGE->SamplerSettings.Address.CLAMP;case GL_MIRRORED_REPEAT->SamplerSettings.Address.MIRROR;default->throw unsupported(mode);};}
     private static int integer(float value){if(value!=(int)value)throw new IllegalArgumentException("Expected integral texture parameter");return (int)value;}
     private static UnsupportedOperationException unsupported(int name){return new UnsupportedOperationException("Unsupported owned texture parameter: "+name);}
-    private void releaseSampling(){if(sampler!=null){sampler.close();sampler=null;}if(view!=null){view.close();view=null;}}
-    @Override public void close(){try{releaseSampling();}finally{if(image!=null){image.close();image=null;}borrowed=null;}}
+    private void retire(AutoCloseable resource){if(queue==null)BlazeQueue.closeResource(resource);else queue.retire(resource);}
+    private void releaseSampling(){if(sampler!=null){GpuSampler old=sampler;sampler=null;retire(old);}if(view!=null){GpuImageView old=view;view=null;retire(old);}}
+    @Override public void close(){try{releaseSampling();}finally{if(image!=null){GpuImage old=image;image=null;retire(old);}borrowed=null;}}
 }
