@@ -22,8 +22,14 @@ public final class BoundedMpmcQueue<E> {
             if (used == capacity) return false;
             if (reservations.compareAndSet(used, used + 1)) break;
         }
-        entries.offer(value);
-        return true;
+        try {
+            entries.offer(value);
+            return true;
+        } catch (RuntimeException | Error failure) {
+            // Node allocation can fail after admission but before publication.
+            reservations.decrementAndGet();
+            throw failure;
+        }
     }
 
     public E poll() {

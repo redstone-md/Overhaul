@@ -52,8 +52,10 @@ public final class WorkerScheduler implements AutoCloseable {
             if (!accepting.get()) throw new RejectedExecutionException("scheduler is closed");
             Job<T> job = new Job<T>(operation, input);
             pending.incrementAndGet();
-            if (!jobs.offer(job)) {
-                pending.decrementAndGet();
+            boolean queued = false;
+            try { queued = jobs.offer(job); }
+            finally { if (!queued) pending.decrementAndGet(); }
+            if (!queued) {
                 throw new RejectedExecutionException("worker queue is full");
             }
             admitted = true;
