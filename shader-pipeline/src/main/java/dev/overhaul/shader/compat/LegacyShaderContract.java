@@ -34,7 +34,7 @@ public final class LegacyShaderContract {
 
     private LegacyShaderContract() {}
 
-    static String lower(String source, boolean vertex) {
+    static String lower(String source, boolean vertex,boolean gameFramebuffer,boolean reversed) {
         StringBuilder declarations = new StringBuilder();
         if (Pattern.compile("\\boverhaul\\w*").matcher(source).find()) {
             throw new UnsupportedShaderException("Shader uses reserved legacy compatibility identifiers");
@@ -71,7 +71,7 @@ public final class LegacyShaderContract {
             }
         }
         if (contains(source,"gl_TextureMatrix")) throw new UnsupportedShaderException("Only constant texture-matrix indices 0 and 1 are supported");
-        if (!vertex && contains(source,"gl_FragCoord")) {
+        if (!vertex && gameFramebuffer && contains(source,"gl_FragCoord")) {
             source = replace(source,"gl_FragCoord","vec4(gl_FragCoord.x, overhaulViewportHeight-gl_FragCoord.y, gl_FragCoord.zw)");
             declarations.append("uniform float overhaulViewportHeight;\n");
         }
@@ -80,7 +80,7 @@ public final class LegacyShaderContract {
             var match = main.matcher(source);
             if (!match.find()) throw new UnsupportedShaderException("Vertex shader has no canonical main entry point");
             source = match.replaceFirst("void overhaulPackMain()");
-            source += "\nvoid main(){ overhaulPackMain(); gl_Position.y = -gl_Position.y; gl_Position.z = 0.5*(gl_Position.z+gl_Position.w); }\n";
+            source += "\nvoid main(){ overhaulPackMain(); "+(gameFramebuffer?"gl_Position.y = -gl_Position.y; ":"")+"gl_Position.z = 0.5*(gl_Position.w"+(reversed?"-":"+")+"gl_Position.z); }\n";
         }
         return declarations+source;
     }

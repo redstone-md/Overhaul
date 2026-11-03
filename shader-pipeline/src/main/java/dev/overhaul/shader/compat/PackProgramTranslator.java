@@ -34,8 +34,10 @@ public final class PackProgramTranslator {
         String vs = stripComments(vertex), fs = stripComments(fragment);
         if (coordinates == null) throw new NullPointerException("coordinates");
         rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
-        if (coordinates == CoordinateConvention.OPENGL_LEGACY) {
-            vs = LegacyShaderContract.lower(vs,true); fs = LegacyShaderContract.lower(fs,false);
+        if (coordinates != CoordinateConvention.NATIVE_VULKAN) {
+            boolean gameFramebuffer=coordinates==CoordinateConvention.OPENGL_LEGACY;
+            boolean reversed=coordinates==CoordinateConvention.OPENGL_REVERSED_DEPTH_TARGET;
+            vs = LegacyShaderContract.lower(vs,true,gameFramebuffer,reversed); fs = LegacyShaderContract.lower(fs,false,gameFramebuffer,reversed);
         }
         validateBuiltins(vs); validateBuiltins(fs);
         Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>();

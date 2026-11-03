@@ -50,8 +50,13 @@ public final class UniformBlock {
     /** A snapshot avoids writes racing an asynchronous GPU upload. */
     public ByteBuffer snapshot() {
         ByteBuffer snapshot = ByteBuffer.allocateDirect(data.capacity()).order(ByteOrder.nativeOrder());
-        snapshot.put(data.duplicate().clear()).flip();
+        copyTo(snapshot);snapshot.flip();
         return snapshot.asReadOnlyBuffer().order(ByteOrder.nativeOrder());
+    }
+    /** Copies into caller-owned reusable upload storage without publishing mutable uniform storage. */
+    public void copyTo(ByteBuffer target){
+        if(target.remaining()<data.capacity())throw new IllegalArgumentException("Uniform destination is too small");
+        target.put(data.duplicate().clear());
     }
 
     private ProgramBindings.Uniform require(String name, String expectedType) {

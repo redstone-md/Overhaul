@@ -34,5 +34,13 @@ final class PackPipelineState {
         if (factor==null) throw unsupported("Unsupported blend factor: "+name);
         return factor;
     }
+    static NativeGraphicsPipeline.Color color(ShaderPackProperties.ProgramState state,int target){
+        var blend=state.blends().getOrDefault("colortex"+target,state.blends().get("*"));
+        boolean enabled=blend!=null&&blend.enabled();
+        return new NativeGraphicsPipeline.Color(enabled,enabled?factor(blend.sourceRgb()):VK_BLEND_FACTOR_ONE,
+                enabled?factor(blend.destinationRgb()):VK_BLEND_FACTOR_ZERO,VK_BLEND_OP_ADD,
+                enabled?factor(blend.sourceAlpha()):VK_BLEND_FACTOR_ONE,enabled?factor(blend.destinationAlpha()):VK_BLEND_FACTOR_ZERO,
+                VK_BLEND_OP_ADD,target<0?0:15);
+    }
     private static UnsupportedShaderException unsupported(String message) { return new UnsupportedShaderException(message); }
 }
