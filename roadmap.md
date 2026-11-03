@@ -418,3 +418,7 @@ are additional domains. This is a design contract, not an implementation claim.
 The active tracer bullet uses shared quad geometry and 124-byte polygon instances
 to preserve per-face ordering and exact mapped/decal UVs. See the
 [model integration contract](docs/MODEL_INTEGRATION.md) before extending it.
+
+The controlled [OpenGL comparison contract](docs/PERFORMANCE_COMPARISON.md)
+requires actual uncapped presentation support before throughput sampling. The
+current Vulkan swapchain is FIFO-only; no FPS advantage has been established.
