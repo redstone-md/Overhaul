@@ -75,10 +75,19 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     }
     @Override public void enableScissor(int x,int y,int width,int height){requireCapture();if(width<0||height<0)throw new IllegalArgumentException("Negative scissor dimensions");scissor=new PassBindings.Scissor(x,y,width,height);}
     @Override public void disableScissor(){requireCapture();scissor=null;}
-    @Override public void setVertexBuffer(int slot,GpuBufferSlice slice){requireCapture();if(slot<0)throw new IllegalArgumentException("Negative vertex slot");retain(slice.buffer());PassDescriptors.checkRange(slice,owner.buffer(slice.buffer()).size());vertices.put(slot,slice);}
-    @Override public void setIndexBuffer(GpuBuffer buffer,IndexType type){requireCapture();retain(buffer);owner.buffer(buffer);indices=buffer;indexType=java.util.Objects.requireNonNull(type);}
+    @Override public void setVertexBuffer(int slot,GpuBufferSlice slice){
+        requireCapture();if(slot<0||slot>=com.mojang.renderpearl.api.commands.RenderPass.MAX_VERTEX_BUFFERS)throw new IllegalArgumentException("Vertex slot outside supported range");
+        // Keep earlier draw snapshots pinned; only subsequent draws observe this unbind.
+        if(slice==null){vertices.remove(slot);return;}
+        retain(slice.buffer());PassDescriptors.checkRange(slice,owner.buffer(slice.buffer()).size());vertices.put(slot,slice);
+    }
+    @Override public void setIndexBuffer(GpuBuffer buffer,IndexType type){
+        requireCapture();java.util.Objects.requireNonNull(buffer,"indexBuffer");java.util.Objects.requireNonNull(type,"indexType");
+        retain(buffer);owner.buffer(buffer);indices=buffer;indexType=type;
+    }
     private PassBindings snapshot(boolean indexed){
         requireCapture();if(pipeline==null)throw new IllegalStateException("Draw requires a pipeline");
+        for(var binding:pipeline.info().vertexBuffers())if(!vertices.containsKey(binding.bufferSlot()))throw new IllegalStateException("Missing vertex buffer slot "+binding.bufferSlot());
         if(indexed&&indices==null)throw new IllegalStateException("Indexed draw requires an index buffer");
         if(pipeline.pushConstantsSize()>0&&constants==null)throw new IllegalStateException("Draw requires push constants");
         var active=pipeline.activeUniforms();

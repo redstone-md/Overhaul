@@ -68,6 +68,11 @@ class PipelineDrawNativeTest {
             var pass=encoder.createRenderPass(RenderPassDescriptor.builder(()->"descriptors").withColorAttachment(targetView,Optional.of(new Vector4f(0,0,0,1))).build());
             pass.setPipeline(pipeline);pass.setVertexBuffer(0,vertices.slice());pass.setIndexBuffer(indices,IndexType.INT);
             pass.setUniform(0,params.slice());pass.setUniform(1,new TextureViewAndSampler(view,sampler));pass.setUniform(2,texels.slice());pass.enableScissor(8,8,16,16);pass.drawIndexed(3,1,0,0,0);
+            pass.setVertexBuffer(0,null);
+            assertThrows(IllegalStateException.class,()->pass.drawIndexed(3,1,0,0,0),"Unbinding a required slot must affect subsequent draws");
+            assertThrows(NullPointerException.class,()->pass.setIndexBuffer(null,IndexType.INT));
+            assertThrows(NullPointerException.class,()->pass.setIndexBuffer(indices,null));
+            // The earlier draw still owns its captured vertex binding after logical unbind.
             pipeline.close();vertices.close();indices.close();params.close();texels.close();view.close();image.close();sampler.close();
             encoder.submitRenderPass();
             var pixels=owner.commands().readback(owner.image(target),ImageRegion.whole(owner.image(target),0,0),0);
@@ -115,11 +120,14 @@ class PipelineDrawNativeTest {
             String fragment="#version 450\nlayout(push_constant) uniform Color{vec4 value;}pc;layout(location=0) out vec4 result;void main(){result=pc.value;}";
             var additive=new ColorTargetState(new BlendFunction(BlendFactor.ONE,BlendFactor.ONE));
             try(var pipeline=OverhaulPipeline.compile(owner,info(shaders(compiler,VERTEX,fragment),List.of(),List.of(),List.of(),16,null,List.of(additive))).finishCompile();
+                var unused=owner.createBuffer(()->"unused vertex binding",GpuBuffer.USAGE_VERTEX,floats(0,0,0,0));
                 var index=owner.createBuffer(()->"indices",GpuBuffer.USAGE_INDEX,ints(0,1,2));
                 var indirect=owner.createBuffer(()->"indirect",GpuBuffer.USAGE_INDIRECT_PARAMETERS,ints(3,1,0,0,3,1,0,0,3,1,0,0));
                 var indexedIndirect=owner.createBuffer(()->"indexed indirect",GpuBuffer.USAGE_INDIRECT_PARAMETERS,ints(3,1,0,0,0,3,1,0,0,0,3,1,0,0,0))) {
                 var encoder=owner.createCommandEncoder();var pass=encoder.createRenderPass(RenderPassDescriptor.builder(()->"draw modes").withColorAttachment(view,Optional.of(new Vector4f(0,0,0,1))).build());
                 pass.setPipeline(pipeline);pass.setIndexBuffer(index,IndexType.INT);
+                pass.setVertexBuffer(0,unused.slice());pass.setVertexBuffer(0,null);
+                // Procedural shaders such as clouds intentionally consume no vertex buffer.
                 pass.pushConstants(floats(.2f,0,0,0));pass.enableScissor(0,0,4,SIZE);pass.draw(3,1,0,0);
                 pass.pushConstants(floats(0,.2f,0,0));pass.enableScissor(4,0,4,SIZE);pass.drawIndexed(3,1,0,0,0);
                 pass.pushConstants(floats(0,0,.2f,0));pass.enableScissor(8,0,4,SIZE);pass.multiDraw(IntBuffer.wrap(new int[]{0,3,0,3}),1,0,2);
