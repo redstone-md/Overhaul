@@ -47,3 +47,21 @@ jobs:
           name: overhaul-${{ matrix.target }}
           path: platform-adapters/minecraft/build/${{ matrix.target }}/libs/*.jar
           if-no-files-found: error
+  experimental-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble the native engine and optional SDL adapter
+        run: ./gradlew :vulkan-backend:assemble :shader-pipeline:jar --no-daemon
+      - name: Compile the experimental game backend and native test sources
+        run: ./gradlew -p platform-adapters/minecraft -Ptarget=fabric-26.3 -PoverhaulBackend build --no-daemon --no-configuration-cache
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: experimental-backend-reports
+          path: platform-adapters/minecraft/build/fabric-26.3-backend/reports/
