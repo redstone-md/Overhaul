@@ -39,6 +39,7 @@ final class PackFullscreenPass implements AutoCloseable {
         upload=ByteBuffer.allocateDirect(program.code().descriptors().uniformBytes()).order(ByteOrder.nativeOrder());
         program.code().requireAlphaTest(program.state().alphaTest().orElse(null));
         try{
+            if(program.code().descriptors().samplerTypes().containsValue("sampler2DShadow"))context.portability().requireMutableComparisonSamplers();
             renderPass=createRenderPass();descriptors(allocator);
             PackVertexLayout layout=program.code().descriptors().attributes().isEmpty()?null:new PackVertexLayout(program.code().descriptors());
             if(layout!=null){vertices=allocator.hostBuffer(layout.stride*4,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);vertices.write(quad(layout));}

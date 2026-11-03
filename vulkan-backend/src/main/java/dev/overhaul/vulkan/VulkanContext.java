@@ -12,6 +12,8 @@ import java.util.Set;
 
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
+import static org.lwjgl.vulkan.KHRPortabilityEnumeration.*;
+import static org.lwjgl.vulkan.KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
 import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK11.VK_API_VERSION_1_1;
 import static org.lwjgl.vulkan.EXTDebugUtils.VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
@@ -27,6 +29,8 @@ public final class VulkanContext implements AutoCloseable {
     private long surface;
     private SurfaceProvider surfaceProvider;
     private Set<String> enabledInstanceExtensions;
+    private Set<String> availableDeviceExtensions;
+    private PortabilityCapabilities portability=PortabilityCapabilities.conformant();
     private boolean presentationEnabled;
     private int queueFamily;
     private int queueFlags;
@@ -90,6 +94,8 @@ public final class VulkanContext implements AutoCloseable {
             surfaceProvider = provider;
             presentationEnabled = provider != null || requiredExtensions != null;
             LinkedHashSet<String> names = new LinkedHashSet<>();
+            boolean enumeratePortability=VulkanExtensions.instance(stack).contains(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            if(enumeratePortability)names.add(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
             if (presentationEnabled) {
                 List<String> required = provider == null ? requiredExtensions : Objects.requireNonNull(provider.requiredInstanceExtensions(), "required extensions");
                 if (required.isEmpty()) throw new IllegalArgumentException("surface provider requires no instance extensions");
@@ -106,7 +112,7 @@ public final class VulkanContext implements AutoCloseable {
             PointerBuffer extensions = names.isEmpty() ? null : stack.mallocPointer(names.size());
             if (extensions != null) { for (String name : names) extensions.put(stack.UTF8(name)); extensions.flip(); }
             VkInstanceCreateInfo create = VkInstanceCreateInfo.calloc(stack).sType$Default()
-                .pApplicationInfo(app).ppEnabledExtensionNames(extensions);
+                .pApplicationInfo(app).ppEnabledExtensionNames(extensions).flags(enumeratePortability?VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR:0);
             if (validation != null) create.ppEnabledLayerNames(stack.pointers(stack.UTF8(ValidationMonitor.LAYER)))
                 .pNext(validation.info(stack).address());
             PointerBuffer pointer = stack.mallocPointer(1);
@@ -123,8 +129,12 @@ public final class VulkanContext implements AutoCloseable {
             VkDeviceCreateInfo deviceInfo = VkDeviceCreateInfo.calloc(stack).sType$Default()
                 .pQueueCreateInfos(queues);
             VkPhysicalDeviceShaderDrawParametersFeatures draw = VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default();
+            boolean subset=availableDeviceExtensions.contains(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+            var subsetFeatures=subset?VkPhysicalDevicePortabilitySubsetFeaturesKHR.calloc(stack).sType$Default():null;
+            if(subsetFeatures!=null)draw.pNext(subsetFeatures.address());
             VkPhysicalDeviceFeatures2 features = VkPhysicalDeviceFeatures2.calloc(stack).sType$Default().pNext(draw.address());
             org.lwjgl.vulkan.VK11.vkGetPhysicalDeviceFeatures2(physicalDevice, features);
+            portability=PortabilityCapabilities.capture(physicalDevice,subsetFeatures,stack);
             VkPhysicalDeviceFeatures supported = features.features();
             multiDrawIndirect = supported.multiDrawIndirect();
             indirectFirstInstance = supported.drawIndirectFirstInstance();
@@ -132,15 +142,20 @@ public final class VulkanContext implements AutoCloseable {
                 .multiDrawIndirect(multiDrawIndirect).drawIndirectFirstInstance(indirectFirstInstance)
                 .samplerAnisotropy(supported.samplerAnisotropy()).fillModeNonSolid(supported.fillModeNonSolid())
                 .independentBlend(supported.independentBlend()).logicOp(supported.logicOp()));
-            deviceInfo.pNext(VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default()
-                .shaderDrawParameters(draw.shaderDrawParameters()).address());
+            var enabledDraw=VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default().shaderDrawParameters(draw.shaderDrawParameters());
+            if(subset)enabledDraw.pNext(portability.enabled(stack).address());
+            deviceInfo.pNext(enabledDraw.address());
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(physicalDevice, properties);
             capabilities = new DeviceCapabilities(supported.samplerAnisotropy(), supported.fillModeNonSolid(),
                 supported.independentBlend(), draw.shaderDrawParameters(), supported.samplerAnisotropy()
                 ? properties.limits().maxSamplerAnisotropy() : 1f, properties.limits().maxImageDimension2D(),
                 properties.limits().maxImageArrayLayers(), properties.limits().maxColorAttachments(),supported.logicOp());
-            if (presentationEnabled) deviceInfo.ppEnabledExtensionNames(stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME)));
+            var deviceNames=new LinkedHashSet<String>();if(presentationEnabled)deviceNames.add(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+            if(subset)deviceNames.add(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+            if(!deviceNames.isEmpty()){
+                var enabled=stack.mallocPointer(deviceNames.size());for(String name:deviceNames)enabled.put(stack.UTF8(name));enabled.flip();deviceInfo.ppEnabledExtensionNames(enabled);
+            }
             check(vkCreateDevice(physicalDevice, deviceInfo, null, pointer), "vkCreateDevice");
             device = new VkDevice(pointer.get(0), physicalDevice, deviceInfo);
             vkGetDeviceQueue(device, queueFamily, 0, pointer);
@@ -156,7 +171,8 @@ public final class VulkanContext implements AutoCloseable {
         int bestScore = -1;
         for (int i = 0; i < physical.remaining(); i++) {
             VkPhysicalDevice candidate = new VkPhysicalDevice(physical.get(i), instance);
-            if (presentationEnabled && !hasSwapchain(candidate, stack)) continue;
+            Set<String> extensions=VulkanExtensions.device(candidate,stack);
+            if (presentationEnabled && !extensions.contains(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) continue;
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(candidate, properties);
             if (Integer.compareUnsigned(properties.apiVersion(), VK_API_VERSION_1_1) < 0) continue;
@@ -170,10 +186,12 @@ public final class VulkanContext implements AutoCloseable {
                     check(vkGetPhysicalDeviceSurfaceSupportKHR(candidate, j, surface, supported), "surface support");
                     if (supported.get(0) == 0) continue;
                 }
-                int score = properties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2 : 1;
+                int score = (extensions.contains(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)?0:4)
+                        +(properties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2 : 1);
                 if (score > bestScore) {
                     bestScore = score;
                     physicalDevice = candidate;
+                    availableDeviceExtensions=extensions;
                     queueFamily = j;
                     queueFlags = families.get(j).queueFlags();
                     deviceName = properties.deviceNameString();
@@ -210,17 +228,6 @@ public final class VulkanContext implements AutoCloseable {
         }
     }
 
-    private static boolean hasSwapchain(VkPhysicalDevice physical, MemoryStack stack) {
-        IntBuffer count = stack.ints(0);
-        check(vkEnumerateDeviceExtensionProperties(physical, (String) null, count, null), "device extensions");
-        VkExtensionProperties.Buffer extensions = VkExtensionProperties.malloc(count.get(0), stack);
-        check(vkEnumerateDeviceExtensionProperties(physical, (String) null, count, extensions), "device extensions");
-        for (VkExtensionProperties extension : extensions) {
-            if (extension.extensionNameString().equals(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) return true;
-        }
-        return false;
-    }
-
     void requireOwner() {
         if (Thread.currentThread() != owner) throw new IllegalStateException("Vulkan context belongs to another thread");
         if (closed) throw new IllegalStateException("Vulkan context is closed");
@@ -238,6 +245,7 @@ public final class VulkanContext implements AutoCloseable {
     public boolean indirectFirstInstance() { requireOwner(); return indirectFirstInstance; }
     public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
     public DeviceCapabilities capabilities() { requireOwner(); return capabilities; }
+    public PortabilityCapabilities portability(){requireOwner();return portability;}
     public boolean samplerAnisotropy(){return capabilities().samplerAnisotropy();}
     public boolean fillModeNonSolid(){return capabilities().fillModeNonSolid();}
     public boolean independentBlend(){return capabilities().independentBlend();}

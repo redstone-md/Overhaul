@@ -40,6 +40,7 @@ final class ScenePackPipeline implements AutoCloseable {
         shape=new DescriptorPoolCache.Shape(upload.capacity()>0?1:0,code.bindings.samplers().size(),0,code.normals?1:0,64);
         var owner=original.owner();
         try(MemoryStack stack=MemoryStack.stackPush()){
+            if(code.bindings.samplerTypes().containsValue("sampler2DShadow"))owner.context().portability().requireMutableComparisonSamplers();
             int count=shape.uniformBuffers()+shape.combinedSamplers()+shape.storageBuffers();var bindings=VkDescriptorSetLayoutBinding.calloc(count,stack);int slot=0;
             if(shape.uniformBuffers()>0){uniforms=owner.allocator().hostBuffer(upload.capacity(),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
                 bindings.get(slot++).binding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);}

@@ -108,11 +108,26 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
         finally{for(long module:modules)if(module!=0)vkDestroyShaderModule(context.device(),module,null);}
     }
     private void validateFeatures(Description description){
+        var portability=context.portability();
+        if(description.topology()==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN&&!portability.triangleFans())throw new UnsupportedOperationException("Triangle fans are unavailable on this device");
+        if(description.polygonMode()==VK_POLYGON_MODE_POINT&&!portability.pointPolygons())throw new UnsupportedOperationException("Point polygons are unavailable on this device");
+        if(portability.subset())for(var binding:description.bindings()){
+            int alignment=portability.minVertexInputBindingStrideAlignment();
+            if(binding.stride()<alignment||binding.stride()%alignment!=0)throw new UnsupportedOperationException("Vertex stride does not meet device portability alignment");
+        }
+        if(!portability.vertexAttributeAccessBeyondStride())for(var attribute:description.attributes()){
+            var binding=description.bindings().stream().filter(value->value.slot()==attribute.slot()).findFirst().orElseThrow(()->new IllegalArgumentException("Vertex attribute has no binding"));
+            int bytes=ImageFormat.fromVk(attribute.format()).bytesPerPixel();
+            if(attribute.offset()<0||(long)attribute.offset()+bytes>binding.stride())throw new UnsupportedOperationException("Vertex attribute extends beyond its portable binding stride");
+        }
+        if(!portability.constantAlphaColorBlendFactors())for(var color:description.colors())if(color.blend()&&(constantAlpha(color.sourceRgb())||constantAlpha(color.destinationRgb())))
+            throw new UnsupportedOperationException("Constant alpha color blend factors are unavailable on this device");
         if(description.colorLogic().enabled()&&!context.logicOp())throw new UnsupportedOperationException("Color logic operations are unavailable");
         if(description.polygonMode()!=VK_POLYGON_MODE_FILL&&!context.fillModeNonSolid())throw new UnsupportedOperationException("Non-solid fill mode is unavailable");
         if(description.bindings().stream().anyMatch(binding->binding.stepRate()>1)&&!context.vertexAttributeDivisor())throw new UnsupportedOperationException("Vertex instance divisors are unavailable");
         if(!context.independentBlend()&&description.colors().stream().distinct().count()>1)throw new UnsupportedOperationException("Independent MRT blend state is unavailable");
     }
+    private static boolean constantAlpha(int factor){return factor==VK_BLEND_FACTOR_CONSTANT_ALPHA||factor==VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;}
     public long handle(){context.device();if(pipeline==0)throw new IllegalStateException("Pipeline closed");return pipeline;}
     public long layout(){context.device();if(layout==0)throw new IllegalStateException("Pipeline closed");return layout;}
     public byte[] cacheData(){

@@ -11,6 +11,10 @@ public final class GpuImageView implements AutoCloseable {
     public record Components(int red,int green,int blue,int alpha){
         public static final Components IDENTITY=new Components(VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY);
         public Components{for(int component:new int[]{red,green,blue,alpha})if(component<VK_COMPONENT_SWIZZLE_IDENTITY||component>VK_COMPONENT_SWIZZLE_A)throw new IllegalArgumentException("Invalid image component swizzle");}
+        public boolean identity(){return (red==VK_COMPONENT_SWIZZLE_IDENTITY||red==VK_COMPONENT_SWIZZLE_R)
+                &&(green==VK_COMPONENT_SWIZZLE_IDENTITY||green==VK_COMPONENT_SWIZZLE_G)
+                &&(blue==VK_COMPONENT_SWIZZLE_IDENTITY||blue==VK_COMPONENT_SWIZZLE_B)
+                &&(alpha==VK_COMPONENT_SWIZZLE_IDENTITY||alpha==VK_COMPONENT_SWIZZLE_A);}
     }
     private final GpuImage image;
     private final int baseMip,mips,baseLayer,layers;
@@ -19,6 +23,7 @@ public final class GpuImageView implements AutoCloseable {
     private FrameRing.Submission lastUse;
     GpuImageView(GpuImage image,int baseMip,int mips,int baseLayer,int layers,int viewType,int aspectMask,Components components){
         this.image=image;this.baseMip=baseMip;this.mips=mips;this.baseLayer=baseLayer;this.layers=layers;this.components=java.util.Objects.requireNonNull(components);
+        if(!components.identity()&&!image.context().portability().imageViewFormatSwizzle())throw new UnsupportedOperationException("This device cannot remap image-view components");
         try(MemoryStack stack=MemoryStack.stackPush()){
             VkImageViewCreateInfo info=VkImageViewCreateInfo.calloc(stack).sType$Default().image(image.handle())
                 .viewType(viewType).format(image.format().vkFormat());
