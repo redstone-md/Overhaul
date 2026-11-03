@@ -144,11 +144,11 @@ public final class PackGraphRuntime implements AutoCloseable {
             for(String samplerName:program.code().descriptors().samplers().keySet()){
                 int colorIndex=PackRenderTargets.colorIndex(samplerName);var color=colorIndex<0?null:swaps.current(colorIndex);int depth=PackRenderTargets.depthIndex(samplerName);
                 int shadowDepth=PackShadowSettings.depthIndex(samplerName),shadowColor=PackShadowSettings.colorIndex(samplerName);
-                GpuImageView image=shadowDepth>=0?shadowDepth(shadowDepth):shadowColor>=0?shadowColor(shadowColor):color!=null?(program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color)):
+                boolean comparison=program.code().descriptors().comparisonSampler(samplerName);
+                GpuImageView image=shadowDepth>=0?shadowDepthSample(shadowDepth,comparison):shadowColor>=0?shadowColor(shadowColor):color!=null?(program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color)):
                         depth==1?images.opaqueDepth:depth>=0?images.depth:textures.get(samplerName);
                 if(image==null)throw new UnsupportedShaderException("Unbound shader-pack sampler: "+samplerName+" in "+program.name());
                 String name=plan.read(image);samples.put(samplerName,name);uses.put(name,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE);
-                boolean comparison=program.code().descriptors().comparisonSampler(samplerName);
                 if(comparison&&shadowDepth<0)throw new UnsupportedShaderException("Depth comparison requires a bound shadow depth texture: "+samplerName);
                 sampleModes.put(samplerName,shadowDepth>=0?shadowSamplerHandle(shadowDepth,comparison):shadowColor>=0?shadowColorSamplerHandle(shadowColor):color!=null&&program.mipmaps().contains(color.color())?mipSampler.handle():sampler.handle());
             }
@@ -167,6 +167,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     public long samplerHandle(){requireOpen();return sampler.handle();}
     public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}
     public GpuImageView shadowDepth(int index){requireShadows();return shadows.depth(index);}
+    public GpuImageView shadowDepthSample(int index,boolean comparison){requireShadows();return shadows.depthSample(index,comparison);}
     public GpuImageView shadowColor(int index){requireShadows();return shadows.color(index);}
     public long shadowSamplerHandle(int index,boolean comparison){requireShadows();return shadows.depthSampler(index,comparison);}
     public long shadowColorSamplerHandle(int index){requireShadows();return shadows.colorSampler(index);}
@@ -266,7 +267,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         context.requireOwner();if(closed)return;List<PackFullscreenPass> reverse=new ArrayList<>(passes.values());Collections.reverse(reverse);
         for(var pass:reverse)pass.close();passes.clear();if(depthPass!=null){depthPass.close();depthPass=null;}
         if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(mipSampler!=null){mipSampler.close();mipSampler=null;}
-        if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}frameLane=null;closed=true;
         if(shadows!=null){shadows.close();shadows=null;}
+        if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}frameLane=null;closed=true;
     }
 }

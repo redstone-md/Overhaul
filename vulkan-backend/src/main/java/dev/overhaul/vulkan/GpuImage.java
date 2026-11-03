@@ -31,11 +31,14 @@ public final class GpuImage implements AutoCloseable {
     }
     public GpuImageView cubeView(int baseMip,int mipCount,int baseLayer){return view(baseMip,mipCount,baseLayer,6,VK_IMAGE_VIEW_TYPE_CUBE,format.aspectMask());}
     public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount,int viewType,int aspectMask){
+        return view(baseMip,mipCount,baseLayer,layerCount,viewType,aspectMask,GpuImageView.Components.IDENTITY);
+    }
+    public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount,int viewType,int aspectMask,GpuImageView.Components components){
         requireOpen();checkRange(baseMip,mipCount,baseLayer,layerCount);
         if(aspectMask==0||(aspectMask&~format.aspectMask())!=0)throw new IllegalArgumentException("view aspect differs from format");
         if(viewType==VK_IMAGE_VIEW_TYPE_CUBE){if((flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)==0||layerCount!=6||baseLayer%6!=0)throw new IllegalArgumentException("invalid cube image view");}
         else if(viewType!=VK_IMAGE_VIEW_TYPE_2D_ARRAY&&(viewType!=VK_IMAGE_VIEW_TYPE_2D||layerCount!=1))throw new IllegalArgumentException("unsupported 2D image view type");
-        GpuImageView view=new GpuImageView(this,baseMip,mipCount,baseLayer,layerCount,viewType,aspectMask);views.add(view);return view;
+        GpuImageView view=new GpuImageView(this,baseMip,mipCount,baseLayer,layerCount,viewType,aspectMask,components);views.add(view);return view;
     }
     public void retainUntil(FrameRing.Submission completion){requireOpen();Objects.requireNonNull(completion,"completion");
         if(completion.owningContext()!=context())throw new IllegalArgumentException("submission belongs to another Vulkan context");lastUse=completion;}

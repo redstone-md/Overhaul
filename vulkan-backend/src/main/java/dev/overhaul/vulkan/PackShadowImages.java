@@ -17,6 +17,7 @@ final class PackShadowImages implements AutoCloseable {
     private final List<GpuImage> images=new ArrayList<>();
     private final List<GpuSampler> samplers=new ArrayList<>();
     private final GpuImageView[] depth=new GpuImageView[2];
+    private final GpuImageView[] rawDepth=new GpuImageView[2];
     private final GpuImageView[][] colors=new GpuImageView[2][2];
     private final GpuSampler[][] depthSamplers=new GpuSampler[2][2];
     private final GpuSampler[] colorSamplers=new GpuSampler[2];
@@ -28,6 +29,9 @@ final class PackShadowImages implements AutoCloseable {
             ImageFormat depthFormat=depthFormat(context,!settings.nearestDepth(0)||!settings.nearestDepth(1));
             for(int index=0;index<2;index++){
                 depth[index]=image(allocator,depthFormat,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+                // Missing alpha is already one. Explicit ONE on depth views requires maintenance5 swizzle support.
+                rawDepth[index]=depth[index].image().view(0,1,0,1,VK_IMAGE_VIEW_TYPE_2D,VK_IMAGE_ASPECT_DEPTH_BIT,
+                        new GpuImageView.Components(VK_COMPONENT_SWIZZLE_R,VK_COMPONENT_SWIZZLE_R,VK_COMPONENT_SWIZZLE_R,VK_COMPONENT_SWIZZLE_A));
                 for(int compare=0;compare<2;compare++)depthSamplers[index][compare]=sampler(allocator,settings.nearestDepth(index),compare!=0);
                 colorSamplers[index]=sampler(allocator,settings.nearestColor(index),false);
                 var target=settings.colors().targets().get(index);if(target==null)continue;
@@ -58,6 +62,7 @@ final class PackShadowImages implements AutoCloseable {
         throw new UnsupportedShaderException("Device has no sampled shadow depth format for the requested filtering");
     }
     GpuImageView depth(int index){if(index<0||index>1)throw new IllegalArgumentException("Invalid shadow depth index");return depth[index];}
+    GpuImageView depthSample(int index,boolean comparison){depth(index);return comparison?depth[index]:rawDepth[index];}
     GpuImageView color(int index){if(index<0||index>1||colors[index][current[index]]==null)throw new IllegalArgumentException("Absent shadow color target: "+index);return colors[index][current[index]];}
     long depthSampler(int index,boolean comparison){depth(index);return depthSamplers[index][comparison?1:0].handle();}
     long colorSampler(int index){color(index);return colorSamplers[index].handle();}
