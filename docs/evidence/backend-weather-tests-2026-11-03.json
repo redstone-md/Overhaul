@@ -1,0 +1,672 @@
+{
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "total": 157,
+  "groups": {
+    "core-common": [
+      {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.ChunkPipelineTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.ChunkPipelineTest.xml",
+        "sha256": "88592f2afe2519a773f60b34052480537a0d13d352054542d8cfc9e63a896be2"
+      },
+      {
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.ConservativeDepthTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.ConservativeDepthTest.xml",
+        "sha256": "69370d2b2c271af0cf22644288bdb6c967f150d12875ab771aecba720b806446"
+      },
+      {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.ConservativeProjectionTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.ConservativeProjectionTest.xml",
+        "sha256": "90c827501fbcfcda52fb699ef92278f2d6f9b1ed104a838c21526e38aebf47d0"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.CullingTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.CullingTest.xml",
+        "sha256": "ee5314a7997447c3ba1f1fe515b6bc1b8747971665dc1f499c536859f861c3af"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.PerspectiveEyeTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.PerspectiveEyeTest.xml",
+        "sha256": "a4a2ee8c14d465dd962da46d84d900802f43f733df6d70066e205c20988eea3c"
+      },
+      {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.ProjectionPrecisionTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.ProjectionPrecisionTest.xml",
+        "sha256": "e508eb99dc30aed3f2f95ac368557a5a60a25db9c370580d2d25d057e4cb2561"
+      },
+      {
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.culling.TerrainGeometryTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.culling.TerrainGeometryTest.xml",
+        "sha256": "e7ad071a6c1d4cf3c9c818ac1f5afa0f51e7afcf72ab589b40a2c70222ad209c"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.GreedyMeshingTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.GreedyMeshingTest.xml",
+        "sha256": "e43945fd844ca208447b8ac1920dd0d0696056fab73d97f905c0f0ae2dcde29f"
+      },
+      {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.MemoryAndWorkersTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.MemoryAndWorkersTest.xml",
+        "sha256": "854896f10e5fcc04a2d6efc522a65500e15a38d285d87f1359f80c9e2ff2bae1"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.model.ModelMesherTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.model.ModelMesherTest.xml",
+        "sha256": "73fef45ea9e5304750cfcb6c68e6ae53b1c7f1de84427a5c2a064d8829bf0dce"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.SpatialAndTickTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.SpatialAndTickTest.xml",
+        "sha256": "3f86228ca58fca73a73f96f73828ebc34241aad730905e02951ccc644530f0bf"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.core.StreamingVertexWriterTest",
+        "report": "core-common/build/test-results/test/TEST-dev.overhaul.core.StreamingVertexWriterTest.xml",
+        "sha256": "9565247fd3d1410c220276ec0d2480a0fe452cd5084573df7e3e9ea3457cd271"
+      }
+    ],
+    "shader-pipeline": [
+      {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.shader.LegacyPackTest",
+        "report": "shader-pipeline/build/test-results/test/TEST-dev.overhaul.shader.LegacyPackTest.xml",
+        "sha256": "a1a27adfde87d1e32494e5ca0867ec2ec828e59b06cfc9f0add15c0529378037"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.shader.RenderGraphTest",
+        "report": "shader-pipeline/build/test-results/test/TEST-dev.overhaul.shader.RenderGraphTest.xml",
+        "sha256": "fffa2128dd9192c836a35cd47eadbc07b84a7df26a032983290be43f16859b87"
+      },
+      {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.shader.ShaderPipelineTest",
+        "report": "shader-pipeline/build/test-results/test/TEST-dev.overhaul.shader.ShaderPipelineTest.xml",
+        "sha256": "d8430b97e41d5680f8358ac502a3720fc8cf6a4d391fde87ec9b490f69432f67"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.shader.ShaderPreprocessorTest",
+        "report": "shader-pipeline/build/test-results/test/TEST-dev.overhaul.shader.ShaderPreprocessorTest.xml",
+        "sha256": "15f125e00bb0c4cf974549b9c0d0d67abf45641bc702ab79ff1727c2e1092c2d"
+      }
+    ],
+    "platform-adapters": [
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.adapter.ChunkBridgeTest",
+        "report": "platform-adapters/build/test-results/test/TEST-dev.overhaul.adapter.ChunkBridgeTest.xml",
+        "sha256": "7fd0c6fbb46943356e8e3b71b558d7b433028ae3a32405291ed7d6f6669eea4e"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.adapter.ServerIsolationTest",
+        "report": "platform-adapters/build/test-results/test/TEST-dev.overhaul.adapter.ServerIsolationTest.xml",
+        "sha256": "1c104e652205a631b277c6bf9643db68b2a601c054edb97d6ccf654f173879e9"
+      }
+    ],
+    "vulkan-backend": [
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.MeshBatchTest",
+        "report": "vulkan-backend/build/test-results/test/TEST-dev.overhaul.vulkan.MeshBatchTest.xml",
+        "sha256": "423382b6ebf036944b7c4f1cc6dfc256dcbf61c67e91eacccf57e376611a1c1a"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.ModelCameraTest",
+        "report": "vulkan-backend/build/test-results/test/TEST-dev.overhaul.vulkan.ModelCameraTest.xml",
+        "sha256": "3c50349f43365dd42b741c9733a85801a65283e3b6a1967accad1c75b7d44a05"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.SceneVisibilityTest",
+        "report": "vulkan-backend/build/test-results/test/TEST-dev.overhaul.vulkan.SceneVisibilityTest.xml",
+        "sha256": "77eb85dda1eb0374fe103e22ea6457ac0ad93cb7203065500c88b9edc10482ba"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.SurfaceExtensionsTest",
+        "report": "vulkan-backend/build/test-results/test/TEST-dev.overhaul.vulkan.SurfaceExtensionsTest.xml",
+        "sha256": "72929d2bf546d396d53540be41c4440fc58c079ff97013fa28f061f9cd457a97"
+      }
+    ],
+    "portableNative": [
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.integration.ChunkGpuIntegrationTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.integration.ChunkGpuIntegrationTest.xml",
+        "sha256": "33a29de5fe39bd59283cc9d255936d34ad01e03d5dca1efcdd831a5b59b4b14a"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.integration.NativeGraphTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.integration.NativeGraphTest.xml",
+        "sha256": "e70c871d9cfe1556c39e7cbdf117c64d9dfe27515420a763215d6bd1be7432a2"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.integration.NativeModelTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.integration.NativeModelTest.xml",
+        "sha256": "1dd0172340a693598b772f557014fac64233ae3ec769b15c00e93a8a73ba3a89"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.integration.NativeShaderPackTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.integration.NativeShaderPackTest.xml",
+        "sha256": "68181f924db75f542f3f50eb8b862e04061531c687c1c24a85a688762eddd17c"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.GpuBufferRangeTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.GpuBufferRangeTest.xml",
+        "sha256": "7135b66f454229fea57a0025c8657f9cf667c85b2ec0a02552a3a149e315b2f6"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.ImageCommandNativeTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.ImageCommandNativeTest.xml",
+        "sha256": "ebfc61b18c80b9d56ac5e0ce9fdac07abebc427d5f4c8c18000453ac8d2a23be"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.ModelIndexUploadTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.ModelIndexUploadTest.xml",
+        "sha256": "d747d7149b97f2a0e42a591922282f37a5effe9a38ed2a28846966928f6bea02"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.NativeImageTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.NativeImageTest.xml",
+        "sha256": "5151c6f193734f26e8a176536faaaab5ebda7e92fc5e39ef7ca23c452fd548a9"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.NativeMappedRangeTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.NativeMappedRangeTest.xml",
+        "sha256": "ee327613c5e076e2476d80248fc0314fda4179c400161867de5baa40037e6b6d"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.NativeViewLifetimeTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.NativeViewLifetimeTest.xml",
+        "sha256": "a25448cc1c0cb04e746283bc5707c8de8b3fdb836fa80e1b291c050e4e4a099f"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.vulkan.TimedSubmissionNativeTest",
+        "report": "integration-tests/build/test-results/nativeTest/TEST-dev.overhaul.vulkan.TimedSubmissionNativeTest.xml",
+        "sha256": "e844877a8cb4a5482cc2e9e6fdad9e8abab50e1ef5c3d61354d448b1c7eb41ff"
+      }
+    ],
+    "adapterNative": [
+      {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.AsyncQueueNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.AsyncQueueNativeTest.xml",
+        "sha256": "1ccc76757b6de96ac0ab8e640b29c036e532ff7d0fc503e3baff9efcf3731442"
+      },
+      {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.AttachmentReuseNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.AttachmentReuseNativeTest.xml",
+        "sha256": "be7b1a90d6631c6ed3ac11894c8f777dc9dfa798a774402c2689ec1004af428b"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.DescriptorReuseNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.DescriptorReuseNativeTest.xml",
+        "sha256": "9ddd276bf55179f4bdaef5235bab66001fb1b3854b2e2f7b2c1adea326f3e10f"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.DeviceBufferNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.DeviceBufferNativeTest.xml",
+        "sha256": "10e7b98ab82d242eb4e7fa1cb44f0d8948cf7bcf69c32843028e82861fc36531"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.EncoderNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.EncoderNativeTest.xml",
+        "sha256": "4614d540df45b3f969a2e38cccebde0c4b91315698062e01dc03228484fea963"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.FrontendDrawNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.FrontendDrawNativeTest.xml",
+        "sha256": "7cb5d7bc1e655eee3943ec14513f30126dafe4514fb4109101c44ff86ec63f41"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.IndirectExecutionNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.IndirectExecutionNativeTest.xml",
+        "sha256": "b4c1a7a0a1d445df119214cdae3c081ab7f32cf439b4ce743047db9db9f7b4e0"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.ParticleInstancingNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.ParticleInstancingNativeTest.xml",
+        "sha256": "4adaf42078f18ab6c93402fabb8593e66cefb6fde439e3c840c94156489326fc"
+      },
+      {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.PipelineDrawNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.PipelineDrawNativeTest.xml",
+        "sha256": "83f428ea45e59380b2c9908b2187488b9a5bd44dc17881b16d7f72cdf3cf73f4"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.ResourceLifetimeNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.ResourceLifetimeNativeTest.xml",
+        "sha256": "58e2a4f55b4201e2b2f8c054117c6bd359f87855d17e69ff92ccaa0b8f2135cf"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.SurfaceNativeTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.backend.SurfaceNativeTest.xml",
+        "sha256": "29dffd7b84a3f697b088ecc59f922430910ccfe7315afadfab9e6399419f7054"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.particle.InstancedParticlePipelinesTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.particle.InstancedParticlePipelinesTest.xml",
+        "sha256": "87c11d7f3af7e5354daf9d62e11e13e1d70867c64617a0fdfd96bedc576bec51"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.shader.OwnedVertexShaderSourceTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.shader.OwnedVertexShaderSourceTest.xml",
+        "sha256": "75f5a00fa96c40cdb660dd754b0719674a932a65cc317fed773b16914f97683e"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.terrain.TerrainGeometryCaptureTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.terrain.TerrainGeometryCaptureTest.xml",
+        "sha256": "27c757a35e47d8da04307ab9b5854a6d00f8fdf0942e4e3f81908bb226eca098"
+      },
+      {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.terrain.TerrainVertexParityTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.terrain.TerrainVertexParityTest.xml",
+        "sha256": "21686d4e424de5f2bbc60c3f7c3c3e4fc60d6bdc8f58527bf8a57e36efddc882"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.weather.WeatherInstanceWriterTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/backendNativeTest/TEST-dev.overhaul.minecraft.weather.WeatherInstanceWriterTest.xml",
+        "sha256": "0593674a209c90d0a80a0cd58a71367d20a725b0ce81abb95199b206c233aff6"
+      }
+    ],
+    "backendUnit": [
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.backend.ReadFootprintsTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/test/TEST-dev.overhaul.minecraft.backend.ReadFootprintsTest.xml",
+        "sha256": "e81d8d93b80f58ddae67ff1790d945002326c614e0bc05649a6ad3bb0e0e926e"
+      },
+      {
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.terrain.SectionWorkerExecutorTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3-backend/test-results/test/TEST-dev.overhaul.minecraft.terrain.SectionWorkerExecutorTest.xml",
+        "sha256": "46dddeb2afa93f860c2792a3a410a0856215862af2790896faf67ad5da7b41e2"
+      }
+    ],
+    "normalLoader": [
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.16.5/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "02c12adc9c96b8fc9a40707666b10e804db1b0f4369cb20f546366a5e172ffed"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.16.5/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "2a201b47c9f3ac6399962af1ed1404185d8cb15c6181c90259d6b48a82845c73"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.20.1/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "7313d59f025506281d8f4962657cc249284b35aadfe7250bf03816c19a2bb4f0"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.20.1/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "8b3718ea4167e6c3ad08c40a3ec5bd308dc9c298d11ee45fd159094a5f5aa186"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "90f2e0484e90b8b7cc152afd10732b35b031432508a866a1c9f683e4d138835a"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/fabric-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "0b3ee2a4b5f085b124b8a861e0023f430305d7467df2bcc2fed9b1fa2233f319"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "a06d5c581247067e0b9d92d65d2bfeedc42ef1f88e80c982a9e8b0018b73ab0c"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/fabric-26.3/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "43cc1e82e9843979aec22c4a351274bb22a4a3c3178013d7013bedb533bc1dda"
+      },
+      {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.legacy.LifecycleTransformerTest",
+        "report": "platform-adapters/minecraft/build/forge-1.12.2/test-results/test/TEST-dev.overhaul.minecraft.legacy.LifecycleTransformerTest.xml",
+        "sha256": "05df8bef7840d0373a0117ae21af8e58510bf22adf2221ec4a2de5ac64463c88"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/forge-1.16.5/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "5cca336da075ea272822ea2eba333b01a416924df7ae2cef4c59172ab315dc7c"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/forge-1.16.5/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "922dc0e7068b069f84b29aa333a8fbe336a4c2551b134cc4ad42766b5f72fa7d"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/forge-1.20.1/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "b5c4e7a5efb9a753ef9c0b814742399253009a3c308e52e8007a264d5f0b2361"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/forge-1.20.1/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "67e7ab813e37ecb5bec27faaea8b62a712075a5c235edadf5b18ab0f5653de4b"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/forge-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "1deaaf25f4bcd81cc8d4e36b1afa8f6beef13f243d14414f591a3d711e00a6da"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/forge-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "54ba9896715996db05f86f12c42ca2a4d45e85b7415fa9a7e19aed0e985f55f5"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/forge-26.3/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "9ae2fd9c5fa4281b6890b03b59f5ddd1450fafd85ad2c6c353dfffd6bf76d28c"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/forge-26.3/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "f6c0ad4ce054662b437ea21eb59de77e9b2e434d7d8cd2a462b1bec9f40e7db4"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/neoforge-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "7e9ef5f6ac590842904d1f522f3523ce38ffc4576688873454959c596654dfc1"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/neoforge-1.21.1/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "8f8c4fe1015d7c619e57ad258d4eac9da8ce5e10266575c751d39351508d5490"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.EntrypointIsolationTest",
+        "report": "platform-adapters/minecraft/build/neoforge-26.3/test-results/test/TEST-dev.overhaul.minecraft.EntrypointIsolationTest.xml",
+        "sha256": "698731f436766d625e275253844aab8a14147b6fc5ff87a3a130ea7f5b172f42"
+      },
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "suite": "dev.overhaul.minecraft.InjectionTargetsTest",
+        "report": "platform-adapters/minecraft/build/neoforge-26.3/test-results/test/TEST-dev.overhaul.minecraft.InjectionTargetsTest.xml",
+        "sha256": "cc554a33a09b94e193c173dfd5724a9a626823e2f9a4cb2735c85cf2ff6e626f"
+      }
+    ]
+  }
+}

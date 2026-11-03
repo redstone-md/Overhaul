@@ -421,6 +421,76 @@ gates pass. See [particle integration](PARTICLE_INTEGRATION.md) for ownership,
 fallback and shader-resource boundaries. Validation remains local to the tested
 RTX 5070 without validation layers; controlled performance comparisons remain.
 
+## Ordinary rain and snow instancing
+
+The opt-in Fabric 26.3 backend now prepares 48-byte weather column instances,
+replacing four 28-byte vertices per column. It keeps the game's world extraction,
+column order, texture choices and normal/OIT render state. Particles and weather
+share owned quad geometry, pipeline cloning and packaged vertex-source loading.
+
+| Live scene | Rain columns | Snow columns | GPU surface source |
+| --- | ---: | ---: | --- |
+| Rain, normal | 121 | 0 | [frame](evidence/backend-weather-rain-2026-11-03.png) |
+| Rain, improved transparency | 121 | 0 | [frame](evidence/backend-weather-rain-oit-2026-11-03.png) |
+| Snow, normal | 0 | 121 | [frame](evidence/backend-weather-snow-2026-11-03.png) |
+| Snow, improved transparency | 0 | 121 | [frame](evidence/backend-weather-snow-oit-2026-11-03.png) |
+| Reload, improved transparency | 0 | 121 | [frame](evidence/backend-weather-reloaded-2026-11-03.png) |
+| Mixed biomes, improved transparency | 55 | 66 | [frame](evidence/backend-weather-mixed-2026-11-03.png) |
+| Clear weather | 0 | 0 | [frame](evidence/backend-weather-clear-2026-11-03.png) |
+
+All seven GPU readbacks were visually inspected. Actual server weather and biome
+packets drive inherited weather extraction. Each mixed client column matches an
+immutable server-sampled precipitation snapshot; both types execute depth bounds,
+transmittance and accumulation. The complete radius-five set remains 121 columns.
+No captured stage falls back, and clear weather records no additional instances.
+The [scenario receipt](evidence/backend-weather-scenarios-2026-11-03.json) retains
+before/after counters, packet convergence and actual native pixel comparisons.
+
+The live pixel oracle invokes the actual game's private `prepareInstances`
+builder through the mixed-in diagnostic bridge, with its ordinary BufferBuilder.
+It compares the resulting vanilla geometry against the production instance
+writer/kernel on separate Vulkan targets. Rain and snow each cover 4,055 partial
+alpha pixels, 13 alpha values and 512 colors, with zero different pixels and zero
+maximum channel error. They exercise negative fractional camera coordinates,
+repeating UVs, opacity, asymmetric light, signed packed light, nonzero offsets,
+firstInstance 1 and caller-byte overwrite after upload. Retained pairs are
+[rain reference](evidence/backend-weather-parity-rain-reference-2026-11-03.png),
+[rain instanced](evidence/backend-weather-parity-rain-instanced-2026-11-03.png),
+[snow reference](evidence/backend-weather-parity-snow-reference-2026-11-03.png) and
+[snow instanced](evidence/backend-weather-parity-snow-instanced-2026-11-03.png).
+
+The [shutdown receipt](evidence/backend-weather-shutdown-2026-11-03.json) confirms
+two weather cache generations, closed renderer/cache and zero remaining frame
+counts. Reload uncertainty uses the original CPU preparation 81 times, then
+returns to eligible instancing. Weather counters are frontend requests; OIT
+reuses the same prepared records across its three passes. Device counters include
+all terrain, particles, weather, startup and reload work. Neither establishes FPS.
+
+The same run passes terrain, occlusion, particle and normal save/disconnect
+checks. One earlier attempt timed out in the pre-existing occlusion-open stage;
+its stale receipt did not identify the blocked predicate. Two subsequent runs
+passed all four transitions without a culling runtime change. Diagnostics now
+refresh each second, and child probes retain their own stage deadlines instead
+of the parent masking their failures. That intermittent timeout remains an open
+test-stability issue. A separate mixed-fixture failure was resolved by verifying
+every affected stored biome cell before accepting the game's specific
+already-correct/no-changes result; other command errors still fail.
+
+The [manifest](evidence/backend-weather-2026-11-03.json) binds the tested source,
+artifacts, loader inputs, receipts and eleven images. Its
+[test summary](evidence/backend-weather-tests-2026-11-03.json) contains 157 passing
+JUnit checks: 74 engine unit, 17 portable native, 30 backend GPU, 3 terrain parity,
+1 geometry capture, 1 particle pipeline contract, 2 weather writer, 1 owned shader
+source, 2 range, 4 worker and 22 normal loader checks. The two live weather pixel
+cases are separate from that JUnit total. Engine builds, isolated native tests,
+live world verifiers, source-size/module gates and all 11 serial loader
+packaging/receipt checks pass. See [weather integration](WEATHER_INTEGRATION.md).
+
+Validation remains local to one RTX 5070 without validation layers. The input
+reduction excludes shared geometry and indirect commands; extraction/preparation
+still allocate. Broader sessions/devices/mods/resources and controlled allocation
+and frame-time comparisons remain open.
+
 ## Remaining evidence
 
 Remote CI has not executed. Complete Minecraft Vulkan scene parity, full shader

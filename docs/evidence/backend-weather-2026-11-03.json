@@ -1,0 +1,443 @@
+{
+  "verifiedAtUtc": "2026-11-03T19:36:33.937732+00:00",
+  "sourceCommit": "fdae199bc3c76e8857e0c349939e0deb03bd6f46",
+  "loaderInputsSha256": "6f89d57469511a039a119592e5a2486b221c81d7e37b482b1e69bcb00e50fc14",
+  "backend": "Overhaul Vulkan",
+  "device": "NVIDIA GeForce RTX 5070",
+  "capture": "Seven actual GPU surface-source readbacks with native presentation Y flip and four controlled native parity targets; all visually inspected",
+  "tests": {
+    "engineUnit": 74,
+    "portableNative": 17,
+    "adapterGpu": 30,
+    "terrainNativeParity": 3,
+    "terrainGeometryCapture": 1,
+    "particlePipelineContract": 1,
+    "weatherWriter": 2,
+    "ownedShaderSource": 1,
+    "backendRange": 2,
+    "terrainWorkers": 4,
+    "normalLoader": 22,
+    "total": 157
+  },
+  "failures": 0,
+  "skipped": 0,
+  "liveWeatherPixelCases": 2,
+  "commands": [
+    ".\\gradlew.bat build :integration-tests:nativeTest --console=plain",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke -x runClient --console=plain --no-configuration-cache",
+    ".\\gradlew.bat verifySourceSize verifyModuleBoundaries --console=plain",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1 -CheckReceipts"
+  ],
+  "weatherInput": {
+    "recordBytes": 48,
+    "previousExpandedVertexBytesPerColumn": 112,
+    "staticCornerBytes": 32,
+    "staticIndexBytes": 24,
+    "indirectBytesPerTypeDraw": 20,
+    "maxGroupInstanceBytes": 8388608
+  },
+  "pixelParity": {
+    "radius": 12,
+    "camera": [
+      -2.25,
+      1.125,
+      -3.75
+    ],
+    "instanceStride": 48,
+    "firstInstance": 1,
+    "rain": {
+      "instancedImage": "D:\\code\\overhaul\\platform-adapters\\minecraft\\run\\fabric-26.3\\overhaul-backend-smoke\\weather-parity-rain-instanced.png",
+      "alphaSum": 476456,
+      "distinctAlphaValues": 13,
+      "signedLight": true,
+      "sourceLimit": 152,
+      "sourceOverwrittenAfterUpload": true,
+      "nearOpacity": 1.0,
+      "columns": 2,
+      "coveredPixels": 4055,
+      "referenceImage": "D:\\code\\overhaul\\platform-adapters\\minecraft\\run\\fabric-26.3\\overhaul-backend-smoke\\weather-parity-rain-reference.png",
+      "differentPixels": 0,
+      "sourcePosition": 8,
+      "partialAlphaPixels": 4055,
+      "instanceSliceOffset": 320,
+      "distinctColors": 512,
+      "indirectSliceOffset": 64,
+      "maxChannelError": 0
+    },
+    "snow": {
+      "instancedImage": "D:\\code\\overhaul\\platform-adapters\\minecraft\\run\\fabric-26.3\\overhaul-backend-smoke\\weather-parity-snow-instanced.png",
+      "alphaSum": 385163,
+      "distinctAlphaValues": 13,
+      "signedLight": true,
+      "sourceLimit": 152,
+      "sourceOverwrittenAfterUpload": true,
+      "nearOpacity": 0.8,
+      "columns": 2,
+      "coveredPixels": 4055,
+      "referenceImage": "D:\\code\\overhaul\\platform-adapters\\minecraft\\run\\fabric-26.3\\overhaul-backend-smoke\\weather-parity-snow-reference.png",
+      "differentPixels": 0,
+      "sourcePosition": 8,
+      "partialAlphaPixels": 4055,
+      "instanceSliceOffset": 896,
+      "distinctColors": 512,
+      "indirectSliceOffset": 192,
+      "maxChannelError": 0
+    },
+    "reference": "live WeatherEffectRenderer.prepareInstances + game BufferBuilder",
+    "status": "PASS",
+    "intensity": 0.83
+  },
+  "stages": [
+    {
+      "stage": "weather-rain",
+      "clientRainBiomes": 121,
+      "clientSnowBiomes": 0,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": false,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 12100,
+      "preparedSnowInstancesDuringCapture": 0,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 100,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "lastRainCount": 121,
+      "lastSnowCount": 0
+    },
+    {
+      "stage": "weather-rain-oit",
+      "clientRainBiomes": 121,
+      "clientSnowBiomes": 0,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": true,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 12100,
+      "preparedSnowInstancesDuringCapture": 0,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 100,
+        "TRANSMITTANCE": 100,
+        "ACCUMULATE": 100
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "lastRainCount": 121,
+      "lastSnowCount": 0
+    },
+    {
+      "stage": "weather-snow",
+      "clientRainBiomes": 0,
+      "clientSnowBiomes": 121,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": false,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 0,
+      "preparedSnowInstancesDuringCapture": 12100,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 100,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "lastRainCount": 0,
+      "lastSnowCount": 121
+    },
+    {
+      "stage": "weather-snow-oit",
+      "clientRainBiomes": 0,
+      "clientSnowBiomes": 121,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": true,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 0,
+      "preparedSnowInstancesDuringCapture": 12100,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 100,
+        "TRANSMITTANCE": 100,
+        "ACCUMULATE": 100
+      },
+      "lastRainCount": 0,
+      "lastSnowCount": 121
+    },
+    {
+      "stage": "weather-reloaded",
+      "clientRainBiomes": 0,
+      "clientSnowBiomes": 121,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": true,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 0,
+      "preparedSnowInstancesDuringCapture": 12100,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 100,
+        "TRANSMITTANCE": 100,
+        "ACCUMULATE": 100
+      },
+      "lastRainCount": 0,
+      "lastSnowCount": 121
+    },
+    {
+      "stage": "weather-mixed",
+      "clientRainBiomes": 55,
+      "clientSnowBiomes": 66,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": true,
+      "clientRainLevel": 1.0,
+      "preparedRainInstancesDuringCapture": 5500,
+      "preparedSnowInstancesDuringCapture": 6600,
+      "preparedInstanceBytesDuringCapture": 580800,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 100,
+        "TRANSMITTANCE": 100,
+        "ACCUMULATE": 100
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 100,
+        "TRANSMITTANCE": 100,
+        "ACCUMULATE": 100
+      },
+      "lastRainCount": 55,
+      "lastSnowCount": 66
+    },
+    {
+      "stage": "weather-clear",
+      "clientRainBiomes": 55,
+      "clientSnowBiomes": 66,
+      "clientMixedMatchesServer": true,
+      "improvedTransparency": true,
+      "clientRainLevel": 0.0,
+      "preparedRainInstancesDuringCapture": 0,
+      "preparedSnowInstancesDuringCapture": 0,
+      "preparedInstanceBytesDuringCapture": 0,
+      "normalRainCallsDuringCapture": 0,
+      "normalSnowCallsDuringCapture": 0,
+      "fallbackPreparationsDuringCapture": 0,
+      "oitRainCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "oitSnowCallsDuringCapture": {
+        "DEPTH_BOUNDS": 0,
+        "TRANSMITTANCE": 0,
+        "ACCUMULATE": 0
+      },
+      "lastRainCount": 0,
+      "lastSnowCount": 0
+    }
+  ],
+  "weatherStatistics": {
+    "oitRainCalls": {
+      "DEPTH_BOUNDS": 805,
+      "TRANSMITTANCE": 805,
+      "ACCUMULATE": 805
+    },
+    "maxSnowCount": 121,
+    "normalSnowCalls": 103,
+    "normalRainCalls": 641,
+    "preparedInstanceBytes": 11604384,
+    "preparations": 4140,
+    "lastRainCount": 0,
+    "oitSnowCalls": {
+      "DEPTH_BOUNDS": 1153,
+      "TRANSMITTANCE": 1153,
+      "ACCUMULATE": 1153
+    },
+    "recordedRainInstances": 230384,
+    "emptyPreparations": 2061,
+    "resourceGeneration": 3,
+    "closed": true,
+    "eligible": true,
+    "lastSnowCount": 0,
+    "pipelineCacheClosed": true,
+    "recordedSnowInstances": 314842,
+    "fallbackPreparations": 81,
+    "preparedRainInstances": 128502,
+    "maxRainCount": 121,
+    "preparedSnowInstances": 113256,
+    "pipelineGenerations": 2,
+    "shaderEligibility": "pinned shader resources and known mods",
+    "lastIntensity": 0.0
+  },
+  "nativeDrawStatistics": {
+    "nonIndexedIndirectCommands": 0,
+    "instancedNonIndexedIndirectCalls": 0,
+    "maxIndexedIndirectBatch": 21,
+    "nonIndexedIndirectCalls": 0,
+    "directIndexedCalls": 57529,
+    "acceptedPasses": 45463,
+    "indexedIndirectCommands": 107313,
+    "indexedIndirectCalls": 26105,
+    "nonIndexedIndirectMultiRecordCalls": 0,
+    "maxNonIndexedIndirectBatch": 0,
+    "indexedIndirectMultiRecordCalls": 11872,
+    "directNonIndexedCalls": 207839,
+    "instancedIndexedIndirectCalls": 26105
+  },
+  "counterMeaning": "Weather counters are frontend requests; OIT reuses prepared records. Device counters are accepted native calls for the entire world run, including other domains and startup/reload.",
+  "nativeTestIsolation": "One test class per fresh JVM, serial; RenderSystem cannot be initialized again after shutdown",
+  "existingTerrainOcclusionParticleScenarios": "PASS",
+  "validationLayers": false,
+  "performanceCompared": false,
+  "testStability": "One prior occlusion-open timeout was masked by the parent deadline and stale diagnostics; two later runs passed all four transitions without a culling runtime change. Cause remains unresolved. Diagnostics now refresh each second and child probes retain stage deadlines.",
+  "fixedFixtureFailure": "Repeated biome fill no-changes is accepted only after every affected stored quart cell independently matches; other command errors fail.",
+  "openAcceptance": [
+    "Resolve intermittent occlusion test timeout",
+    "Controlled performance/allocation profiling and stress scenes",
+    "Additional GPUs/mods/resource changes and custom particle renderers",
+    "Entity/block-entity instancing and remaining version/loader runtimes",
+    "Full shader packs/render graph and actual world/server replacements"
+  ],
+  "artifacts": [
+    {
+      "file": "core-common/build/libs/core-common-0.1.0-SNAPSHOT.jar",
+      "sha256": "b282c505a465af7b4daeaf50309075fc74916fcfa71901a77f7e769339a6cf6f"
+    },
+    {
+      "file": "platform-adapters/build/libs/platform-adapters-0.1.0-SNAPSHOT.jar",
+      "sha256": "11f1aa6e2fc45278673985e3b5682ffa0ed4698ea4eacc15e25d995eeef02c9b"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "728654fd27744cc0398150b36ec0961be9d4c494e314149f7229e14eab3dd09b"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-26.3-backend/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "b6667dd7829a5c8ca2372a7c060f02a7eb8df66f34e5660e3b7b6d24769e4533"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "backend-weather-clear-2026-11-03.png",
+      "sha256": "a95755a245508759c7b81fa88f0931896564ceaf8c5f57ee706581e915945859"
+    },
+    {
+      "file": "backend-weather-fixture-2026-11-03.json",
+      "sha256": "26994159f6c33f341b613ee37454c4421071891fb8f7f6d9f4900a80cb1ad0c2"
+    },
+    {
+      "file": "backend-weather-mixed-2026-11-03.png",
+      "sha256": "f566b6a43c057056a872165311962bfb00f3d8f29f22ddebe60b0612a945a1bb"
+    },
+    {
+      "file": "backend-weather-occlusion-2026-11-03.json",
+      "sha256": "b37d6cdea3415d0a4f9e729cc7c5441fcd30015ab0b6039deff37692ad3e7d01"
+    },
+    {
+      "file": "backend-weather-parity-rain-instanced-2026-11-03.png",
+      "sha256": "1b24839e26144e8b769be6a805ef8ebe81774aeab2cc4b5ae767ff5bbe08c615"
+    },
+    {
+      "file": "backend-weather-parity-rain-reference-2026-11-03.png",
+      "sha256": "1b24839e26144e8b769be6a805ef8ebe81774aeab2cc4b5ae767ff5bbe08c615"
+    },
+    {
+      "file": "backend-weather-parity-snow-instanced-2026-11-03.png",
+      "sha256": "15f038b9a8e11e5e77a7a860810e3ebaf70b9382ae60a2aecf57abc0b58d8e23"
+    },
+    {
+      "file": "backend-weather-parity-snow-reference-2026-11-03.png",
+      "sha256": "15f038b9a8e11e5e77a7a860810e3ebaf70b9382ae60a2aecf57abc0b58d8e23"
+    },
+    {
+      "file": "backend-weather-particles-2026-11-03.json",
+      "sha256": "dc50733ce3955fdc9986d362d06f0bef2bd940544b6dab0944ed258510e4c4fb"
+    },
+    {
+      "file": "backend-weather-rain-2026-11-03.png",
+      "sha256": "d4a6c1cbd48f876dc09dfbbf34af7bd527b3ed18d2bbeb709f09ab731ed63ed8"
+    },
+    {
+      "file": "backend-weather-rain-oit-2026-11-03.png",
+      "sha256": "5c79fd3bd9f94ae537d6608ee0073ae24a402308b6e91a83a6f3f1cc7fe297ac"
+    },
+    {
+      "file": "backend-weather-reloaded-2026-11-03.png",
+      "sha256": "e0719fb7c4477ead70cf4416f9165c3ad8fb82d921f7d35868b0f82d19b20577"
+    },
+    {
+      "file": "backend-weather-scenarios-2026-11-03.json",
+      "sha256": "ebba7315318c38958fd029896796f7e90737182c56653ccfc7f2616b34757248"
+    },
+    {
+      "file": "backend-weather-shutdown-2026-11-03.json",
+      "sha256": "2d5543e781db0a881b66e605f4afa3dbe803fefb1aa4bcdcb4d7e0f9ad485f39"
+    },
+    {
+      "file": "backend-weather-snow-2026-11-03.png",
+      "sha256": "65d5db01518ea695d0c7a605094c6033b04cd589244faf952a1fa0fb5b1fc501"
+    },
+    {
+      "file": "backend-weather-snow-oit-2026-11-03.png",
+      "sha256": "bfad5dd7682207eb379d3352d8fc1de8927ad440592469e5d87be7585975d00b"
+    },
+    {
+      "file": "backend-weather-terrain-2026-11-03.json",
+      "sha256": "281c06da9088145c1f23929f80faceae7bcac521b30b2752c68ccb215068cf0a"
+    },
+    {
+      "file": "backend-weather-tests-2026-11-03.json",
+      "sha256": "0b19a28c86b82256651df73b9543e8fb750f05b5c5aa4d07320a1fd445fdb83b"
+    },
+    {
+      "file": "loader-targets-weather-2026-11-03.json",
+      "sha256": "6166ddff3f9c1448b62cef80cc4c6ccc83395a3c57edce343e147fc0befba4ac"
+    }
+  ]
+}

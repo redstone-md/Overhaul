@@ -317,3 +317,40 @@ scope remain required.
 - Entity, block-entity and weather instancing, full shader packs and every other
   original acceptance requirement remain open. Server spatial-query research
   also found a callback-prefetch behavior that must survive any index replacement.
+
+## Active ordinary weather instancing increment
+
+Replace the ordinary 26.3 weather renderer's four-vertex column expansion with
+48-byte rain/snow instances and indexed indirect draws. Keep its actual world
+extraction, column order, camera-relative rounding, direction tables, UV drift,
+opacity/light and normal/OIT pipeline state. Extract shared owned quad geometry,
+pipeline cloning and packaged shader-source loading from the particle path rather
+than duplicating them. Preserve reload/unload/empty-frame lifetime and original
+rendering for uncertain resource semantics. Verify against the actual live game
+weather builder (not a partially constructed headless mock), inspect rain/snow
+GPU frames, exercise normal/OIT/reload and retain source-bound evidence. Keep
+source files below 500 lines and make atomic commits. The complete original
+renderer/shader/world/server/version/performance acceptance scope stays open.
+
+## Ordinary weather checkpoint: 2026-11-03
+
+- The actual 26.3 weather renderer retains world extraction and prepares 48-byte
+  rain/snow instances instead of four 28-byte vertices. Normal and OIT passes use
+  indexed indirect draws and the original fragment/render-state contracts.
+- Particles/weather now share owned quad geometry, pipeline variants, packaged
+  shader loading and vertex-output code. Frame slices are fence-owned; reload,
+  clear weather, world reset and final cache/static-buffer closure are explicit.
+- The real game's private weather builder supplies the live Vulkan pixel oracle,
+  including UV quirks, opacity, negative fractional coordinates, signed light,
+  sentinels, offsets and source-byte reuse. Headless tests remain ABI/ownership
+  checks rather than claims of an authentic game constructor.
+- Live server weather/biome packets exercise rain/snow normal and OIT rendering,
+  reload, a mixed-biome frame and no stale draws after clearing precipitation.
+- Retained evidence records seven inspected world frames, two exact live
+  game-builder pixel comparisons, 157 passing JUnit checks and all 11 current
+  loader packaging receipts. See [validation](docs/VALIDATION.md). An earlier
+  occlusion-open timeout did not recur in two later runs; its cause remains an
+  open test-stability issue, with refreshed readiness diagnostics retained.
+- Input-size reduction is not a measured FPS gain. Entity/block-entity instancing,
+  remaining renderers/versions, complete shader packs, world/server systems,
+  broader compatibility and controlled benchmarks remain acceptance work.

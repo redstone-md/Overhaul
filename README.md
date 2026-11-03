@@ -126,3 +126,8 @@ The ordinary quad-particle feature path now uploads 56-byte instance records and
 executes indexed indirect instanced draws. Native pixels match the game's expanded
 quads; live flame/end-rod scenes pass in normal mode, improved transparency and
 after resource reload. See [particle integration](docs/PARTICLE_INTEGRATION.md).
+
+Ordinary rain and snow also use indexed indirect instancing with 48-byte column
+records. The particle and weather paths share owned rendering helpers. See
+[weather integration](docs/WEATHER_INTEGRATION.md) for data, lifecycle and live
+pixel-verification boundaries.
