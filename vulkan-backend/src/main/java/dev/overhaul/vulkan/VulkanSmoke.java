@@ -35,6 +35,7 @@ public final class VulkanSmoke {
             verifyTransfer(context);
             verifyDraw(context, output);
             verifyOwnership(context);
+            AsyncSmoke.verify(context);
         }
         context.assertValidationClean();
         if (present) verifyPresentation(validation);

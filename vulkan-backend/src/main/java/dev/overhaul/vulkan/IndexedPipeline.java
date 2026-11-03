@@ -18,9 +18,10 @@ final class IndexedPipeline implements AutoCloseable {
         #version 450
         layout(location=0) in vec3 position;
         layout(location=1) in uint material;
+        layout(location=2) in vec3 instanceOffset;
         layout(set=0,binding=0) uniform Camera { mat4 transform; } camera;
         layout(location=0) flat out uint surface;
-        void main() { gl_Position=camera.transform*vec4(position,1.0); surface=material; }
+        void main() { gl_Position=camera.transform*vec4(position+instanceOffset,1.0); surface=material; }
         """;
     private static final String FRAGMENT = """
         #version 450
@@ -56,11 +57,13 @@ final class IndexedPipeline implements AutoCloseable {
             VkPipelineShaderStageCreateInfo.Buffer stages = VkPipelineShaderStageCreateInfo.calloc(2, stack);
             stages.get(0).sType$Default().stage(VK_SHADER_STAGE_VERTEX_BIT).module(vertex).pName(stack.UTF8("main"));
             stages.get(1).sType$Default().stage(VK_SHADER_STAGE_FRAGMENT_BIT).module(fragment).pName(stack.UTF8("main"));
-            VkVertexInputBindingDescription.Buffer binding = VkVertexInputBindingDescription.calloc(1, stack)
-                .binding(0).stride(16).inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
-            VkVertexInputAttributeDescription.Buffer attributes = VkVertexInputAttributeDescription.calloc(2, stack);
+            VkVertexInputBindingDescription.Buffer binding = VkVertexInputBindingDescription.calloc(2, stack);
+            binding.get(0).binding(0).stride(16).inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+            binding.get(1).binding(1).stride(16).inputRate(VK_VERTEX_INPUT_RATE_INSTANCE);
+            VkVertexInputAttributeDescription.Buffer attributes = VkVertexInputAttributeDescription.calloc(3, stack);
             attributes.get(0).location(0).binding(0).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0);
             attributes.get(1).location(1).binding(0).format(VK_FORMAT_R32_UINT).offset(12);
+            attributes.get(2).location(2).binding(1).format(VK_FORMAT_R32G32B32_SFLOAT).offset(0);
             VkPipelineVertexInputStateCreateInfo input = VkPipelineVertexInputStateCreateInfo.calloc(stack)
                 .sType$Default().pVertexBindingDescriptions(binding).pVertexAttributeDescriptions(attributes);
             VkPipelineInputAssemblyStateCreateInfo assembly = VkPipelineInputAssemblyStateCreateInfo.calloc(stack)

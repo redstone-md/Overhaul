@@ -10,6 +10,7 @@ public final class GpuMesh implements AutoCloseable {
     final GpuBuffer vertices;
     final GpuBuffer indices;
     final GpuBuffer indirect;
+    final GpuBuffer instances;
     private final VulkanContext context;
     private final java.util.function.Consumer<GpuMesh> retirement;
     private boolean closed;
@@ -18,17 +19,8 @@ public final class GpuMesh implements AutoCloseable {
             ByteBuffer vertexData, ByteBuffer indexData, int indexCount, java.util.function.Consumer<GpuMesh> retirement) {
         this.context = context;
         this.retirement = retirement;
-        if (vertexData.remaining() % 16 != 0 || vertexData.remaining() == 0)
-            throw new IllegalArgumentException("vertices must contain xyz/material records");
-        if (indexCount < 1 || (long) indexCount * 4 > indexData.remaining())
-            throw new IllegalArgumentException("index count exceeds available uint32 indices");
-        int vertexCount = vertexData.remaining() / 16;
-        ByteBuffer indexView = indexData.duplicate().order(ByteOrder.nativeOrder());
-        for (int i = 0; i < indexCount; i++) {
-            if (Integer.compareUnsigned(indexView.getInt(indexView.position() + i * 4), vertexCount) >= 0)
-                throw new IllegalArgumentException("mesh index exceeds vertex count");
-        }
-        GpuBuffer vertex = null, index = null, draw = null;
+        MeshValidation.validate(vertexData, indexData, indexCount);
+        GpuBuffer vertex = null, index = null, draw = null, instance = null;
         try {
             vertex = upload(allocator, commands, vertexData, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
             ByteBuffer indexSlice = indexData.duplicate();
@@ -37,8 +29,10 @@ public final class GpuMesh implements AutoCloseable {
             ByteBuffer command = ByteBuffer.allocate(20).order(ByteOrder.nativeOrder());
             command.putInt(indexCount).putInt(1).putInt(0).putInt(0).putInt(0).flip();
             draw = upload(allocator, commands, command, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+            instance = upload(allocator, commands, ByteBuffer.allocate(16), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         } catch (RuntimeException | Error failure) {
             if (draw != null) draw.close();
+            if (instance != null) instance.close();
             if (index != null) index.close();
             if (vertex != null) vertex.close();
             throw failure;
@@ -46,6 +40,7 @@ public final class GpuMesh implements AutoCloseable {
         vertices = vertex;
         indices = index;
         indirect = draw;
+        instances = instance;
     }
 
     private static GpuBuffer upload(GpuAllocator allocator, ImmediateCommands commands, ByteBuffer source, int usage) {
@@ -64,6 +59,7 @@ public final class GpuMesh implements AutoCloseable {
         if (closed) return;
         context.requireOwner();
         indirect.close();
+        instances.close();
         indices.close();
         vertices.close();
         closed = true;

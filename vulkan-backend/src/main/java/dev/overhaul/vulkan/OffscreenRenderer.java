@@ -58,17 +58,8 @@ public final class OffscreenRenderer implements AutoCloseable {
         camera.write(columnMajorTransform);
         commands.submit(command -> {
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkClearValue.Buffer clear = VkClearValue.calloc(2, stack);
-                clear.get(0).color().float32(0, 0.02f).float32(1, 0.03f).float32(2, 0.04f).float32(3, 1f);
-                clear.get(1).depthStencil().depth(1f).stencil(0);
-                VkRenderPassBeginInfo begin = VkRenderPassBeginInfo.calloc(stack).sType$Default()
-                    .renderPass(target.renderPass).framebuffer(target.framebuffer).pClearValues(clear);
-                begin.renderArea().extent().set(target.width, target.height);
-                vkCmdBeginRenderPass(command, begin, VK_SUBPASS_CONTENTS_INLINE);
-                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-                vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout,
-                    0, stack.longs(camera.set), null);
-                vkCmdBindVertexBuffers(command, 0, stack.longs(mesh.vertices.handle()), stack.longs(0));
+                IndexedPass.begin(command, target, camera, pipeline);
+                vkCmdBindVertexBuffers(command, 0, stack.longs(mesh.vertices.handle(), mesh.instances.handle()), stack.longs(0, 0));
                 vkCmdBindIndexBuffer(command, mesh.indices.handle(), 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexedIndirect(command, mesh.indirect.handle(), 0, 1, 20);
                 vkCmdEndRenderPass(command);

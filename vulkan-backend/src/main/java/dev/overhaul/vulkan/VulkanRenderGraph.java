@@ -19,7 +19,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class VulkanRenderGraph implements AutoCloseable {
     public enum Usage {
         COLOR_WRITE(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, true),
+                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, true),
         DEPTH_WRITE(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
@@ -98,6 +98,9 @@ public final class VulkanRenderGraph implements AutoCloseable {
             if (!declared.equals(operation.uses().keySet())) throw new IllegalArgumentException("Pass access differs from graph: "+pass.name());
             for (Map.Entry<String,Usage> use:operation.uses().entrySet()) {
                 Usage usage=use.getValue();
+                if (usage==Usage.COMPUTE_SAMPLE && !context.supportsCompute()) {
+                    throw new IllegalArgumentException("Selected queue does not support compute shader access");
+                }
                 if (usage.writes!=pass.writes().contains(use.getKey())) throw new IllegalArgumentException("Read/write usage mismatch: "+use.getKey());
                 boolean depth=graph.resources().get(use.getKey()).format()==RenderGraph.Format.DEPTH32F;
                 if ((usage==Usage.DEPTH_WRITE || usage==Usage.DEPTH_READ) && !depth

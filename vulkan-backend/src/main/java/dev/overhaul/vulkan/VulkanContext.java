@@ -25,7 +25,11 @@ public final class VulkanContext implements AutoCloseable {
     private VkQueue queue;
     private long surface;
     private int queueFamily;
+    private int queueFlags;
     private String deviceName;
+    private boolean multiDrawIndirect;
+    private boolean indirectFirstInstance;
+    private int maxIndirectDrawCount;
     private ValidationMonitor validation;
     private boolean closed;
 
@@ -91,6 +95,12 @@ public final class VulkanContext implements AutoCloseable {
                 .sType$Default().queueFamilyIndex(queueFamily).pQueuePriorities(stack.floats(1f));
             VkDeviceCreateInfo deviceInfo = VkDeviceCreateInfo.calloc(stack).sType$Default()
                 .pQueueCreateInfos(queues);
+            VkPhysicalDeviceFeatures supported = VkPhysicalDeviceFeatures.malloc(stack);
+            vkGetPhysicalDeviceFeatures(physicalDevice, supported);
+            multiDrawIndirect = supported.multiDrawIndirect();
+            indirectFirstInstance = supported.drawIndirectFirstInstance();
+            deviceInfo.pEnabledFeatures(VkPhysicalDeviceFeatures.calloc(stack)
+                .multiDrawIndirect(multiDrawIndirect).drawIndirectFirstInstance(indirectFirstInstance));
             if (surface != 0) deviceInfo.ppEnabledExtensionNames(stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME)));
             check(vkCreateDevice(physicalDevice, deviceInfo, null, pointer), "vkCreateDevice");
             device = new VkDevice(pointer.get(0), physicalDevice, deviceInfo);
@@ -125,7 +135,9 @@ public final class VulkanContext implements AutoCloseable {
                     bestScore = score;
                     physicalDevice = candidate;
                     queueFamily = j;
+                    queueFlags = families.get(j).queueFlags();
                     deviceName = properties.deviceNameString();
+                    maxIndirectDrawCount = properties.limits().maxDrawIndirectCount();
                 }
                 break;
             }
@@ -154,8 +166,12 @@ public final class VulkanContext implements AutoCloseable {
     public VkDevice device() { requireOwner(); return device; }
     public VkQueue queue() { requireOwner(); return queue; }
     public int queueFamily() { requireOwner(); return queueFamily; }
+    public boolean supportsCompute() { requireOwner(); return (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0; }
     public long surface() { requireOwner(); return surface; }
     public String deviceName() { requireOwner(); return deviceName; }
+    public boolean multiDrawIndirect() { requireOwner(); return multiDrawIndirect; }
+    public boolean indirectFirstInstance() { requireOwner(); return indirectFirstInstance; }
+    public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
     public void waitIdle() { requireOwner(); check(vkDeviceWaitIdle(device), "vkDeviceWaitIdle"); }
     public List<String> validationErrors() { return validation == null ? List.of() : validation.errors(); }
     public void assertValidationClean() {
