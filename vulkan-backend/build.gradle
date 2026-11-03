@@ -58,3 +58,11 @@ tasks.register('sdlVulkanSmoke', JavaExec) {
     classpath = sourceSets.sdlSmoke.runtimeClasspath
     mainClass = 'dev.overhaul.vulkan.sdl.SdlVulkanSmoke'
 }
+
+tasks.register('sdlAdapterJar', Jar) {
+    description = 'Packages the SDL3 surface provider separately from the default LWJGL runtime.'
+    archiveClassifier = 'sdl34'
+    from(sourceSets.sdlSmoke.output) { exclude 'dev/overhaul/vulkan/sdl/**' }
+}
+
+tasks.named('assemble') { dependsOn 'sdlAdapterJar' }
