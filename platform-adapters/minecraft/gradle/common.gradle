@@ -2,7 +2,10 @@ ext.targetName = providers.gradleProperty('target').getOrElse('fabric-26.3')
 ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetName]
 ext.set('loom.platform', target.loader)
 group = 'dev.overhaul'
-version = '0.1.0-SNAPSHOT'
+def sharedProperties = new Properties()
+file('../../gradle.properties').withInputStream { sharedProperties.load(it) }
+version = providers.gradleProperty('modVersion').getOrElse(sharedProperties.getProperty('modVersion'))
+if (!version || version == 'unspecified') throw new GradleException('The root modVersion is required')
 def worldSmoke = providers.gradleProperty('worldSmoke').isPresent()
 def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
@@ -53,8 +56,8 @@ dependencies {
 }
 if (modelSmoke) {
     dependencies {
-        implementation files('../../vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar',
-                '../../shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar')
+        implementation files("../../vulkan-backend/build/libs/vulkan-backend-${project.version}.jar",
+                "../../shader-pipeline/build/libs/shader-pipeline-${project.version}.jar")
     }
     tasks.withType(JavaExec).configureEach {
         systemProperty 'org.lwjgl.system.stackSize', '1024'
@@ -126,6 +129,12 @@ tasks.named('processResources') {
 }
 tasks.named('jar') {
     archiveBaseName = "overhaul-${target.loader}-${target.minecraft}"
+    if (!worldSmoke) {
+        // Older development builds shared this directory. Never package stale
+        // development-only classes, even when Gradle's incremental output retains them.
+        exclude 'dev/overhaul/minecraft/smoke/**', 'dev/overhaul/minecraft/modelmixin/**',
+                'dev/overhaul/minecraft/ModelSmokeFactory.class'
+    }
     manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)
     if (target.loader == 'forge' && target.tier != 'legacy') {
         manifest.attributes('MixinConfigs': 'overhaul.mixins.json')
