@@ -496,4 +496,4 @@ and frame-time comparisons remain open.
 Remote CI has not executed. Complete Minecraft Vulkan scene parity, full shader
 packs, actual world-generation/loading/lighting/tick changes, all render domains,
 remaining versions, ecosystem parity and controlled performance comparisons are
-still required. See `IMPLEMENTATION_STATUS.md` and `roadmap.md`.
+still required. See [server query evidence](ENTITY_QUERY_VALIDATION.md), `IMPLEMENTATION_STATUS.md` and `roadmap.md`.

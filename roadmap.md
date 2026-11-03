@@ -354,3 +354,63 @@ renderer/shader/world/server/version/performance acceptance scope stays open.
 - Input-size reduction is not a measured FPS gain. Entity/block-entity instancing,
   remaining renderers/versions, complete shader packs, world/server systems,
   broader compatibility and controlled benchmarks remain acceptance work.
+
+## Active server section-query integration
+
+Integrate bounded range seeks into the existing 26.3 entity section index. Small
+queries should avoid scanning distant Z/Y keys in each X column without creating
+a second index or retaining entity bounds. Keep the actual full-column AVL
+iterator at callback boundaries. Track structural changes per storage instance;
+after a callback mutates membership, drain that same iterator with the original
+filters so its prefetched next-node semantics survive. Nested queries must keep
+independent traversal locals. Large, unsupported and foreign-thread queries keep
+the original method. A derived primitive count per X column admits long, sparse
+workloads; counts affect strategy rather than entity membership. Diagnostic
+counters are opt-in, instance-owned and read-only.
+
+Compare against the untouched resolved game method for key order, padding,
+negative coordinates, visibility, aborts, nested queries and insert/remove/reinsert
+callbacks. Then exercise actual integrated-server entity queries, entity movement,
+removal, tracking visibility and ordinary ticks in a uniquely named disposable
+world, comparing with a scoped call to the original method. Package all 11 loader
+targets with the integration isolated to the matching 26.3 sources. Keep source
+files below 500 lines and commit runtime, proof and evidence atomically. This
+does not complete pathfinding, tick scheduling, rendering or remaining versions.
+
+## Server query checkpoint: 2026-11-03
+
+- Matching 26.3 artifacts hook the actual entity section storage. Derived primitive
+  column counts admit sparse queries; full-column iterators retain callback
+  prefetch behavior through structural mutation and nested queries.
+- Each pinned 26.3 loader passes 23 query oracle cases plus a descriptor test.
+  The real integrated server passes 21 ordered original-method comparisons,
+  movement/removal/tracking checks, 40 ordinary ticks and cleanup of 73 fixtures.
+- All 11 loader packages and input/artifact receipts pass, alongside 229 recorded
+  JUnit checks and the complete terrain/occlusion/particle/weather Vulkan suite.
+  NeoForge test sources receive game dependencies through its documented API.
+- Seven controlled helper workloads show substantial sparse-column gains and
+  measurable residual routing overhead. Full tick-time, Mixin entry cost and
+  allocations are still open. See [query validation](docs/ENTITY_QUERY_VALIDATION.md).
+- Occupancy admission now replaces the prefix's cost-estimation role. A next
+  measured simplification can remove redundant prefix scanning while keeping
+  full-column interval iterators, the Long.MIN_VALUE seek guard and exact
+  mutation draining. That change is proposed, not implemented in this checkpoint.
+- Dedicated servers, live Forge/NeoForge sessions, other versions/mods and full
+  tick/pathfinding ownership remain required, as does the original full scope.
+
+## Next ordinary model-rendering contract
+
+The pinned model feature path CPU-expands animated entity and chest-model cubes.
+Use an owned `FeatureRenderer` registered for `ModelFeatureRenderer.TYPE`;
+`RenderTypeFeatureRenderer.prepareGroup` is final. Preserve actual `setupAnim`,
+hierarchy visibility/skipDraw and child order. Cache actual polygon geometry,
+UVs and winding, then copy immutable part poses, color, overlay and light into
+frame-owned instance records. Do not retain shared mutable model poses.
+
+Classic translucency sorts both submits and individual quads; cube-only grouping
+cannot preserve arbitrary face order. Keep cached quad ranges and the actual
+game sort contract. Normal handling must preserve conditional normalization and
+signed-byte quantization. Sprite UV mappings and pose-dependent sheeted decals
+need explicit equivalent paths. Preserve phase order, prepared render-type state,
+resource reload and fenced lifetimes. Items, moving blocks and custom geometry
+are additional domains. This is a design contract, not an implementation claim.

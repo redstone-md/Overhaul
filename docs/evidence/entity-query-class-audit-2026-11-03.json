@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "auditedAtUtc": "2026-11-03T19:49:05.4617112Z",
+  "scope": "Static audit of resolved primary game classes for the pinned 26.3 Fabric, Forge and NeoForge targets; no build, Mixin application or runtime verification.",
+  "className": "net.minecraft.world.level.entity.EntitySectionStorage",
+  "disassembler": "javap -c -p from installed Temurin JDK 25.0.3",
+  "methodDescriptor": "forEachAccessibleNonEmptySection(Lnet/minecraft/world/phys/AABB;Lnet/minecraft/util/AbortableIterationConsumer;)V",
+  "normalization": {
+    "methodExtractionRegex": "(?s)  public void forEachAccessibleNonEmptySection.*?(?=\\n  (?:public|private|protected))",
+    "instructionsExtractionRegex": "(?s)    Code:\\n(.*)",
+    "steps": [
+      "Join javap output lines with LF.",
+      "Extract the method with methodExtractionRegex.",
+      "Extract the Code body with instructionsExtractionRegex; trim leading and trailing whitespace.",
+      "Replace constant-pool references matching #\\d+ with #.",
+      "Collapse every whitespace run matching \\s+ into one ASCII space; trim.",
+      "SHA-256 the resulting UTF-8 bytes without BOM or trailing newline."
+    ],
+    "retained": "Instruction byte offsets, opcodes, operands, branch targets and resolved symbolic comments."
+  },
+  "allNormalizedInstructionBodiesEqual": true,
+  "fastutil": {
+    "coordinate": "it.unimi.dsi:fastutil:8.5.18",
+    "source": "C:/Users/user/.gradle/caches/fabric-loom/26.3/mojang_minecraft_info.json",
+    "neoForgeArtifactManifest": "D:/code/overhaul/platform-adapters/minecraft/build/neoforge-26.3/tmp/createMinecraftArtifacts/nfrt_artifact_manifest.properties",
+    "treeImplementation": "it.unimi.dsi.fastutil.longs.LongAVLTreeSet",
+    "limitation": "Metadata and audited constructor identify the version and tree; this audit does not measure live class-loader selection."
+  },
+  "invariants": {
+    "paddingBlocks": {
+      "minX": -2,
+      "minY": -4,
+      "minZ": -2,
+      "maxX": 2,
+      "maxY": 0,
+      "maxZ": 2
+    },
+    "xTraversal": "Ascending inclusive section X coordinates.",
+    "columnBounds": "sectionIds.subSet(SectionPos.asLong(x,0,0), SectionPos.asLong(x,-1,-1)+1), upper bound exclusive.",
+    "columnOrder": "Natural signed-long LongAVLTreeSet iteration order.",
+    "callbackSequence": [
+      "iterator.nextLong()",
+      "Decode Y and Z; check inclusive query bounds.",
+      "sections.get(key)",
+      "Skip null, empty or inaccessible sections.",
+      "consumer.accept(section).shouldAbort(); return entire traversal on abort."
+    ],
+    "fields": "private final Long2ObjectMap sections; private final LongSortedSet sectionIds.",
+    "initialization": "Constructor allocates Long2ObjectOpenHashMap and LongAVLTreeSet.",
+    "creation": "getOrCreateSection(J) uses sections.computeIfAbsent; createSection(J)Lnet/minecraft/world/level/entity/EntitySection; is private and calls sectionIds.add(J).",
+    "removal": "remove(J)V calls sections.remove(J), then sectionIds.remove(J).",
+    "additionalSectionIdMutationMethods": [],
+    "hookCoverage": "The current createSection(J)Lnet/minecraft/world/level/entity/EntitySection; and remove(J)V HEAD hooks cover every sectionIds add/remove in these audited classes."
+  },
+  "artifacts": [
+    {
+      "loader": "fabric",
+      "minecraft": "26.3",
+      "loaderVersion": "0.20.1",
+      "artifactPath": "C:/Users/user/.gradle/caches/fabric-loom/26.3/minecraft-client.jar",
+      "classEntry": "net/minecraft/world/level/entity/EntitySectionStorage.class",
+      "classSha256": "aa183f53770c9b3507bd8cbff64dbc06d113906eadba2c731b110d8c7ebeb1ba",
+      "classBytes": 11394,
+      "normalizedForEachInstructionSha256": "3d2515cffb4e538e373ad7389fe27e8945ef19690b40d9b40abda1aa1fc8110a",
+      "normalizedInstructionCharacters": 3665,
+      "structuralMutationCalls": [
+        {
+          "method": "private net.minecraft.world.level.entity.EntitySection<T> createSection(long);",
+          "instruction": "25: invokeinterface #206,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.add:(J)Z"
+        },
+        {
+          "method": "public void remove(long);",
+          "instruction": "16: invokeinterface #242,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.remove:(J)Z"
+        }
+      ]
+    },
+    {
+      "loader": "forge",
+      "minecraft": "26.3",
+      "loaderVersion": "66.1.5",
+      "artifactPath": "D:/code/overhaul/platform-adapters/minecraft/.gradle/mavenizer/repo/net/minecraftforge/forge/26.3-66.1.5/forge-26.3-66.1.5.jar",
+      "classEntry": "net/minecraft/world/level/entity/EntitySectionStorage.class",
+      "classSha256": "42a8c304636d45bc57ed9f5e9afd89e6f2365f61a110379071c3f2eb80e7e698",
+      "classBytes": 9036,
+      "normalizedForEachInstructionSha256": "3d2515cffb4e538e373ad7389fe27e8945ef19690b40d9b40abda1aa1fc8110a",
+      "normalizedInstructionCharacters": 3665,
+      "structuralMutationCalls": [
+        {
+          "method": "private net.minecraft.world.level.entity.EntitySection<T> createSection(long);",
+          "instruction": "25: invokeinterface #204,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.add:(J)Z"
+        },
+        {
+          "method": "public void remove(long);",
+          "instruction": "16: invokeinterface #240,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.remove:(J)Z"
+        }
+      ]
+    },
+    {
+      "loader": "neoforge",
+      "minecraft": "26.3",
+      "loaderVersion": "26.3.0.101",
+      "artifactPath": "D:/code/overhaul/platform-adapters/minecraft/build/neoforge-26.3/moddev/artifacts/minecraft-patched-26.3.0.101.jar",
+      "classEntry": "net/minecraft/world/level/entity/EntitySectionStorage.class",
+      "classSha256": "6d56aca7e93a221746a4650352104206ca1b563890741ea06f6d9361f6780ba4",
+      "classBytes": 11227,
+      "normalizedForEachInstructionSha256": "3d2515cffb4e538e373ad7389fe27e8945ef19690b40d9b40abda1aa1fc8110a",
+      "normalizedInstructionCharacters": 3665,
+      "structuralMutationCalls": [
+        {
+          "method": "private net.minecraft.world.level.entity.EntitySection<T> createSection(long);",
+          "instruction": "25: invokeinterface #204,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.add:(J)Z"
+        },
+        {
+          "method": "public void remove(long);",
+          "instruction": "16: invokeinterface #240,  3          // InterfaceMethod it/unimi/dsi/fastutil/longs/LongSortedSet.remove:(J)Z"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Third-party transformers or Mixins can change these semantics after loading.",
+    "This evidence proves static equality of the pinned artifacts only.",
+    "It does not establish a runtime or performance result."
+  ]
+}

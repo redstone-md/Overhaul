@@ -1,0 +1,300 @@
+{
+  "verifiedAtUtc": "2026-11-03T20:08:08.978018+00:00",
+  "sourceCommit": "a17f5dc1ae46f65448aeacaca6d8a9a87d8d8a98",
+  "runtimeCommit": "c385de8",
+  "proofCommit": "a17f5dc",
+  "loaderInputsSha256": "c08f778a1f2c5960406c3956a6ae90ba08e8c12baec98f33130f070e0f9436d1",
+  "scope": "Actual pinned26.3 EntitySectionStorage integration; primary game index, derived X-column occupancy strategy cache; all other original overhaul requirements remain acceptance work.",
+  "tests": {
+    "engineUnit": 74,
+    "portableNative": 17,
+    "adapterGpu": 30,
+    "terrainNativeParity": 3,
+    "terrainGeometryCapture": 1,
+    "particlePipelineContract": 1,
+    "weatherWriter": 2,
+    "ownedShaderSource": 1,
+    "backendRange": 2,
+    "terrainWorkers": 4,
+    "normalLoader": 94,
+    "total": 229
+  },
+  "testCounting": "Normal-loader94 includes23 query-oracle and1 hook test for each of three26.3 loaders plus22 existing loader checks. Duplicate backend-default copies of these and entrypoint checks are excluded fromtotal.",
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "commands": [
+    ".\\gradlew.bat build :integration-tests:nativeTest --console=plain",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' build queryBenchmark --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PworldSmoke -PquerySmoke verifyWorldSmoke --console=plain --no-configuration-cache",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1",
+    ".\\platform-adapters\\minecraft\\verify-targets.ps1 -CheckReceipts",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --console=plain --no-configuration-cache",
+    ".\\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --console=plain --no-configuration-cache"
+  ],
+  "admission": {
+    "maxExpandedCells": 256,
+    "maxIntervalSeeks": 32,
+    "prefixKeysPerQualifiedColumn": 8,
+    "columnCountMustExceed": 32,
+    "columnCountMustExceedTimesQueryYZCells": 4,
+    "derivedCache": "One primitive section count per X column; no entity positions/bounds/membership copy; strategy only"
+  },
+  "queryWorld": {
+    "world": "overhaul-smoke-e98ade5d-6472-4cb7-b5a0-d7c6caaad0f6",
+    "fixtureSections": 72,
+    "ownedEntitiesRemoved": 73,
+    "orderedOracleCases": 21,
+    "ordinaryWorldTicks": 40,
+    "pigTicks": 40,
+    "ordinaryOptimizedQueryDelta": 3126,
+    "finalStatistics": {
+      "queries": 3143,
+      "fallbacks": 47,
+      "seeks": 2379,
+      "visitedKeys": 29737,
+      "mutationFallbacks": 0,
+      "acceptedSections": 3147,
+      "vanillaBypasses": 24,
+      "prefixKeys": 25144,
+      "prefixDrains": 0,
+      "columnDrains": 0,
+      "columns": 1,
+      "longColumns": 0
+    },
+    "normalClientBackend": "OpenGL; this is a server integration proof"
+  },
+  "benchmark": {
+    "diagnostics": false,
+    "interleavedPairs": 6,
+    "datasets": [
+      {
+        "name": "populated-column-local-hits",
+        "medianOriginalNsPerQuery": 13212.585,
+        "medianCandidateNsPerQuery": 146.53,
+        "medianPairedCandidateToOriginalRatio": 0.01090618737883722
+      },
+      {
+        "name": "populated-column-local-misses",
+        "medianOriginalNsPerQuery": 13429.58,
+        "medianCandidateNsPerQuery": 106.565,
+        "medianPairedCandidateToOriginalRatio": 0.007872411708151204
+      },
+      {
+        "name": "many-global-sections-short-local-columns",
+        "medianOriginalNsPerQuery": 35.2185,
+        "medianCandidateNsPerQuery": 42.1655,
+        "medianPairedCandidateToOriginalRatio": 1.1438747329502457
+      },
+      {
+        "name": "dense-local-256-cells-32-seek-budget",
+        "medianOriginalNsPerQuery": 2751.0955,
+        "medianCandidateNsPerQuery": 2826.2690000000002,
+        "medianPairedCandidateToOriginalRatio": 1.0232472911073436
+      },
+      {
+        "name": "short-populated-48-section-layout",
+        "medianOriginalNsPerQuery": 146.45850000000002,
+        "medianCandidateNsPerQuery": 150.404,
+        "medianPairedCandidateToOriginalRatio": 1.0242460348677587
+      },
+      {
+        "name": "live-fixture-shaped-72-sections",
+        "medianOriginalNsPerQuery": 217.138,
+        "medianCandidateNsPerQuery": 109.402,
+        "medianPairedCandidateToOriginalRatio": 0.5231259042835955
+      },
+      {
+        "name": "small-tree-vanilla-fallback",
+        "medianOriginalNsPerQuery": 17.216,
+        "medianCandidateNsPerQuery": 24.7595,
+        "medianPairedCandidateToOriginalRatio": 1.2742362981680464
+      }
+    ],
+    "limitations": "In-process helper and original fallback, excluding transformed Mixin entry cost, actual AI callbacks, full server ticks and FPS. Routing overhead remains onshort/dense/fallback layouts; no universal speedup claim."
+  },
+  "regression": {
+    "backend": "Overhaul Vulkan",
+    "device": "NVIDIA GeForce RTX 5070",
+    "terrainStages": 4,
+    "occlusionStages": 4,
+    "particleStages": 3,
+    "weatherStages": 7,
+    "allStatus": "PASS",
+    "closed": true,
+    "twoRepresentativeReadbacksVisuallyInspected": true,
+    "liveWeatherPixelCases": 2,
+    "weatherParityPngReuse": "Current four controlled parity images are byte-identical to the retained backend-weather-parity images referenced below."
+  },
+  "counterMeaning": "Query counters count traversal calls and sectionkeys, not entities/ticktime. Backend counters aggregate accepted native calls from all rendered domains.",
+  "validationLayers": false,
+  "liveForgeNeoForgeVerified": false,
+  "realWorldPerformanceCompared": false,
+  "openAcceptance": [
+    "Full server workload/Mixin-entry/allocationprofiling and residualroutingoverhead",
+    "Measured removal of now-redundant prefix machinery after occupancyadmission",
+    "Dedicated server, other loaders live, mods and remainingversions",
+    "Earlier intermittent occlusion-open smoke timeout remains unresolved; current regressionpassed",
+    "Entity/blockentity/other renderdomain instancing, full shaderpacks, generation/loading/lighting/tick/pathfinding and originalcrossversion outcome"
+  ],
+  "artifacts": [
+    {
+      "file": "core-common/build/libs/core-common-0.1.0-SNAPSHOT.jar",
+      "sha256": "b282c505a465af7b4daeaf50309075fc74916fcfa71901a77f7e769339a6cf6f"
+    },
+    {
+      "file": "platform-adapters/build/libs/platform-adapters-0.1.0-SNAPSHOT.jar",
+      "sha256": "11f1aa6e2fc45278673985e3b5682ffa0ed4698ea4eacc15e25d995eeef02c9b"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT.jar",
+      "sha256": "728654fd27744cc0398150b36ec0961be9d4c494e314149f7229e14eab3dd09b"
+    },
+    {
+      "file": "shader-pipeline/build/libs/shader-pipeline-0.1.0-SNAPSHOT.jar",
+      "sha256": "07b3f61ac9e289fb763d60b1b90e77de6aecf782458e0c7285b4142e698e97b0"
+    },
+    {
+      "file": "vulkan-backend/build/libs/vulkan-backend-0.1.0-SNAPSHOT-sdl34.jar",
+      "sha256": "c85bd93c5eb87ccbc71ce1dd73a06c579a5a065777a6ec606fec79b72b3eb3bf"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-26.3-backend/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "70ed39676317901f956b9240213bfa034cea9e4d8d412134f462d6aff4b28305"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-1.16.5/libs/overhaul-fabric-1.16.5-0.1.0-SNAPSHOT.jar",
+      "sha256": "bf5a9eae0cb2baf06229f9eec6f48c0340cc8f5f95c0d9efb8b19a97be4d8982"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-1.20.1/libs/overhaul-fabric-1.20.1-0.1.0-SNAPSHOT.jar",
+      "sha256": "f0fb53daa38f46dff586108eea93121305b1e22a76f803a62760de4ea03b0ed0"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-1.21.1/libs/overhaul-fabric-1.21.1-0.1.0-SNAPSHOT.jar",
+      "sha256": "5d47043e6ea60612d670ee2a8e90c747e15698ecf4b4c1c65fa41289e92768d2"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/fabric-26.3/libs/overhaul-fabric-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "7bfd8d22285e7a6070f629c4a6d355c75f63d8463afe25571566b58cde929174"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/forge-1.12.2/libs/overhaul-forge-1.12.2-0.1.0-SNAPSHOT.jar",
+      "sha256": "f43999809f74eafd35af743ce270fd9a1768b860db1a07a45557a0d7c1c43248"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/forge-1.16.5/libs/overhaul-forge-1.16.5-0.1.0-SNAPSHOT.jar",
+      "sha256": "70adb9418d174307e4b9cc91187cd1010ea64e52a7774df487ae90db742dba6c"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/forge-1.20.1/libs/overhaul-forge-1.20.1-0.1.0-SNAPSHOT.jar",
+      "sha256": "7a9d2ec2ffd4bbda707dd146c79406295c06c085f683ff8c55f56f907c384de9"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/forge-1.21.1/libs/overhaul-forge-1.21.1-0.1.0-SNAPSHOT.jar",
+      "sha256": "87ba602d8712c95730a24cc04c9d20a776ad52e0a0259798044fe55a2b5ee382"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/forge-26.3/libs/overhaul-forge-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "8f3fcf98d31ddfd4e4e3e2c68e33070e78f5181ad73f01c221a3535fb43e1cdd"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/neoforge-1.21.1/libs/overhaul-neoforge-1.21.1-0.1.0-SNAPSHOT.jar",
+      "sha256": "2b0e35fc7de1e91c095b8c7fde8c5ad6e21574b8c5ac13fd85cc43149c287332"
+    },
+    {
+      "file": "platform-adapters/minecraft/build/neoforge-26.3/libs/overhaul-neoforge-26.3-0.1.0-SNAPSHOT.jar",
+      "sha256": "96f2ca781af770993fcf157bfed56fb88160e10698427fa29666acead2b95571"
+    }
+  ],
+  "evidence": [
+    {
+      "file": "entity-query-backend-occlusion-2026-11-03.json",
+      "sha256": "05b3ed85e87b32a070f5e9492e3dfecda30103f5d1f81507bf92073a5722e24d"
+    },
+    {
+      "file": "entity-query-backend-occlusion-open-2026-11-03.png",
+      "sha256": "58de36a59aca57cd64bee6122979817370a5abf177c127456df5721f5c52aa71"
+    },
+    {
+      "file": "entity-query-backend-particles-2026-11-03.json",
+      "sha256": "8d703c1f4a4ea150996ab429d529250b02d8852081f7c43f33ae4b4041420e0e"
+    },
+    {
+      "file": "entity-query-backend-shutdown-2026-11-03.json",
+      "sha256": "35e5dffad54aa44954bde00679b37627d710de95c04a4caa400e5cad16a1ad8a"
+    },
+    {
+      "file": "entity-query-backend-terrain-2026-11-03.json",
+      "sha256": "f4521729961e014ae392b47073758f9ee43288dc2b5076c573f7a1698ac956e8"
+    },
+    {
+      "file": "entity-query-backend-weather-2026-11-03.json",
+      "sha256": "f543e9fe7b26e6bfea5b2f06844683cd87c78b73206d0501457257b3127a8f46"
+    },
+    {
+      "file": "entity-query-backend-weather-mixed-2026-11-03.png",
+      "sha256": "6cd447e488b82a31a2d852cd1d6fbd3cc9713854f6227d51d163fac9a47b583d"
+    },
+    {
+      "file": "entity-query-backend-world-2026-11-03.json",
+      "sha256": "26a9c58a2aac71b7899e5b1c864ec748f08512a89752cd9422a373572b66888b"
+    },
+    {
+      "file": "entity-query-benchmark-2026-11-03.json",
+      "sha256": "d468408ec027f734a5e6cf86c1943566b535d6a05ef329a662a08652d7a838ef"
+    },
+    {
+      "file": "entity-query-benchmark-initial-2026-11-03.json",
+      "sha256": "c57755f6edbaf2676655d13f709229dbed43287150597f9950097fdda0b1d316"
+    },
+    {
+      "file": "entity-query-benchmark-prefix-2026-11-03.json",
+      "sha256": "5778f91d3833c3415081e238f8a9bc6e52c71f1913b9e0046817d26b687e982d"
+    },
+    {
+      "file": "entity-query-class-audit-2026-11-03.json",
+      "sha256": "95291141b1156e7d4a5b71236b870961f955739b510724aabfaf1ca7dafbd989"
+    },
+    {
+      "file": "entity-query-fixture-2026-11-03.json",
+      "sha256": "a7f5a7697392cc07dd48c6b658b8238b9167071d9ce8fac777b4756797790834"
+    },
+    {
+      "file": "entity-query-initial-traversal-2026-11-03.txt",
+      "sha256": "157a158d066df5a9fa38bf771b2f4304a6b1b7e8895ca0451ba5f301a84f2dc6"
+    },
+    {
+      "file": "entity-query-prefix-traversal-2026-11-03.txt",
+      "sha256": "ac02c974bcae081ef42a6a666ce786a6a149c200b2d02f7be853ba5708fd976f"
+    },
+    {
+      "file": "entity-query-tests-2026-11-03.json",
+      "sha256": "904b180fec479f47cface8e23bc92d4a205448d632ff02f7059a101b451eb31e"
+    },
+    {
+      "file": "entity-query-world-2026-11-03.json",
+      "sha256": "6d19685efb41fd554272c66c2d6ddd2ee7dd5f21db48b75b6bab67e0ec15ad70"
+    },
+    {
+      "file": "loader-targets-queries-2026-11-03.json",
+      "sha256": "c5137f0796dbe8015bf47427589813d1d6127003cb5b0b1f79521b05c7fbf7a7"
+    },
+    {
+      "file": "backend-weather-parity-rain-reference-2026-11-03.png",
+      "sha256": "1b24839e26144e8b769be6a805ef8ebe81774aeab2cc4b5ae767ff5bbe08c615"
+    },
+    {
+      "file": "backend-weather-parity-rain-instanced-2026-11-03.png",
+      "sha256": "1b24839e26144e8b769be6a805ef8ebe81774aeab2cc4b5ae767ff5bbe08c615"
+    },
+    {
+      "file": "backend-weather-parity-snow-reference-2026-11-03.png",
+      "sha256": "15f038b9a8e11e5e77a7a860810e3ebaf70b9382ae60a2aecf57abc0b58d8e23"
+    },
+    {
+      "file": "backend-weather-parity-snow-instanced-2026-11-03.png",
+      "sha256": "15f038b9a8e11e5e77a7a860810e3ebaf70b9382ae60a2aecf57abc0b58d8e23"
+    }
+  ]
+}

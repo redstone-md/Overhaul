@@ -131,3 +131,9 @@ Ordinary rain and snow also use indexed indirect instancing with 48-byte column
 records. The particle and weather paths share owned rendering helpers. See
 [weather integration](docs/WEATHER_INTEGRATION.md) for data, lifecycle and live
 pixel-verification boundaries.
+
+The pinned 26.3 adapters also use range seeks for sparse entity section queries
+on the existing index, with original traversal for short/dense workloads. Live server
+checks preserve ordered results across movement, removal and tracking changes.
+See [entity query integration](docs/ENTITY_QUERY_INTEGRATION.md) and its measured
+performance boundaries.

@@ -1,0 +1,451 @@
+{
+  "timestamp": "2026-11-03T19:51:31.053817400Z",
+  "javaVersion": "25.0.3",
+  "javaVm": "OpenJDK 64-Bit Server VM",
+  "javaVendor": "Eclipse Adoptium",
+  "os": "Windows 11",
+  "osVersion": "10.0",
+  "architecture": "amd64",
+  "availableProcessors": 16,
+  "maxHeapBytes": 8535408640,
+  "jvmArguments": [
+    "-Dfile.encoding=UTF-8",
+    "-Duser.country=RU",
+    "-Duser.language=ru",
+    "-Duser.variant"
+  ],
+  "pairs": 6,
+  "warmupRounds": 4,
+  "diagnostics": false,
+  "pairOrder": [
+    "original-first",
+    "candidate-first",
+    "original-first",
+    "candidate-first",
+    "original-first",
+    "candidate-first"
+  ],
+  "ratioDefinition": "candidate ns/query divided by original ns/query; above 1 is slower",
+  "checksumSink": 7080855041066537728,
+  "datasets": [
+    {
+      "name": "populated-column-local-hits",
+      "sections": 2000,
+      "queries": 4,
+      "iterationsPerRound": 10000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "originalNsPerQuery": [
+        19488.13,
+        19114.43,
+        19179.65,
+        19137.6,
+        19235.25,
+        17294.01
+      ],
+      "candidateNsPerQuery": [
+        252.43,
+        227.46,
+        185.84,
+        225.3,
+        918.22,
+        168.0
+      ],
+      "candidateToOriginalRatios": [
+        0.012953012936592685,
+        0.011899910172576425,
+        0.009689436459997966,
+        0.011772636067218461,
+        0.04773631743803694,
+        0.009714346181134394
+      ],
+      "acceptedSectionsPerRound": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ],
+      "checksums": [
+        8787843815000,
+        8787843815000,
+        8787843815000,
+        8787843815000,
+        8787843815000,
+        8787843815000
+      ],
+      "medianOriginalNsPerQuery": 19158.625,
+      "medianCandidateNsPerQuery": 226.38,
+      "medianPairRatio": 0.011836273119897444
+    },
+    {
+      "name": "populated-column-local-misses",
+      "sections": 2000,
+      "queries": 4,
+      "iterationsPerRound": 10000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "originalNsPerQuery": [
+        17166.73,
+        17169.63,
+        17758.31,
+        17338.49,
+        17080.11,
+        17122.61
+      ],
+      "candidateNsPerQuery": [
+        141.39,
+        148.56,
+        143.01,
+        140.73,
+        155.6,
+        149.44
+      ],
+      "candidateToOriginalRatios": [
+        0.00823628029333484,
+        0.008652486978461387,
+        0.00805313118196495,
+        0.008116623765968084,
+        0.009110011586576433,
+        0.008727641405136249
+      ],
+      "acceptedSectionsPerRound": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "checksums": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "medianOriginalNsPerQuery": 17168.18,
+      "medianCandidateNsPerQuery": 145.785,
+      "medianPairRatio": 0.008444383635898113
+    },
+    {
+      "name": "many-global-sections-short-local-columns",
+      "sections": 2048,
+      "queries": 4,
+      "iterationsPerRound": 100000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "originalNsPerQuery": [
+        146.597,
+        48.607,
+        46.233,
+        46.109,
+        45.922,
+        46.207
+      ],
+      "candidateNsPerQuery": [
+        116.386,
+        62.568,
+        63.439,
+        64.518,
+        64.635,
+        63.022
+      ],
+      "candidateToOriginalRatios": [
+        0.7939180201504805,
+        1.2872220050609995,
+        1.3721584149849675,
+        1.3992496041987463,
+        1.4074953181481644,
+        1.3639059017032051
+      ],
+      "acceptedSectionsPerRound": [
+        100000,
+        100000,
+        100000,
+        100000,
+        100000,
+        100000
+      ],
+      "checksums": [
+        95409997950000,
+        95409997950000,
+        95409997950000,
+        95409997950000,
+        95409997950000,
+        95409997950000
+      ],
+      "medianOriginalNsPerQuery": 46.22,
+      "medianCandidateNsPerQuery": 63.9785,
+      "medianPairRatio": 1.3680321583440862
+    },
+    {
+      "name": "dense-local-256-cells-32-seek-budget",
+      "sections": 256,
+      "queries": 1,
+      "iterationsPerRound": 100000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          4,
+          16,
+          4
+        ]
+      ],
+      "originalNsPerQuery": [
+        4035.615,
+        4125.22,
+        4200.068,
+        4003.561,
+        4037.483,
+        4106.212
+      ],
+      "candidateNsPerQuery": [
+        5136.323,
+        5431.072,
+        5177.75,
+        5159.397,
+        5117.102,
+        5059.915
+      ],
+      "candidateToOriginalRatios": [
+        1.2727485154059544,
+        1.3165532989755697,
+        1.23277765979027,
+        1.2887019830595812,
+        1.2673990206274552,
+        1.2322585877202636
+      ],
+      "acceptedSectionsPerRound": [
+        25600000,
+        25600000,
+        25600000,
+        25600000,
+        25600000,
+        25600000
+      ],
+      "checksums": [
+        28151188258400000,
+        28151188258400000,
+        28151188258400000,
+        28151188258400000,
+        28151188258400000,
+        28151188258400000
+      ],
+      "medianOriginalNsPerQuery": 4071.8475000000003,
+      "medianCandidateNsPerQuery": 5147.860000000001,
+      "medianPairRatio": 1.270073768016705
+    },
+    {
+      "name": "live-fixture-shaped-48-sections",
+      "sections": 48,
+      "queries": 4,
+      "iterationsPerRound": 100000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "originalNsPerQuery": [
+        444.903,
+        137.306,
+        129.503,
+        136.727,
+        129.613,
+        135.997
+      ],
+      "candidateNsPerQuery": [
+        147.954,
+        149.934,
+        153.802,
+        149.951,
+        153.253,
+        146.068
+      ],
+      "candidateToOriginalRatios": [
+        0.3325533880418878,
+        1.0919697609718437,
+        1.1876327189331521,
+        1.09671827802848,
+        1.182389112203251,
+        1.0740531041125907
+      ],
+      "acceptedSectionsPerRound": [
+        100000,
+        100000,
+        100000,
+        100000,
+        100000,
+        100000
+      ],
+      "checksums": [
+        76998248325000,
+        76998248325000,
+        76998248325000,
+        76998248325000,
+        76998248325000,
+        76998248325000
+      ],
+      "medianOriginalNsPerQuery": 136.36200000000002,
+      "medianCandidateNsPerQuery": 149.9425,
+      "medianPairRatio": 1.094344019500162
+    },
+    {
+      "name": "small-tree-vanilla-fallback",
+      "sections": 8,
+      "queries": 4,
+      "iterationsPerRound": 100000,
+      "warmupIterationsPerPathPerRound": 5000,
+      "querySectionDimensions": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "originalNsPerQuery": [
+        28.183,
+        26.895,
+        31.435,
+        26.336,
+        27.306,
+        27.064
+      ],
+      "candidateNsPerQuery": [
+        35.927,
+        35.017,
+        30.86,
+        30.59,
+        31.738,
+        31.649
+      ],
+      "candidateToOriginalRatios": [
+        1.274775573927545,
+        1.3019892173266407,
+        0.9817082869413075,
+        1.1615279465370596,
+        1.162308650113528,
+        1.1694132426840083
+      ],
+      "acceptedSectionsPerRound": [
+        100000,
+        100000,
+        100000,
+        100000,
+        100000,
+        100000
+      ],
+      "checksums": [
+        87121982250000,
+        87121982250000,
+        87121982250000,
+        87121982250000,
+        87121982250000,
+        87121982250000
+      ],
+      "medianOriginalNsPerQuery": 27.185000000000002,
+      "medianCandidateNsPerQuery": 31.6935,
+      "medianPairRatio": 1.1658609463987681
+    }
+  ],
+  "candidateSourceSha256": "ac02c974bcae081ef42a6a666ce786a6a149c200b2d02f7be853ba5708fd976f",
+  "candidate": "Adaptive eight-key-prefix traversal before occupancy-based admission"
+}

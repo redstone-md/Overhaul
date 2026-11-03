@@ -6,7 +6,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Requested capability | Current evidence | Remaining acceptance |
 | --- | --- | --- |
 | Unified Gradle monorepo | Pinned, checksum-verified wrapper; five engine modules; Java 8/17 output; engine build passes | Loader artifacts and gameplay must be checked separately |
-| Fabric, Forge, NeoForge | All 11 pinned targets build; 22 loader tests and source/artifact receipts pass | Full client/server gameplay and remaining releases in the requested range |
+| Fabric, Forge, NeoForge | All 11 pinned targets build; 94 normal loader checks and source/artifact receipts pass | Full client/server gameplay and remaining releases in the requested range |
 | Legacy/intermediate/modern separation | Java 8 common contracts; loader-specific source sets; isolated legacy CoreMod toolchain | Real legacy game execution and rendering integration |
 | Owned native resources | Vulkan context, queue, VMA buffers, image ownership, descriptors and teardown | Validation-layer runs and broader GPU/OS coverage |
 | Indexed indirect rendering | Ordinary 26.3 terrain, quad particles and rain/snow use native indirect instanced draws; actual-builder pixel parity and normal/OIT/reload paths verified | Entity/block-entity and custom particle domains, every remaining loader/version and controlled throughput |
@@ -20,7 +20,7 @@ The full requested outcome remains the acceptance target in `roadmap.md`.
 | Lighting | Async emissive propagation over immutable snapshots | Vanilla skylight, light updates and cross-chunk engine parity |
 | Generation/loading | Async immutable generator callbacks and a checked pooled snapshot codec | Integration with Minecraft generation stages, region/NBT codecs and loading dependencies |
 | Memory churn | Reused slabs/worker scratch, fixed-budget streaming terrain pages, mapped GPU buffers and camera storage; particles/weather copy compact instances without four-vertex expansion | Allocations remain in extraction/group preparation, game tessellators, snapshots, futures and upload bookkeeping; no zero-allocation claim |
-| Tick/entity/path queries | Owner-thread spatial hash and cooperative tick budgets with correctness tests | Wire actual server/entity tracking and pathfinder behavior and measure improvement |
+| Tick/entity/path queries | Actual 26.3 section queries use occupancy-admitted range seeks on the game's index, preserving callback mutation order; live server movement/removal/tracking/oracle checks pass | Full tick/pathfinding changes, remaining versions, dedicated-server/ecosystem runs and controlled real-workload performance |
 | Renderer replacement | Opt-in Fabric 26.3 selects only Overhaul's native backend; actual GUI, continuous terrain edits, fluid/chest frames, resource reload and orderly teardown verified | Complete render-domain/session/mod parity, every remaining loader/version, packaging and throughput |
 | Ecosystem compatibility | Strict lifecycle hooks and explicit dependency boundaries | In-game tests with major mods, reloads, dimensions, unloads, disconnects and dedicated servers |
 | Performance | Geometry reduction and specific native execution paths verified | Controlled vanilla comparisons of FPS/frame times, memory, loading and tick costs |
@@ -100,12 +100,15 @@ game builder, avoiding a partially constructed headless game object. Server
 weather/biome fixtures cover both pure precipitation types, reload, mixed columns
 and clear-state lifetime. See [weather integration](WEATHER_INTEGRATION.md).
 
-The entity-query integration remains open. The pinned game already owns a
-section index; adding a shadow point index would duplicate it and miss changing
-entity bounds. A small-query direct-map traversal could avoid AVL scans, but its
-callback mutation semantics differ: the existing AVL iterator prefetches its next
-node before invoking the callback. Preserve that behavior before replacing it;
-do not infer compatibility from static query results alone.
+The 26.3 entity-query integration now seeks within the game's authoritative
+section index. A derived primitive column count admits sparse workloads; short
+and dense columns use original traversal. Callback mutations retain the actual
+AVL iterator's prefetched successor, including insert/remove/reinsert and nested
+queries. The integrated-server proof compares 21 ordered cases with the original
+method and verifies 72 real section fixtures, ordinary tick traffic and cleanup.
+Controlled helper benchmarks show workload-specific gains and residual routing
+overhead; full tick-time and transformed-entry costs remain unmeasured. See
+[entity query integration](ENTITY_QUERY_INTEGRATION.md).
 
 Fixtures and compile checks do not prove complete Minecraft scene parity, full shader
 pack compatibility, cross-platform native behavior or performance gains. Those
