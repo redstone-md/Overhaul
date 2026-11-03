@@ -41,6 +41,7 @@ if (target.tier != 'legacy') {
     sourceSets.main.java.srcDir target.minecraft == '26.3' ? 'src/unobfuscated/java' : 'src/mapped/java'
     if (sectionQueries) sourceSets.main.java.srcDir 'src/sectionQueries/java'
     if (chunkGeneration) sourceSets.main.java.srcDir 'src/chunkGeneration/java'
+    if (chunkGeneration) sourceSets.main.java.srcDir 'src/chunkLighting/java'
     if (mappedGeneration) sourceSets.main.java.srcDir 'src/generationMapped/java'
     if (target.minecraft == '1.20.1') sourceSets.main.java.srcDir 'src/generation120/java'
     if (target.minecraft == '1.21.1') sourceSets.main.java.srcDir 'src/generation121/java'
@@ -170,7 +171,8 @@ tasks.named('processResources') {
         def json = new groovy.json.JsonSlurper().parse(config)
         def queryMixins = ['EntitySectionStorageMixin']
         if (chunkGeneration) queryMixins += 'RandomStateGenerationMixin'
-        if (mappedGeneration) queryMixins += ['ChunkMapMappedGenerationMixin', 'MinecraftServerMappedGenerationMixin']
+        if (mappedGeneration) queryMixins += ['ChunkMapMappedGenerationMixin', 'MinecraftServerMappedGenerationMixin',
+                'ChunkMapMappedLightingMixin']
         if (target.minecraft == '1.20.1') queryMixins += ['ChunkBiomeGeneration120Mixin', 'NoiseTerrainGeneration120Mixin',
                 'ChunkStatusGeneration120Mixin']
         if (target.minecraft == '1.21.1') queryMixins += ['ChunkBiomeGeneration121Mixin', 'NoiseTerrainGeneration121Mixin']

@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ChunkMap.class)
 public abstract class ChunkMapLightingMixin {
     @Shadow @Final private ServerLevel level;
-    @Unique private ChunkLightingExecutor.Strand overhaul$lightStrand;
+    @Unique private ChunkLightingExecutor.Strand<ConsecutiveExecutor> overhaul$lightStrand;
 
     // Pinned 26.3 assigns level at bytecode 130, before the second NEW at 328.
     // Factory redirect returns the same vanilla class, with both constructor
@@ -28,7 +28,8 @@ public abstract class ChunkMapLightingMixin {
             target = "net/minecraft/util/thread/ConsecutiveExecutor", ordinal = 1), require = 1, allow = 1)
     private ConsecutiveExecutor overhaul$lightExecutor(Executor vanillaExecutor, String name) {
         if (!"light".equals(name)) throw new IllegalStateException("Expected the Minecraft light strand");
-        overhaul$lightStrand = ((ChunkLightAccess) level.getServer()).overhaul$createLightStrand(vanillaExecutor, name);
+        overhaul$lightStrand = ((ChunkLightAccess) level.getServer()).overhaul$createLightStrand(vanillaExecutor, name,
+                ConsecutiveExecutor::new, ConsecutiveExecutor::close);
         return overhaul$lightStrand.executor();
     }
 

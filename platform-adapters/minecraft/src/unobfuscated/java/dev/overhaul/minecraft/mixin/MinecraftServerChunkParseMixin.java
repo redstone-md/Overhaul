@@ -9,6 +9,8 @@ import dev.overhaul.minecraft.world.ChunkGenerationExecutor;
 import dev.overhaul.minecraft.world.GenerationStateAccess;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Util;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,10 +35,11 @@ public abstract class MinecraftServerChunkParseMixin implements ChunkParseAccess
         return overhaul$chunkParser;
     }
 
-    @Override public synchronized ChunkLightingExecutor.Strand overhaul$createLightStrand(Executor vanillaExecutor, String name) {
+    @Override public synchronized <E> ChunkLightingExecutor.Strand<E> overhaul$createLightStrand(
+            Executor vanillaExecutor, String name, BiFunction<Executor, String, E> factory, Consumer<E> closer) {
         if (overhaul$chunkLightingClosed) throw new RejectedExecutionException("server chunk lighting is closed");
         if (overhaul$chunkLighting == null) overhaul$chunkLighting = new ChunkLightingExecutor(vanillaExecutor);
-        return overhaul$chunkLighting.createStrand(vanillaExecutor, name);
+        return overhaul$chunkLighting.createStrand(vanillaExecutor, name, factory, closer);
     }
 
     @Override public synchronized ChunkGenerationExecutor.World overhaul$createGenerationWorld(
