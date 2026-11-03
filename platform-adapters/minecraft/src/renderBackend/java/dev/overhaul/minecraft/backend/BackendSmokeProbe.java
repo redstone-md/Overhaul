@@ -11,6 +11,8 @@ import dev.overhaul.minecraft.terrain.TerrainCompilerAccess;
 import dev.overhaul.minecraft.terrain.TerrainDispatcherAccess;
 import dev.overhaul.minecraft.terrain.TerrainCullingAccess;
 import dev.overhaul.minecraft.terrain.TerrainCullingController;
+import dev.overhaul.minecraft.particle.OverhaulQuadParticleRenderer;
+import dev.overhaul.minecraft.particle.ParticleRendererAccess;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -34,6 +36,7 @@ final class BackendSmokeProbe {
     private OverhaulSectionCompiler terrainCompiler;
     private TerrainCullingController terrainCulling;
     private boolean terrainIndirectObserved;
+    private OverhaulQuadParticleRenderer particles;
 
     BackendSmokeProbe(OverhaulDeviceBackend owner) {
         this.owner=owner;
@@ -50,6 +53,7 @@ final class BackendSmokeProbe {
         lastScreen=screen==null?"none":screen.getClass().getName();
         lastOverlay=overlay==null?"none":overlay.getClass().getName();
         boolean world=minecraft.level!=null;
+        if(world&&minecraft.gameRenderer.featureRenderDispatcher() instanceof ParticleRendererAccess access)particles=access.overhaul$particles();
         if(world&&minecraft.levelRenderer.sectionRenderDispatcher() instanceof TerrainDispatcherAccess dispatcher
                 &&dispatcher.overhaul$sectionCompiler() instanceof TerrainCompilerAccess access) {
             terrainDispatcher=dispatcher;terrainCompiler=access.overhaul$compiler();
@@ -124,6 +128,7 @@ final class BackendSmokeProbe {
         report.put("submissionStatistics",owner.submissionStatistics());
         report.put("nativeDrawStatistics",owner.drawStatistics());
         report.put("terrainIndirectObserved",terrainIndirectObserved);
+        if(particles!=null)report.put("particleStatistics",particles.snapshot());
         if(terrainCulling!=null)report.put("terrainCullingStatistics",terrainCulling.snapshot());
         report.put("bufferStorageStatistics",owner.bufferStorage().snapshot());
         report.put("descriptorPoolStatistics",owner.descriptorPools().stats());
