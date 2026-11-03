@@ -4,6 +4,7 @@ def natives = rootProject.lwjglNatives
 
 dependencies {
     api project(':core-common')
+    implementation project(':shader-pipeline')
     api platform("org.lwjgl:lwjgl-bom:${property('lwjglVersion')}")
     api 'org.lwjgl:lwjgl'
     api 'org.lwjgl:lwjgl-vulkan'
