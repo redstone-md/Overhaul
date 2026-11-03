@@ -12,10 +12,12 @@ if (!version || version == 'unspecified') throw new GradleException('The root mo
 def worldSmoke = providers.gradleProperty('worldSmoke').isPresent()
 def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
+def blazeBackend = providers.gradleProperty('blazeBackend').isPresent()
+if (blazeBackend && overhaulBackend) throw new GradleException('Select one owned renderer frontend')
 def querySmoke = providers.gradleProperty('querySmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
 if (querySmoke && (!worldSmoke || modelSmoke || overhaulBackend)) throw new GradleException('Query smoke requires only -PworldSmoke -PquerySmoke')
-layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}${overhaulBackend ? '-backend' : ''}${querySmoke ? '-queries' : ''}")
+layout.buildDirectory = file("build/${targetName}${worldSmoke ? '-world-smoke' : ''}${modelSmoke ? '-model' : ''}${overhaulBackend ? '-backend' : ''}${querySmoke ? '-queries' : ''}${blazeBackend ? '-blaze' : ''}")
 
 repositories {
     mavenCentral()
@@ -90,6 +92,7 @@ if (target.minecraft == '26.3') {
     }
 }
 if (overhaulBackend) apply from: 'gradle/render-backend.gradle'
+if (blazeBackend) apply from: 'gradle/blaze-backend.gradle'
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     systemProperty 'overhaul.loader', target.loader
@@ -199,6 +202,7 @@ tasks.named('jar') {
     }
     if (!overhaulBackend) exclude 'dev/overhaul/minecraft/backend/**', 'dev/overhaul/minecraft/backendmixin/**',
             'overhaul.backend.mixins.json'
+    if (!blazeBackend) exclude 'dev/overhaul/minecraft/blaze/**', 'overhaul.blaze.mixins.json'
     if (!sectionQueries) exclude 'dev/overhaul/minecraft/world/**',
             'dev/overhaul/minecraft/mixin/EntitySectionStorageMixin.class'
     manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)

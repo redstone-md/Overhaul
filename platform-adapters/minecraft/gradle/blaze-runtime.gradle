@@ -1,0 +1,144 @@
+// Keep original LWJGL Java/native module descriptors and their resource opens intact.
+def lwjgl = '3.3.3'
+def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
+def platform = os.contains('win') ? 'windows' : os.contains('mac') ? 'macos' : os.contains('linux') ? 'linux' : null
+if (platform == null) throw new GradleException('Unsupported Blaze3D native platform')
+def suffix = arch in ['aarch64','arm64'] ? '-arm64' : arch in ['x86_64','amd64'] ? '' : null
+if (suffix == null) throw new GradleException('Unsupported Blaze3D native architecture')
+def nativeClassifier = "natives-${platform}${suffix}"
+configurations {
+    blazeBindings { canBeConsumed = false; transitive = false }
+    blazeNativeAddons { canBeConsumed = false; transitive = false }
+}
+def libraries = []
+['vulkan','vma','shaderc'].each { name ->
+    libraries += [key: name, artifact: "lwjgl-${name}", classifier: null, module: "org.lwjgl.${name}", configuration: configurations.blazeBindings]
+}
+(['vma','shaderc'] + (platform == 'macos' ? ['vulkan'] : [])).each { name ->
+    libraries += [key: "${name}_natives", artifact: "lwjgl-${name}", classifier: nativeClassifier,
+                  module: "org.lwjgl.${name}.natives", configuration: configurations.blazeNativeAddons]
+}
+libraries.each { library ->
+    library.originalName = "${library.artifact}-${lwjgl}${library.classifier ? '-' + library.classifier : ''}.jar"
+    library.archiveName = "${library.artifact}-${lwjgl}${library.classifier ? '-' + library.classifier : ''}-overhaul.jar"
+    library.source = providers.provider {
+        def matches = library.configuration.files.findAll { it.name == library.originalName }
+        if (matches.size() != 1) throw new GradleException("Expected one matching LWJGL module: ${library.originalName}")
+        matches.first()
+    }
+    dependencies.add(library.configuration.name, "org.lwjgl:${library.artifact}:${lwjgl}${library.classifier ? ':' + library.classifier : ''}")
+}
+dependencies { runtimeOnly configurations.blazeNativeAddons }
+
+def engineAssembly = tasks.register('assembleBlazeRuntimeInputs', GradleBuild) {
+    description = 'Compiles/packages current portable engine inputs without verification tasks.'
+    dir = file('../..')
+    tasks = [':vulkan-backend:jar', ':shader-pipeline:jar']
+    startParameter.setProjectProperties([modVersion: project.version.toString()])
+    startParameter.setIncludedBuilds([])
+}
+ext.blazeRuntimeJars = files("../../vulkan-backend/build/libs/vulkan-backend-${project.version}.jar",
+        "../../shader-pipeline/build/libs/shader-pipeline-${project.version}.jar").builtBy(engineAssembly)
+tasks.named('compileJava') { dependsOn engineAssembly }
+
+def generated = layout.buildDirectory.dir('generated/blaze-runtime-metadata')
+def metadataTask = tasks.register('prepareBlazeRuntimeMetadata') {
+    inputs.properties(version: project.version.toString(), nativeClassifier: nativeClassifier)
+    inputs.files configurations.blazeBindings, configurations.blazeNativeAddons
+    outputs.dir generated
+    doLast {
+        def metadata = { String key, String version ->
+            def descriptor = generated.get().file("${key}/fabric.mod.json").asFile
+            descriptor.parentFile.mkdirs()
+            descriptor.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+                    schemaVersion: 1, id: "overhaul_blaze_${key}", version: version,
+                    name: "Overhaul Blaze3D ${key}", environment: 'client',
+                    depends: [minecraft: '1.21.1', java: '>=21']
+            ]))
+        }
+        metadata('runtime', project.version.toString())
+        libraries.each { library ->
+            metadata(library.key.toString(), lwjgl)
+            new java.util.jar.JarFile(library.source.get()).withCloseable { jar ->
+                def manifest = generated.get().file("${library.key}.mf").asFile
+                manifest.parentFile.mkdirs()
+                manifest.withOutputStream { stream -> (jar.manifest ?: new java.util.jar.Manifest()).write(stream) }
+            }
+        }
+    }
+}
+
+def runtimeJar = tasks.register('blazeRuntimeJar', Jar) {
+    dependsOn metadataTask, engineAssembly
+    archiveFileName = 'overhaul-blaze-runtime.jar'
+    destinationDirectory = layout.buildDirectory.dir('runtime')
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    inputs.files blazeRuntimeJars
+    from({ blazeRuntimeJars.collect { zipTree(it) } }) {
+        include 'dev/overhaul/vulkan/**', 'dev/overhaul/shader/**', 'assets/overhaul/**',
+                'data/overhaul/**', 'shaders/overhaul/**', 'overhaul/**', 'META-INF/services/**'
+        exclude 'dev/overhaul/vulkan/*Smoke*'
+    }
+    from(generated.map { it.dir('runtime') })
+    manifest.attributes('FMLModType': 'GAMELIBRARY', 'Automatic-Module-Name': 'dev.overhaul.blaze.runtime',
+            'Overhaul-Blaze-Native-Classifier': nativeClassifier, 'Overhaul-LWJGL-Version': lwjgl)
+}
+libraries.each { library ->
+    library.task = tasks.register("blazeLibrary_${library.key}", Jar) {
+        dependsOn metadataTask
+        archiveFileName = library.archiveName
+        destinationDirectory = layout.buildDirectory.dir('runtime')
+        duplicatesStrategy = DuplicatesStrategy.FAIL
+        inputs.file library.source
+        from({ zipTree(library.source.get()) }) { exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA' }
+        from(generated.map { it.dir(library.key.toString()) })
+        manifest.from(generated.map { it.file("${library.key}.mf") })
+        manifest.attributes('FMLModType': 'GAMELIBRARY', 'Automatic-Module-Name': library.module, 'Multi-Release': 'true')
+    }
+}
+def packaged = [[task: runtimeJar, group: 'dev.overhaul', artifact: 'blaze-runtime', version: project.version.toString()]] +
+        libraries.collect { library -> [task: library.task, group: 'org.lwjgl',
+                artifact: "${library.artifact}${library.classifier ? '-' + library.classifier : ''}", version: lwjgl] }
+tasks.named('processResources') {
+    dependsOn packaged.collect { it.task }
+    inputs.files packaged.collect { it.task.flatMap { task -> task.archiveFile } }
+    inputs.property('blazeLoader', target.loader)
+    doLast {
+        def nestedDirectory = target.loader == 'fabric' ? 'META-INF/jars' : 'META-INF/jarjar'
+        def entries = packaged.collect { item ->
+            def library = item.task.get().archiveFile.get().asFile
+            copy { from library; into new File(destinationDir, nestedDirectory) }
+            [item: item, path: "${nestedDirectory}/${library.name}"]
+        }
+        def mixins = new File(destinationDir, 'overhaul.blaze.mixins.json')
+        if (target.loader != 'forge') {
+            def config = new groovy.json.JsonSlurper().parse(mixins)
+            config.remove('refmap')
+            mixins.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config))
+        }
+        if (target.loader == 'fabric') {
+            def metadata = new File(destinationDir, 'fabric.mod.json')
+            def config = new groovy.json.JsonSlurper().parse(metadata)
+            config.mixins = ((config.mixins ?: []) + 'overhaul.blaze.mixins.json').unique()
+            config.jars = ((config.jars ?: []) + entries.collect { [file: it.path] }).unique()
+            metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config))
+        } else {
+            def metadata = new File(destinationDir, 'META-INF/jarjar/metadata.json')
+            metadata.parentFile.mkdirs()
+            metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([jars: entries.collect { entry -> [
+                    identifier: [group: entry.item.group, artifact: entry.item.artifact],
+                    version: [range: "[${entry.item.version}]", artifactVersion: entry.item.version],
+                    path: entry.path, isObfuscated: false
+            ] }] ))
+            if (target.loader == 'neoforge') {
+                def descriptor = new File(destinationDir, 'META-INF/neoforge.mods.toml')
+                if (!descriptor.getText('UTF-8').contains('config="overhaul.blaze.mixins.json"')) descriptor.append('\n[[mixins]]\nconfig="overhaul.blaze.mixins.json"\n', 'UTF-8')
+            }
+        }
+    }
+}
+tasks.named('jar') {
+    if (target.loader == 'forge') doFirst { manifest.attributes('MixinConfigs': 'overhaul.mixins.json,overhaul.blaze.mixins.json') }
+    manifest.attributes('Overhaul-Blaze-Native-Classifier': nativeClassifier)
+}

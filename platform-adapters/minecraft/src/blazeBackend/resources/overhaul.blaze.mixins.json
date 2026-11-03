@@ -1,0 +1,32 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.overhaul.minecraft.blaze.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "overhaul.refmap.json",
+  "client": [
+    "MinecraftBlazeOwnerMixin",
+    "VirtualScreenBlazeMixin",
+    "WindowBlazeMixin",
+    "RenderSystemBlazeBootstrapMixin",
+    "GlStateManagerBlazeCapabilitiesMixin",
+    "VertexBufferBlazeMixin",
+    "ShaderInstanceBlazeMixin",
+    "ProgramConstructorAccess",
+    "EffectProgramConstructorAccess",
+    "ProgramBlazeMixin",
+    "EffectProgramBlazeMixin",
+    "ProgramManagerBlazeMixin",
+    "UniformBlazeMixin",
+    "EffectInstanceBlazeMixin",
+    "GlTextureBlazeMixin",
+    "GlPixelBlazeMixin",
+    "TextureUtilBlazeMixin",
+    "GlStateBlazeMixin",
+    "GlFramebufferBlazeMixin",
+    "RenderTargetBlazeMixin",
+    "MainTargetBlazeMixin",
+    "TimerQueryBlazeMixin"
+  ],
+  "injectors": {"defaultRequire": 1}
+}

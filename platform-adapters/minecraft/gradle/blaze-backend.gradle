@@ -1,0 +1,13 @@
+// Production-only 1.21.1 frontend. Window selection is registered only after API closure review.
+if (target.minecraft != '1.21.1' || !['fabric','forge','neoforge'].contains(target.loader)) {
+    throw new GradleException('The Blaze3D frontend requires a pinned 1.21.1 target')
+}
+sourceSets.main.java.srcDir 'src/blazeBackend/java'
+sourceSets.main.resources.srcDir 'src/blazeBackend/resources'
+apply from: 'gradle/blaze-runtime.gradle'
+dependencies { implementation blazeRuntimeJars; implementation configurations.blazeBindings }
+tasks.withType(JavaExec).configureEach {
+    systemProperty 'overhaul.blaze.enabled', 'true'
+    systemProperty 'org.lwjgl.system.stackSize', '1024'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
