@@ -181,11 +181,23 @@ public final class AsyncRenderer implements AutoCloseable {
         public long sequence() { return submission.sequence(); }
         public void await() { requireOpen(); submission.await(); }
         public boolean isComplete() { requireOpen(); return submission.isComplete(); }
-        public ByteBuffer pixels() {
+        /** GPU image presentation; this initial surface path waits for rendering and presentation. */
+        public boolean presentTo(SwapchainPresenter presenter) {
+            Target target = currentTarget();
+            submission.await();
+            return presenter.presentImage(context, target.color);
+        }
+
+        private Target currentTarget() {
             requireOpen();
-            if (!capture) throw new IllegalStateException("frame was submitted without readback");
             Target target = targets[submission.slot()];
-            if (target.sequence != submission.sequence()) throw new IllegalStateException("readback frame slot has been reused");
+            if (target.sequence != submission.sequence()) throw new IllegalStateException("rendered frame slot has been reused");
+            return target;
+        }
+
+        public ByteBuffer pixels() {
+            Target target = currentTarget();
+            if (!capture) throw new IllegalStateException("frame was submitted without readback");
             submission.await();
             return target.readback.read();
         }

@@ -152,10 +152,7 @@ public final class VulkanSmoke {
                     glfwPollEvents();
                     if (!presenter.presentClear(0.1f, 0.2f, 0.3f)) presenter.resize(128, 128);
                 }
-                glfwSetWindowSize(window, 192, 160);
-                glfwPollEvents();
-                presenter.resize(192, 160);
-                if (!presenter.presentClear(0.3f, 0.2f, 0.1f)) throw new IllegalStateException("presentation failed after resize");
+                AsyncSmoke.verifyPresentation(context, presenter, window);
                 System.out.println("GLFW no-API swapchain: present and resize verified " + presenter.width() + "x" + presenter.height());
             }
             context.assertValidationClean();

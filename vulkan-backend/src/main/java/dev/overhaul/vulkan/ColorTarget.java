@@ -89,6 +89,18 @@ final class ColorTarget implements AutoCloseable {
         }
     }
 
+    void blitTo(VkCommandBuffer command, long destination, int destinationWidth, int destinationHeight) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageBlit.Buffer region = VkImageBlit.calloc(1, stack);
+            region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
+            region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
+            region.srcOffsets(1).set(width, height, 1);
+            region.dstOffsets(1).set(destinationWidth, destinationHeight, 1);
+            vkCmdBlitImage(command, color.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region, VK_FILTER_NEAREST);
+        }
+    }
+
     @Override public void close() {
         context.requireOwner();
         if (framebuffer != 0) vkDestroyFramebuffer(context.device(), framebuffer, null);

@@ -20,6 +20,49 @@ final class AsyncSmoke {
         verifyBatches(context, AsyncRenderer.DrawMode.SINGLE_DRAW);
     }
 
+    static void verifyPresentation(VulkanContext context, SwapchainPresenter presenter, long window) {
+        ByteBuffer vertices = ByteBuffer.allocate(48).order(ByteOrder.nativeOrder());
+        vertex(vertices, -0.20f, -0.3f); vertex(vertices, 0.20f, -0.3f); vertex(vertices, 0, 0.3f);
+        vertices.flip();
+        ByteBuffer indices = ByteBuffer.allocate(12).order(ByteOrder.nativeOrder()).putInt(0).putInt(1).putInt(2).flip();
+        float[] identity = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        try (AsyncRenderer renderer = new AsyncRenderer(context, 128, 128, 3);
+             MeshBatch packet = MeshBatch.builder().add(vertices, indices, 3,
+                 new float[] {-0.5f, 0, 0, 0.5f, 0, 0}).build();
+             GpuBatch gpu = renderer.uploadBatch(packet)) {
+            AsyncRenderer.RenderedFrame first = null;
+            for (int i = 0; i < 5; i++) {
+                org.lwjgl.glfw.GLFW.glfwPollEvents();
+                AsyncRenderer.RenderedFrame frame = renderer.submit(gpu, identity);
+                if (first == null) first = frame;
+                if (!frame.presentTo(presenter)) throw new IllegalStateException("instanced geometry presentation failed");
+            }
+            try { first.presentTo(presenter); throw new IllegalStateException("reused presentation frame accepted"); }
+            catch (IllegalStateException expected) {
+                if (!expected.getMessage().contains("reused")) throw expected;
+            }
+            presenter.resize(0, 0);
+            if (renderer.submit(gpu, identity).presentTo(presenter)) throw new IllegalStateException("zero-extent surface was presented");
+            presenter.resize(128, 128);
+            if (!renderer.submit(gpu, identity).presentTo(presenter)) throw new IllegalStateException("surface did not resume");
+            try (VulkanContext foreign = VulkanContext.openHeadless();
+                 AsyncRenderer foreignRenderer = new AsyncRenderer(foreign, 16, 16, 1);
+                 GpuBatch foreignBatch = foreignRenderer.uploadBatch(packet)) {
+                try {
+                    foreignRenderer.submit(foreignBatch, identity).presentTo(presenter);
+                    throw new IllegalStateException("cross-context image presentation accepted");
+                } catch (IllegalArgumentException expected) { }
+            }
+            org.lwjgl.glfw.GLFW.glfwSetWindowSize(window, 192, 160);
+            org.lwjgl.glfw.GLFW.glfwPollEvents();
+            presenter.resize(192, 160);
+            if (!renderer.submit(gpu, identity).presentTo(presenter))
+                throw new IllegalStateException("scaled geometry presentation failed after resize");
+            System.out.println("GPU instanced geometry -> swapchain blit: 5 frames; resize/scaling "
+                + presenter.width() + "x" + presenter.height() + "; no CPU image readback");
+        }
+    }
+
     private static void verifyRing(VulkanContext context) {
         AtomicInteger retired = new AtomicInteger();
         try (GpuAllocator allocator = new GpuAllocator(context)) {

@@ -20,6 +20,8 @@ public final class SwapchainPresenter implements AutoCloseable {
     private long[] images;
     private int width;
     private int height;
+    private boolean destinationBlitSupported;
+    private boolean suspended;
     private boolean closed;
 
     public SwapchainPresenter(VulkanContext context, int width, int height) {
@@ -39,7 +41,7 @@ public final class SwapchainPresenter implements AutoCloseable {
 
     public void resize(int requestedWidth, int requestedHeight) {
         requireOpen();
-        if (requestedWidth < 1 || requestedHeight < 1) return;
+        if (requestedWidth < 1 || requestedHeight < 1) { suspended = true; return; }
         context.waitIdle();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkSurfaceCapabilitiesKHR capabilities = VkSurfaceCapabilitiesKHR.malloc(stack);
@@ -52,7 +54,7 @@ public final class SwapchainPresenter implements AutoCloseable {
                 nextWidth = Math.max(capabilities.minImageExtent().width(), Math.min(requestedWidth, capabilities.maxImageExtent().width()));
                 nextHeight = Math.max(capabilities.minImageExtent().height(), Math.min(requestedHeight, capabilities.maxImageExtent().height()));
             }
-            if (nextWidth == 0 || nextHeight == 0) return;
+            if (nextWidth == 0 || nextHeight == 0) { suspended = true; return; }
             IntBuffer count = stack.ints(0);
             check(vkGetPhysicalDeviceSurfaceFormatsKHR(context.physicalDevice(), context.surface(), count, null), "surface formats");
             if (count.get(0) == 0) throw new IllegalStateException("surface has no formats");
@@ -66,6 +68,7 @@ public final class SwapchainPresenter implements AutoCloseable {
                     format = available.format(); colorSpace = available.colorSpace(); break;
                 }
             }
+            destinationBlitSupported = supportsFormat(format, VK_FORMAT_FEATURE_BLIT_DST_BIT, stack);
             int imageCount = capabilities.minImageCount() + 1;
             if (capabilities.maxImageCount() > 0) imageCount = Math.min(imageCount, capabilities.maxImageCount());
             int alpha = Integer.lowestOneBit(capabilities.supportedCompositeAlpha());
@@ -87,13 +90,43 @@ public final class SwapchainPresenter implements AutoCloseable {
             handles.get(images);
             width = nextWidth;
             height = nextHeight;
+            suspended = false;
         }
     }
 
     /** A synchronized clear/present check. Full scene frame scheduling is a separate renderer. */
     public boolean presentClear(float red, float green, float blue) {
+        return present((command, image) -> {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkClearColorValue color = VkClearColorValue.calloc(stack)
+                    .float32(0, red).float32(1, green).float32(2, blue).float32(3, 1);
+                VkImageSubresourceRange.Buffer range = VkImageSubresourceRange.calloc(1, stack)
+                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).levelCount(1).layerCount(1);
+                vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, color, range);
+            }
+        });
+    }
+
+    boolean presentImage(VulkanContext sourceContext, ColorTarget source) {
         requireOpen();
-        if (swapchain == 0) return false;
+        if (sourceContext != context) throw new IllegalArgumentException("rendered image belongs to another Vulkan context");
+        if (swapchain == 0 || suspended) return false;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            if (!destinationBlitSupported || !supportsFormat(VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_FEATURE_BLIT_SRC_BIT, stack))
+                throw new IllegalStateException("source/destination formats do not support GPU blitting");
+        }
+        return present((command, image) -> source.blitTo(command, image, width, height));
+    }
+
+    private boolean supportsFormat(int format, int feature, MemoryStack stack) {
+        VkFormatProperties properties = VkFormatProperties.malloc(stack);
+        vkGetPhysicalDeviceFormatProperties(context.physicalDevice(), format, properties);
+        return (properties.optimalTilingFeatures() & feature) != 0;
+    }
+
+    private boolean present(ImageWriter writeImage) {
+        requireOpen();
+        if (swapchain == 0 || suspended) return false;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             check(vkResetFences(context.device(), acquireFence), "reset acquire fence");
             IntBuffer index = stack.mallocInt(1);
@@ -106,11 +139,7 @@ public final class SwapchainPresenter implements AutoCloseable {
                 try (MemoryStack recording = MemoryStack.stackPush()) {
                     transition(command, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, recording);
-                    VkClearColorValue color = VkClearColorValue.calloc(recording)
-                        .float32(0, red).float32(1, green).float32(2, blue).float32(3, 1);
-                    VkImageSubresourceRange.Buffer range = VkImageSubresourceRange.calloc(1, recording)
-                        .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).levelCount(1).layerCount(1);
-                    vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, color, range);
+                    writeImage.write(command, image);
                     transition(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                         VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, recording);
                 }
@@ -122,6 +151,10 @@ public final class SwapchainPresenter implements AutoCloseable {
             check(vkQueueWaitIdle(context.queue()), "presentation idle");
             return acquire != VK_SUBOPTIMAL_KHR && result == VK_SUCCESS;
         }
+    }
+
+    @FunctionalInterface private interface ImageWriter {
+        void write(VkCommandBuffer command, long image);
     }
 
     private static void transition(VkCommandBuffer command, long image, int before, int after,
