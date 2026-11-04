@@ -50,7 +50,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
         for(int column=0;column<3;column++)for(int row=0;row<3;row++)normal[column*3+row]=viewInverse[row*4+column];
         state.cameraRenderState.projectionMatrix.get(originalProjection);
         near=originalProjection[14]/(1+originalProjection[10]);
-        for(float value:projectionInverse)if(!Float.isFinite(value))throw new UnsupportedShaderException("Singular shader-pack camera projection");
+        for(float value:projectionInverse)if(!Float.isFinite(value))throw new UnsupportedShaderException("Singular shader-pack camera projection: "+java.util.Arrays.toString(nativeProjection));
         if(!Float.isFinite(near)||near<=0)throw new UnsupportedShaderException("Unsupported shader-pack camera near plane");
         if(!initialized){System.arraycopy(projection,0,previousProjection,0,16);System.arraycopy(view,0,previousView,0,16);
             var position=state.cameraRenderState.pos;previousX=position.x;previousY=position.y;previousZ=position.z;}
