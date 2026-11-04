@@ -85,9 +85,10 @@ final class ShaderPackPlayerUniforms {
             case "darknessFactor"->values.setFloat(name,darkness);
             case "darknessLightFactor"->values.setFloat(name,darknessLight);
             case "playerMood"->values.setFloat(name,mood);
-            case "fogStart"->values.setFloat(name,fogStart);
-            case "fogEnd"->values.setFloat(name,fogEnd);
-            case "fogDensity"->values.setFloat(name,fogDensity);
+            case "fogStart","overhaulFogStart"->values.setFloat(name,fogStart);
+            case "fogEnd","overhaulFogEnd"->values.setFloat(name,fogEnd);
+            case "fogDensity","overhaulFogDensity"->values.setFloat(name,fogDensity);
+            case "overhaulFogScale"->values.setFloat(name,fogEnd>fogStart?1/(fogEnd-fogStart):0);
             case "fogMode"->values.setInt(name,GL_LINEAR);
             case "fogShape"->values.setInt(name,fogShape);
             case "hideGUI"->values.setInt(name,hideGui?1:0);
