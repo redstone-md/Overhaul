@@ -7,8 +7,10 @@ import dev.overhaul.minecraft.backend.ShaderPackSceneState;
 import dev.overhaul.minecraft.shadow.ShadowCasterAccess;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackBuiltinMacros;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.ShaderPackSource;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import org.joml.Matrix4fc;
@@ -42,7 +44,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
         if(!installed||width!=target.width||height!=target.height||!nextConfiguration.equals(configuration)){
             Path path=minecraft.gameDirectory.toPath().resolve(nextConfiguration.requested()).normalize();
             try(ShaderPackSource source=ShaderPackSource.open(path);ShadercCompiler compiler=new ShadercCompiler()){
-                Map<String,String> definitions=definitions(nextConfiguration.defines());Map<String,Boolean> selected=options(nextConfiguration.options());
+                Map<String,String> definitions=PackBuiltinMacros.with(definitions(nextConfiguration.defines()),SharedConstants.getCurrentVersion().name(),System.getProperty("os.name"));Map<String,Boolean> selected=options(nextConfiguration.options());
                 String dimension=key.identifier().toString();CompiledShaderPack pack;
                 try{pack=CompiledShaderPack.compileForDimension(source,dimension,selected,definitions,compiler);}
                 catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}

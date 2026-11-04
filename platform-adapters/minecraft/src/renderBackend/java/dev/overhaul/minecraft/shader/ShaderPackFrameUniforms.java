@@ -4,6 +4,7 @@ import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackCustomUniforms;
+import dev.overhaul.shader.pack.PackRenderStages;
 import dev.overhaul.vulkan.PackGraphRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
@@ -104,6 +105,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             case "overhaulTextureMatrix1"->values.setMatrix(name,4,program.scene()?LIGHTMAP_MATRIX:IDENTITY);
             case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
             case "alphaTestRef"->values.setFloat(name,program.state().alphaTest().map(test->test.reference()).orElse(0f));
+            case "renderStage"->values.setInt(name,PackRenderStages.of(program.name()));
             default->{if(!shadow.fill(name,values)&&!environment.fill(name,values)&&!player.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
         }
     }

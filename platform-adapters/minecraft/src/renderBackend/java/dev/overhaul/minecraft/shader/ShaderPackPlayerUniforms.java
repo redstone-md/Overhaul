@@ -19,7 +19,7 @@ import net.minecraft.world.phys.HitResult;
 
 /** Effects, held items, fog and the smoothed values, sampled from the camera entity once per frame. */
 final class ShaderPackPlayerUniforms {
-    private static final int GL_LINEAR=9729,FOG_SPHERE=0,FOG_CYLINDER=1;
+    private static final int GL_LINEAR=9729,FOG_SPHERE=0,FOG_CYLINDER=1,TERRAIN_ICON_SIZE=16,NO_BOSS=0;
     private final ShaderPackBiomeValues biome=new ShaderPackBiomeValues();
     private float wetness,eyeBlock,eyeSky,centerDepth,nightVision,blindness,darkness,darknessLight,mood;
     private float fogStart,fogEnd,fogDensity;
@@ -95,7 +95,9 @@ final class ShaderPackPlayerUniforms {
             case "heldItemId"->values.setInt(name,itemMain);
             case "heldItemId2"->values.setInt(name,itemOff);
             case "entityId","blockEntityId"->values.setInt(name,PackIdMap.UNKNOWN);
-            case "atlasSize"->values.setIntVector(name,atlasWidth,atlasHeight);
+            case "atlasSize","terrainTextureSize"->values.setIntVector(name,atlasWidth,atlasHeight);
+            case "terrainIconSize"->values.setInt(name,TERRAIN_ICON_SIZE);
+            case "bossBattle"->values.setInt(name,NO_BOSS);
             default->{return false;}
         }
         return true;
@@ -122,7 +124,9 @@ final class ShaderPackPlayerUniforms {
             case "heldItemId"->itemMain;
             case "heldItemId2"->itemOff;
             case "entityId","blockEntityId"->PackIdMap.UNKNOWN;
-            case "atlasSize"->component==0?atlasWidth:atlasHeight;
+            case "atlasSize","terrainTextureSize"->component==0?atlasWidth:atlasHeight;
+            case "terrainIconSize"->TERRAIN_ICON_SIZE;
+            case "bossBattle"->NO_BOSS;
             case "is_alive"->flag(entity!=null&&entity.isAlive());
             case "is_burning"->flag(entity!=null&&entity.isOnFire());
             case "is_child"->flag(entity instanceof LivingEntity living&&living.isBaby());

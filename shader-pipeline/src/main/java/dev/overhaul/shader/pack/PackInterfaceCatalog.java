@@ -43,8 +43,9 @@ public final class PackInterfaceCatalog {
                 "shadowLightPosition","upPosition");
         add(table,Binding.BOUND,"mat4","gbufferProjection","gbufferProjectionInverse","gbufferModelView","gbufferModelViewInverse",
                 "gbufferPreviousProjection","gbufferPreviousModelView","shadowProjection","shadowProjectionInverse","shadowModelView","shadowModelViewInverse");
-        add(table,Binding.UNBOUND,"int","renderStage","bossBattle","terrainIconSize");
-        add(table,Binding.UNBOUND,"ivec2","terrainTextureSize");
+        add(table,Binding.BOUND,"int","renderStage","terrainIconSize");
+        add(table,Binding.CONSTANT,"int","bossBattle");
+        add(table,Binding.BOUND,"ivec2","terrainTextureSize");
         add(table,Binding.UNBOUND,"ivec4","blendFunc");
         add(table,Binding.UNBOUND,"vec4",ENTITY_COLOR,"colorModulator","spriteBounds");
         add(table,Binding.UNBOUND,"vec3","chunkOffset");
@@ -97,7 +98,7 @@ public final class PackInterfaceCatalog {
         if (known == null) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Unknown uniform: neither built in nor defined by the pack's uniform.* properties"));
         else if (!known.type().equals(type)) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Declared "+type+" but this uniform is "+known.type()));
         else if (name.equals(ENTITY_COLOR) && scene) diagnostics.add(PackDiagnostic.info(Category.UNIFORM,subject,"Bound only on entity pipelines, where the adapter lowers it"));
-        else if (known.binding() == Binding.CONSTANT) diagnostics.add(PackDiagnostic.degraded(Category.UNIFORM,subject,"Reads -1: ids from *.properties are not mapped yet"));
+        else if (known.binding() == Binding.CONSTANT) diagnostics.add(PackDiagnostic.degraded(Category.UNIFORM,subject,name.equals("bossBattle")?"Reads 0: the boss overlay is not read yet":"Reads -1: ids from *.properties are not mapped yet"));
         else if (known.binding() == Binding.UNBOUND) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Known uniform with no value source yet"));
     }
 
