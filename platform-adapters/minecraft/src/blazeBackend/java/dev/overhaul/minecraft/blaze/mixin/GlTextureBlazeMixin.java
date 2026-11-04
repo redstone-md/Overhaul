@@ -24,9 +24,9 @@ public abstract class GlTextureBlazeMixin {
     @Inject(method="_deleteTextures",at=@At("HEAD"),cancellable=true)
     private static void overhaul$deleteMany(int[] ids,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){for(int id:ids)renderer.textures().delete(id);callback.cancel();}}
     @Inject(method="_bindTexture",at=@At("HEAD"),cancellable=true)
-    private static void overhaul$bind(int id,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){renderer.textures().bind(id);callback.cancel();}}
+    private static void overhaul$bind(int id,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){renderer.textures().bind(id);}}
     @Inject(method={"_activeTexture","glActiveTexture"},at=@At("HEAD"),cancellable=true)
-    private static void overhaul$active(int unit,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){renderer.textures().active(unit);callback.cancel();}}
+    private static void overhaul$active(int unit,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){renderer.textures().active(unit);}}
     @Inject(method="_getActiveTexture",at=@At("HEAD"),cancellable=true)
     private static void overhaul$currentUnit(CallbackInfoReturnable<Integer> result){var renderer=BlazeFrontend.current();if(renderer!=null)result.setReturnValue(renderer.textures().active());}
     @Inject(method="_texParameter(III)V",at=@At("HEAD"),cancellable=true)
