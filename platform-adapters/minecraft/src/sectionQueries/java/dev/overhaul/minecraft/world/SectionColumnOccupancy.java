@@ -10,6 +10,7 @@ final class SectionColumnOccupancy {
     private static final int LONG_COLUMN_MINIMUM = 32;
     private final Int2IntOpenHashMap counts = new Int2IntOpenHashMap();
     private int longColumns;
+    private long tracked;
     private boolean consistent = true;
 
     SectionColumnOccupancy(Long2ObjectMap<?> sections) {
@@ -22,6 +23,7 @@ final class SectionColumnOccupancy {
         int previous = counts.get(x);
         if (previous == Integer.MAX_VALUE) { consistent = false; return; }
         counts.put(x, previous + 1);
+        tracked++;
         if (previous == LONG_COLUMN_MINIMUM) longColumns++;
     }
 
@@ -29,11 +31,14 @@ final class SectionColumnOccupancy {
         int x = SectionPos.x(key);
         int previous = counts.get(x);
         if (previous <= 0) { consistent = false; return; }
+        tracked--;
         if (previous == LONG_COLUMN_MINIMUM + 1) longColumns--;
         if (previous == 1) counts.remove(x);
         else counts.put(x, previous - 1);
     }
 
+    /** False when the tree changed size without passing the storage hooks. */
+    boolean tracks(int treeSize) { return tracked == treeSize; }
     boolean hasLongColumns() { return consistent && longColumns != 0; }
     boolean worthSeeking(int x, long intersectingCells) {
         return consistent && counts.get(x) > Math.max(LONG_COLUMN_MINIMUM, 4L * intersectingCells);

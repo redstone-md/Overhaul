@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.LongAVLTreeSet;
 import it.unimi.dsi.fastutil.longs.LongBidirectionalIterator;
 import it.unimi.dsi.fastutil.longs.LongSortedSet;
 import net.minecraft.core.SectionPos;
@@ -22,6 +23,8 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
     private final Long2ObjectMap<EntitySection<T>> sections;
     private final LongSortedSet sectionIds;
     private final SectionColumnOccupancy occupancy;
+    /** The prefetch contract was audited for this exact class; any replacement keeps the original method. */
+    private final boolean auditedTree;
     private final boolean diagnostics;
     private long structureEpoch;
     private volatile boolean foreignMutation;
@@ -38,6 +41,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
         this.sections = Objects.requireNonNull(sections, "sections");
         this.sectionIds = Objects.requireNonNull(sectionIds, "sectionIds");
         this.occupancy = new SectionColumnOccupancy(sections);
+        this.auditedTree = sectionIds.getClass() == LongAVLTreeSet.class;
         this.diagnostics = diagnostics;
     }
 
@@ -71,7 +75,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
     public boolean tryTraverse(AABB box, AbortableIterationConsumer<EntitySection<T>> consumer) {
         if (Thread.currentThread() != owner) return false;
         if (vanillaDepth != 0) { if (diagnostics) vanillaBypasses++; return false; }
-        if (foreignMutation || !occupancy.hasLongColumns() || !finite(box)) return fallback();
+        if (foreignMutation || !auditedTree || !occupancy.hasLongColumns() || untracked() || !finite(box)) return fallback();
         int minX = SectionPos.posToSectionCoord(box.minX - 2.0);
         int minY = SectionPos.posToSectionCoord(box.minY - 4.0);
         int minZ = SectionPos.posToSectionCoord(box.minZ - 2.0);
@@ -97,7 +101,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
         // Full vanilla column bounds are essential: a narrower subset would drop its cached successor.
         LongSortedSet column = sectionIds.subSet(SectionPos.asLong(x, 0, 0),
                 SectionPos.asLong(x, -1, -1) + 1);
-        if (foreignMutation || !occupancy.worthSeeking(x, intersectingCells)) {
+        if (foreignMutation || untracked() || !occupancy.worthSeeking(x, intersectingCells)) {
             if (diagnostics) columnDrains++;
             return drain(column.iterator(), minY, minZ, maxY, maxZ, consumer);
         }
@@ -125,7 +129,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
                     if (key > high) break;
                     long epoch = structureEpoch;
                     if (!accept(key, consumer)) return false;
-                    if (epoch != structureEpoch || foreignMutation) {
+                    if (epoch != structureEpoch || foreignMutation || untracked()) {
                         if (diagnostics) mutationFallbacks++;
                         // nextLong prefetched an Entry before accept, exactly as the untouched game did.
                         return drain(iterator, minY, minZ, maxY, maxZ, consumer);
@@ -170,6 +174,7 @@ public final class SectionQueryTraversal<T extends EntityAccess> {
                 && Double.isFinite(box.maxX) && Double.isFinite(box.maxY) && Double.isFinite(box.maxZ);
     }
 
+    private boolean untracked() { return !occupancy.tracks(sectionIds.size()); }
     private boolean fallback() { if (diagnostics) fallbacks++; return false; }
 
     /** Immutable diagnostic snapshot; disabled diagnostics keep counters at zero. */
