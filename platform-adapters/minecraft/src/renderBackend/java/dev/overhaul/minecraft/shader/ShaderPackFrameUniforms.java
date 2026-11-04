@@ -27,6 +27,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
     private final ShaderPackEnvironmentUniforms environment=new ShaderPackEnvironmentUniforms();
     private final ShaderPackShadowUniforms shadow=new ShaderPackShadowUniforms();
     private final ShaderPackPlayerUniforms player=new ShaderPackPlayerUniforms();
+    private final ShaderPackPresenceUniforms presence=new ShaderPackPresenceUniforms();
     private PackCustomUniforms custom;
     private LevelRenderState state;
     private int width,height,frame;
@@ -54,6 +55,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
         if(!initialized){System.arraycopy(projection,0,previousProjection,0,16);System.arraycopy(view,0,previousView,0,16);
             var position=state.cameraRenderState.pos;previousX=position.x;previousY=position.y;previousZ=position.z;}
         player.capture(minecraft,state,frameTime,pack.smoothing(),pack.ids(),environment,near,state.cameraRenderState.depthFar);
+        presence.capture(minecraft,state,state.worldPartialTicks);
         custom.update(frameTime,this);
     }
     @Override public double read(String name,int component){
@@ -70,8 +72,12 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             case "cameraPosition"->component==0?position.x:component==1?position.y:position.z;
             case "previousCameraPosition"->component==0?previousX:component==1?previousY:previousZ;
             case "fogColor"->state.cameraRenderState.fogData.color.get(component);
+            case "cameraPositionInt"->Math.floor(component==0?position.x:component==1?position.y:position.z);
+            case "cameraPositionFract"->{double value=component==0?position.x:component==1?position.y:position.z;yield value-Math.floor(value);}
+            case "previousCameraPositionInt"->Math.floor(component==0?previousX:component==1?previousY:previousZ);
+            case "previousCameraPositionFract"->{double value=component==0?previousX:component==1?previousY:previousZ;yield value-Math.floor(value);}
             default->{
-                double value=shadow.read(name,component);if(Double.isNaN(value))value=environment.read(name,component);
+                double value=shadow.read(name,component);if(Double.isNaN(value))value=environment.read(name,component);if(Double.isNaN(value))value=presence.read(name,component);
                 yield Double.isNaN(value)?player.read(name,component):value;
             }
         };
@@ -89,6 +95,10 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             case "cameraPosition"->{var position=state.cameraRenderState.pos;values.setVector(name,(float)position.x,(float)position.y,(float)position.z);}
             case "previousCameraPosition"->values.setVector(name,(float)previousX,(float)previousY,(float)previousZ);
             case "fogColor"->{var color=state.cameraRenderState.fogData.color;values.setVector(name,color.x(),color.y(),color.z());}
+            case "cameraPositionInt"->{var position=state.cameraRenderState.pos;whole(name,values,position.x,position.y,position.z);}
+            case "cameraPositionFract"->{var position=state.cameraRenderState.pos;fraction(name,values,position.x,position.y,position.z);}
+            case "previousCameraPositionInt"->whole(name,values,previousX,previousY,previousZ);
+            case "previousCameraPositionFract"->fraction(name,values,previousX,previousY,previousZ);
             case "overhaulFogColor"->{var color=state.cameraRenderState.fogData.color;values.setVector(name,color.x(),color.y(),color.z(),color.w());}
             case "gbufferProjection"->values.setMatrix(name,4,projection);
             case "gbufferProjectionInverse"->values.setMatrix(name,4,projectionInverse);
@@ -106,9 +116,11 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
             case "alphaTestRef"->values.setFloat(name,program.state().alphaTest().map(test->test.reference()).orElse(0f));
             case "renderStage"->values.setInt(name,PackRenderStages.of(program.name()));
-            default->{if(!shadow.fill(name,values)&&!environment.fill(name,values)&&!player.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
+            default->{if(!shadow.fill(name,values)&&!environment.fill(name,values)&&!presence.fill(name,values)&&!player.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
         }
     }
+    private static void whole(String name,UniformBlock values,double x,double y,double z){values.setIntVector(name,(int)Math.floor(x),(int)Math.floor(y),(int)Math.floor(z));}
+    private static void fraction(String name,UniformBlock values,double x,double y,double z){values.setVector(name,(float)(x-Math.floor(x)),(float)(y-Math.floor(y)),(float)(z-Math.floor(z)));}
     void complete(){
         System.arraycopy(projection,0,previousProjection,0,16);System.arraycopy(view,0,previousView,0,16);
         var position=state.cameraRenderState.pos;previousX=position.x;previousY=position.y;previousZ=position.z;

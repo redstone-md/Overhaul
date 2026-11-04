@@ -34,7 +34,7 @@ public final class PackInterfaceCatalog {
         Map<String,UniformInfo> table = new HashMap<>();
         add(table,Binding.BOUND,"float","viewWidth","viewHeight","aspectRatio","frameTime","frameTimeCounter","near","far",
                 "rainStrength","thunderStrength","eyeAltitude","screenBrightness","pi","sunAngle","shadowAngle",
-                "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef");
+                "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef","endFlashIntensity");
         add(table,Binding.BOUND,"int","frameCounter","worldTime","worldDay","moonPhase","isEyeInWater","fogMode","fogShape","heldBlockLightValue","heldBlockLightValue2","hideGUI");
         add(table,Binding.BOUND,"ivec2","eyeBrightness","eyeBrightnessSmooth","atlasSize");
         add(table,Binding.BOUND,"int","heldItemId","heldItemId2");
@@ -44,6 +44,11 @@ public final class PackInterfaceCatalog {
         add(table,Binding.BOUND,"mat4","gbufferProjection","gbufferProjectionInverse","gbufferModelView","gbufferModelViewInverse",
                 "gbufferPreviousProjection","gbufferPreviousModelView","shadowProjection","shadowProjectionInverse","shadowModelView","shadowModelViewInverse");
         add(table,Binding.BOUND,"int","renderStage","terrainIconSize");
+        add(table,Binding.BOUND,"float","velocity");
+        add(table,Binding.BOUND,"ivec3","cameraPositionInt","previousCameraPositionInt");
+        add(table,Binding.BOUND,"vec3","cameraPositionFract","previousCameraPositionFract","eyePosition","relativeEyePosition","playerLookVector");
+        add(table,Binding.BOUND,"vec4","lightningBoltPosition");
+        add(table,Binding.CONSTANT,"int","currentRenderedItemId");
         add(table,Binding.CONSTANT,"int","bossBattle");
         add(table,Binding.BOUND,"ivec2","terrainTextureSize");
         add(table,Binding.UNBOUND,"ivec4","blendFunc");

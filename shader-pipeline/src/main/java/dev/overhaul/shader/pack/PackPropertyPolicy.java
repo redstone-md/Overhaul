@@ -15,7 +15,7 @@ final class PackPropertyPolicy {
             "underwaterOverlay","sun","moon","stars","sky","vignette","rain.depth","beacon.beam.depth","separateAo",
             "voxelizeLightBlocks","frustum.culling","occlusion.culling","shadow.culling","shadow.enabled","dhShadow.enabled",
             "particles.before.deferred","separateEntityDraws","prepareBeforeShadow","supportsColorCorrection",
-            "allowConcurrentCompute","iris.features.optional","weather","fallbackTex");
+            "allowConcurrentCompute","breaksAnisotropy","iris.features.optional","weather","fallbackTex");
     private static final Pattern IGNORED_FAMILY = Pattern.compile("backFace\\..*|particles\\.ordering.*|version\\..*");
 
     private PackPropertyPolicy() {}

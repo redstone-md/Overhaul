@@ -64,7 +64,7 @@ public final class CompiledShaderPack {
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
             if(!discovered.state().enabled())continue;
             String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
-            if(name.startsWith("dh_")){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Distant Horizons programs are not compiled; there is no Distant Horizons integration"));continue;}
+            var foreign=PackForeignPrograms.owner(name);if(foreign.isPresent()){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Not compiled; there is no "+foreign.get()+" integration"));continue;}
             Sources expanded=preprocess(discovered,preprocessor);
             sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length();if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),expanded);
@@ -77,8 +77,9 @@ public final class CompiledShaderPack {
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
         stage(discovered.name().substring(discovered.name().lastIndexOf('/')+1));
-        return new Sources(PackCoreProfile.lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),PackCoreProfile.lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)));
+        return new Sources(lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)));
     }
+    private static String lower(String source){return PackUnusedUniforms.strip(PackUniformDefaults.lower(PackCoreProfile.lower(source)));}
     /** One program of a generation, recorded into the builders that aggregate pack-wide requirements. */
     public static Program compileProgram(ShaderPackCatalog.Program discovered,Sources sources,ShadercCompiler compiler,
                                          PackRenderTargets.Builder targets,PackShadowSettings.Builder shadow,PackTextures.Builder textures){

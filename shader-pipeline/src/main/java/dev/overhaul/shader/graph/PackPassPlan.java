@@ -101,8 +101,9 @@ public final class PackPassPlan {
             diagnostics.add(PackDiagnostic.info(Category.PROGRAM,input.name(),"Disabled by the pack"+stand));
             return;
         }
-        if (bare.startsWith("dh_")) {
-            diagnostics.add(PackDiagnostic.degraded(Category.PROGRAM,input.name(),"Left out of the plan; there is no Distant Horizons integration"));
+        var foreign = dev.overhaul.shader.pack.PackForeignPrograms.owner(bare);
+        if (foreign.isPresent()) {
+            diagnostics.add(PackDiagnostic.degraded(Category.PROGRAM,input.name(),"Left out of the plan; there is no "+foreign.get()+" integration"));
             return;
         }
         try { placed.add(new Placed(input,phase(bare,particlesFirst),CompiledShaderPack.ordinal(bare))); }

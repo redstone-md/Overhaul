@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 public final class FragmentAlphaTest {
     private static final Pattern COLOR = Pattern.compile("layout\\s*\\(\\s*location\\s*=\\s*0\\s*\\)\\s*out\\s+vec4\\s+(\\w+)\\s*;");
     private static final String ENTRY = "overhaulAlphaTestEntry";
+    private static final Pattern OUTPUT = Pattern.compile("\\bout\\s+\\w+\\s+\\w+\\s*;");
     private static final Pattern REFERENCE=Pattern.compile("\\buniform\\s+float\\s+alphaTestRef\\s*;");
 
     private FragmentAlphaTest() {}
@@ -38,6 +39,8 @@ public final class FragmentAlphaTest {
         String condition = "false";
         if (!state.comparison().equals("NEVER")) {
             var color = COLOR.matcher(fragment);
+            if (!color.find() && !OUTPUT.matcher(fragment).find()) return fragment; // Nothing is written, so nothing can fail the test.
+            color.reset();
             if (!color.find()) throw unsupported("Fragment alpha test requires a vec4 output at location zero");
             condition = color.group(1) + ".a " + operator + " " + Float.toString(state.reference());
         }

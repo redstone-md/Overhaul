@@ -21,7 +21,7 @@ import net.minecraft.world.phys.HitResult;
 final class ShaderPackPlayerUniforms {
     private static final int GL_LINEAR=9729,FOG_SPHERE=0,FOG_CYLINDER=1,TERRAIN_ICON_SIZE=16,NO_BOSS=0;
     private final ShaderPackBiomeValues biome=new ShaderPackBiomeValues();
-    private float wetness,eyeBlock,eyeSky,centerDepth,nightVision,blindness,darkness,darknessLight,mood;
+    private float wetness,eyeBlock,eyeSky,centerDepth,nightVision,blindness,darkness,darknessLight,mood,endFlash;
     private float fogStart,fogEnd,fogDensity;
     private int fogShape,lightMain,lightOff,itemMain,itemOff,atlasWidth,atlasHeight;
     private boolean hideGui,started;
@@ -36,6 +36,7 @@ final class ShaderPackPlayerUniforms {
         mood=minecraft.player instanceof LocalPlayer player?player.getCurrentMood():0;
         lightMain=living==null?0:light(living.getMainHandItem());lightOff=living==null?0:light(living.getOffhandItem());
         itemMain=living==null?PackIdMap.UNKNOWN:id(ids,living.getMainHandItem());itemOff=living==null?PackIdMap.UNKNOWN:id(ids,living.getOffhandItem());
+        var flash=minecraft.level.endFlashState();endFlash=flash==null?0:flash.getIntensity(partial);
         hideGui=minecraft.gui.hud.isHidden();
         fog(state);
         var atlas=minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTexture();atlasWidth=atlas.getWidth(0);atlasHeight=atlas.getHeight(0);
@@ -94,10 +95,11 @@ final class ShaderPackPlayerUniforms {
             case "heldBlockLightValue2"->values.setInt(name,lightOff);
             case "heldItemId"->values.setInt(name,itemMain);
             case "heldItemId2"->values.setInt(name,itemOff);
-            case "entityId","blockEntityId"->values.setInt(name,PackIdMap.UNKNOWN);
+            case "entityId","blockEntityId","currentRenderedItemId"->values.setInt(name,PackIdMap.UNKNOWN);
             case "atlasSize","terrainTextureSize"->values.setIntVector(name,atlasWidth,atlasHeight);
             case "terrainIconSize"->values.setInt(name,TERRAIN_ICON_SIZE);
             case "bossBattle"->values.setInt(name,NO_BOSS);
+            case "endFlashIntensity"->values.setFloat(name,endFlash);
             default->{return false;}
         }
         return true;
@@ -123,10 +125,11 @@ final class ShaderPackPlayerUniforms {
             case "heldBlockLightValue2"->lightOff;
             case "heldItemId"->itemMain;
             case "heldItemId2"->itemOff;
-            case "entityId","blockEntityId"->PackIdMap.UNKNOWN;
+            case "entityId","blockEntityId","currentRenderedItemId"->PackIdMap.UNKNOWN;
             case "atlasSize","terrainTextureSize"->component==0?atlasWidth:atlasHeight;
             case "terrainIconSize"->TERRAIN_ICON_SIZE;
             case "bossBattle"->NO_BOSS;
+            case "endFlashIntensity"->endFlash;
             case "is_alive"->flag(entity!=null&&entity.isAlive());
             case "is_burning"->flag(entity!=null&&entity.isOnFire());
             case "is_child"->flag(entity instanceof LivingEntity living&&living.isBaby());

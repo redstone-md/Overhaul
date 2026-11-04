@@ -6,8 +6,9 @@ import java.util.regex.Pattern;
 
 /**
  * Core-profile programs name the inputs Minecraft's own shaders use. Each maps onto the legacy contract, so
- * they share its decoding and matrices. A name is rewritten only where the program declares it on its own
- * line: a local variable of the same name stays, and a multi-declaration falls through to the interface check.
+ * they share its decoding and matrices. Iris supplies these names even to a program that never declares them,
+ * so a bare use is rewritten too; a local variable of the same name stays, and a multi-declaration falls
+ * through to the interface check.
  * Geometry reaches the vertex stage already camera-relative and tinted, so chunkOffset and colorModulator are
  * neutral, and vaUV1 is vanilla's "no overlay" coordinate because scene geometry carries no overlay.
  */
@@ -29,7 +30,8 @@ final class PackCoreProfile {
 
     private static String rewrite(String source, String kind, String name, String replacement) {
         Matcher declaration = Pattern.compile("(?m)^[ \\t]*"+kind+"\\s+\\w+\\s+"+name+"\\s*;").matcher(source);
-        if (!declaration.find()) return source;
-        return declaration.replaceAll("").replaceAll("\\b"+name+"\\b",Matcher.quoteReplacement(replacement));
+        String body = declaration.replaceAll("");
+        if (Pattern.compile("\\b(?:uniform|in|attribute)\\b[^;]*\\b"+name+"\\b|\\b(?:float|int|bool|[iu]?vec[234]|mat[234])\\s+"+name+"\\b").matcher(body).find()) return source;
+        return body.replaceAll("\\b"+name+"\\b",Matcher.quoteReplacement(replacement));
     }
 }

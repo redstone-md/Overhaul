@@ -85,7 +85,7 @@ public final class PackPreflight {
         for (ShaderPackCatalog.Program discovered : catalog.programs()) {
             String name = discovered.name();
             boolean enabled = discovered.state().enabled();
-            if (!enabled || bare(name).startsWith("dh_")) { // The plan reports both.
+            if (!enabled || dev.overhaul.shader.pack.PackForeignPrograms.owner(bare(name)).isPresent()) { // The plan reports both.
                 inputs.add(new PackPassPlan.Input(name,enabled,List.of(),Set.of(),Map.of()));
                 continue;
             }

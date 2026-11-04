@@ -43,7 +43,8 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
             String relative = path.substring(prefix.length());
             if (relative.contains("/")) continue;
             if (relative.endsWith(".vsh") || relative.endsWith(".fsh")) names.add(path.substring(0,path.length()-4));
-            else if (relative.matches(".*\\.(gsh|csh|tcs|tes)$")) diagnostics.add("Unsupported shader stage: "+path);
+            else if (relative.endsWith(".csh")) warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,path,"Compute program is not run; features that depend on it stay off"));
+            else if (relative.matches(".*\\.(gsh|tcs|tes)$")) diagnostics.add("Unsupported shader stage: "+path);
         }
         List<Program> programs = new ArrayList<>();
         for (String name : names) {
