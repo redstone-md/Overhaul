@@ -1,0 +1,25 @@
+// The receive codec is pinned to 1.21.1; other tiers keep their existing payload path.
+sourceSets.main.java.srcDirs += ['src/chunkPackets/java', 'src/packets121/java']
+sourceSets.main.resources.srcDir 'src/chunkPackets/resources'
+def packetMixins = 'overhaul.chunk-packets.mixins.json'
+overhaulMixinConfigs.add(packetMixins)
+tasks.named('processResources') {
+    inputs.property('chunkPacketVersion', target.minecraft)
+    filesMatching(packetMixins) {
+        expand(compatibility: "JAVA_${target.java}")
+        if (target.loader != 'forge') filter { line -> line.contains('"refmap"') ? null : line }
+    }
+    doLast {
+        if (target.loader == 'fabric') {
+            def metadata = new File(destinationDir, 'fabric.mod.json')
+            def config = new groovy.json.JsonSlurper().parse(metadata)
+            config.mixins = ((config.mixins ?: []) + packetMixins).unique()
+            metadata.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)), 'UTF-8')
+        } else if (target.loader == 'neoforge') {
+            def metadata = new File(destinationDir, 'META-INF/neoforge.mods.toml')
+            if (!metadata.getText('UTF-8').contains('config="' + packetMixins + '"')) {
+                metadata.append('\n[[mixins]]\nconfig="' + packetMixins + '"\n', 'UTF-8')
+            }
+        }
+    }
+}
