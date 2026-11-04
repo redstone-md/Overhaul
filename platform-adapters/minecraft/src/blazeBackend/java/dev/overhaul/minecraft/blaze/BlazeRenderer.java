@@ -12,9 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.ShaderInstance;
-import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK10.*;
@@ -106,11 +103,6 @@ public final class BlazeRenderer implements AutoCloseable {
         state.framebufferBindings(drawTarget,readTarget);
     }
 
-    public void draw(BlazeMesh mesh,Matrix4f modelView,Matrix4f projection,ShaderInstance shader){
-        requireOpen();shader.setDefaultUniforms(mesh.state().mode(),modelView,projection,Minecraft.getInstance().getWindow());
-        shader.apply();
-        try{draw(mesh);}finally{shader.clear();}
-    }
     public void draw(BlazeMesh mesh){draw(mesh,programs.activeSnapshot());}
     public void clear(int mask){requireOpen();currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}

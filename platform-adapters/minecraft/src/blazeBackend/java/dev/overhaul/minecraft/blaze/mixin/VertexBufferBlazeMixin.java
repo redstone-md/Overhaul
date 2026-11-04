@@ -7,8 +7,6 @@ import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
-import net.minecraft.client.renderer.ShaderInstance;
-import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -57,10 +55,6 @@ public abstract class VertexBufferBlazeMixin {
     private static void overhaul$unbind(CallbackInfo callback){if(BlazeFrontend.current()!=null)callback.cancel();}
     @Inject(method="draw()V",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$draw(CallbackInfo callback){var owner=BlazeFrontend.current();if(overhaul$owned){if(overhaul$mesh!=null)BlazeFrontend.require().draw(overhaul$mesh);callback.cancel();}else if(owner!=null)throw new IllegalStateException("OpenGL vertex buffer cannot draw on the owned device");}
-    @Inject(method="_drawWithShader(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;Lnet/minecraft/client/renderer/ShaderInstance;)V",at=@At("HEAD"),cancellable=true,require=1)
-    private void overhaul$shader(Matrix4f modelView,Matrix4f projection,ShaderInstance shader,CallbackInfo callback){
-        var owner=BlazeFrontend.current();if(overhaul$owned){if(overhaul$mesh!=null)BlazeFrontend.require().draw(overhaul$mesh,modelView,projection,shader);callback.cancel();}else if(owner!=null)throw new IllegalStateException("OpenGL vertex buffer cannot draw on the owned device");
-    }
     @Inject(method="close()V",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$close(CallbackInfo callback){
         if(!overhaul$owned)return;
