@@ -18,14 +18,25 @@ public final class ShaderPackProperties {
             "ONE_MINUS_DST_ALPHA","SRC_ALPHA_SATURATE","CONSTANT_COLOR","ONE_MINUS_CONSTANT_COLOR",
             "CONSTANT_ALPHA","ONE_MINUS_CONSTANT_ALPHA");
     private static final Set<String> COMPARES = Set.of("NEVER","LESS","EQUAL","LEQUAL","GREATER","NOTEQUAL","GEQUAL","ALWAYS");
+    private static final java.util.regex.Pattern UNPROCESSED = java.util.regex.Pattern.compile("iris\\.features\\..*|sliders|screen(?:\\..*)?|profile\\..*");
     private final Map<String,String> values;
 
     private ShaderPackProperties(Map<String,String> values) { this.values = Map.copyOf(values); }
     public static ShaderPackProperties parse(String source) throws IOException {
-        Properties parsed = new Properties(); parsed.load(new StringReader(source));
+        return parse(source,Map.of());
+    }
+    /** Conditionals select the active keys; menu and feature keys are read from the raw text, as Iris does. */
+    public static ShaderPackProperties parse(String source, Map<String,String> defines) throws IOException {
+        Map<String,String> values = load(PackPropertiesPreprocessor.process(source,defines));
+        values.keySet().removeIf(key -> UNPROCESSED.matcher(key).matches());
+        for (var entry : load(source).entrySet()) if (UNPROCESSED.matcher(entry.getKey()).matches()) values.put(entry.getKey(),entry.getValue());
+        return new ShaderPackProperties(values);
+    }
+    private static Map<String,String> load(String text) throws IOException {
+        Properties parsed = new Properties(); parsed.load(new StringReader(text));
         Map<String,String> values = new TreeMap<>();
         for (String key : parsed.stringPropertyNames()) values.put(key,parsed.getProperty(key).trim());
-        return new ShaderPackProperties(values);
+        return values;
     }
     public Map<String,String> values() { return values; }
 
