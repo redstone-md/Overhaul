@@ -8,6 +8,7 @@ import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.ShaderDefines;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -18,6 +19,7 @@ import java.util.Objects;
 /** Renderer-owned vertex variants preserve every original fragment, descriptor and attachment contract. */
 public final class InstancedPipelineVariants {
     public static final VertexFormat CORNERS=VertexFormat.builder(0).addAttribute("Corner",GpuFormat.RG32_FLOAT).build();
+    private static final int VERTEX_BINDING_SLOTS=16;
     private final Identifier vertex;
     private final String prefix;
     private final VertexFormat[] bindings;
@@ -28,10 +30,12 @@ public final class InstancedPipelineVariants {
         this(vertex,prefix,SceneDrawDomain.UNKNOWN,bindings);
     }
     public InstancedPipelineVariants(Identifier vertex,String prefix,SceneDrawDomain domain,VertexFormat... bindings){
-        this.vertex=Objects.requireNonNull(vertex);this.prefix=Objects.requireNonNull(prefix);this.bindings=bindings.clone();
+        this.vertex=Objects.requireNonNull(vertex);this.prefix=Objects.requireNonNull(prefix);
         this.domain=Objects.requireNonNull(domain);
         if(bindings.length==0)throw new IllegalArgumentException("Instanced vertex bindings are required");
-        for(VertexFormat format:this.bindings)Objects.requireNonNull(format);
+        for(VertexFormat format:bindings)Objects.requireNonNull(format);
+        // Frontend draw validation reads every slot, so the list keeps RenderPipeline.Builder's fixed size.
+        this.bindings=Arrays.copyOf(bindings,VERTEX_BINDING_SLOTS);
     }
     public RenderPipeline variant(RenderPipeline original){return variants.computeIfAbsent(Objects.requireNonNull(original),this::create);}
     private RenderPipeline create(RenderPipeline original){
