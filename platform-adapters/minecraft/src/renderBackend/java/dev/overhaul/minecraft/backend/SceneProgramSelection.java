@@ -21,6 +21,8 @@ final class SceneProgramSelection {
     boolean hasScene(){return !programs.isEmpty();}
     CompiledShaderPack.Program select(OverhaulPipeline pipeline){
         var metadata=pipeline.compileMetadata();if(metadata==null||metadata.flags().stream().anyMatch(name->name.startsWith("OIT_"))||metadata.defines().keySet().stream().anyMatch(name->name.startsWith("OIT_")))return null;
+        // Combined foil has no pack material route yet: an enchanted entity stays vanilla-drawn instead of failing the frame.
+        if(metadata.family()==PipelineCompileMetadata.Family.ENTITY&&metadata.defined("GLINT"))return null;
         String name;boolean transparent=transparent(pipeline);
         if(metadata.family()==PipelineCompileMetadata.Family.TERRAIN)name=transparent?"gbuffers_water":metadata.defined("ALPHA_CUTOUT")?"gbuffers_terrain_cutout":"gbuffers_terrain_solid";
         // The exact core/block source is Iris's moving-block profile, independently of caller object type.
