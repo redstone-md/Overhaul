@@ -21,7 +21,7 @@ final class BlazeDescriptors implements AutoCloseable {
     private boolean closed;
 
     BlazeDescriptors(VulkanContext context,BlazeQueue queue){this.context=context;this.queue=queue;}
-    Lease acquire(BlazeProgramCompiler.Program program,BlazeBufferPool.Slice uniforms,List<BlazeTextures.Sampled> samples){
+    Lease acquire(BlazeProgramCompiler.Program program,BlazeBufferPool.Slice uniforms,int range,List<BlazeTextures.Sampled> samples){
         if(closed)throw new IllegalStateException("Descriptor storage is closed");
         Layout layout=layouts.get(program);
         if(layout==null){
@@ -39,13 +39,13 @@ final class BlazeDescriptors implements AutoCloseable {
         }
         long set=page.free.removeFirst();page.active++;
         Lease lease=new Lease(layout,page,set);
-        try{write(lease,program,uniforms,samples);return lease;}catch(RuntimeException|Error failure){lease.close();throw failure;}
+        try{write(lease,program,uniforms,range,samples);return lease;}catch(RuntimeException|Error failure){lease.close();throw failure;}
     }
-    private void write(Lease lease,BlazeProgramCompiler.Program program,BlazeBufferPool.Slice uniforms,List<BlazeTextures.Sampled> samples){
+    private void write(Lease lease,BlazeProgramCompiler.Program program,BlazeBufferPool.Slice uniforms,int range,List<BlazeTextures.Sampled> samples){
         try(MemoryStack stack=MemoryStack.stackPush()){
             var writes=VkWriteDescriptorSet.calloc(samples.size()+1,stack);
-            writes.get(0).sType$Default().dstSet(lease.set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(1)
-                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.buffer().handle()).offset(uniforms.offset()).range(uniforms.size()));
+            writes.get(0).sType$Default().dstSet(lease.set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1)
+                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.buffer().handle()).offset(uniforms.offset()).range(range));
             int index=0;
             for(int binding:program.bindings().samplers().values()){
                 BlazeTextures.Sampled sample=samples.get(index);
@@ -75,7 +75,7 @@ final class BlazeDescriptors implements AutoCloseable {
             samplerCount=program.bindings().samplers().size();
             try(MemoryStack stack=MemoryStack.stackPush()){
                 var bindings=VkDescriptorSetLayoutBinding.calloc(samplerCount+1,stack);
-                bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
+                bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
                 int index=1;for(int number:program.bindings().samplers().values())bindings.get(index++).binding(number).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
                 var pointer=stack.mallocLong(1);
                 check(vkCreateDescriptorSetLayout(context.device(),VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(bindings),null,pointer),"Blaze descriptor layout");handle=pointer.get(0);
@@ -93,7 +93,7 @@ final class BlazeDescriptors implements AutoCloseable {
         private Page(Layout layout){
             try(MemoryStack stack=MemoryStack.stackPush()){
                 var sizes=VkDescriptorPoolSize.calloc(layout.samplerCount==0?1:2,stack);
-                sizes.get(0).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(SETS_PER_PAGE);
+                sizes.get(0).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(SETS_PER_PAGE);
                 if(layout.samplerCount!=0)sizes.get(1).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(SETS_PER_PAGE*layout.samplerCount);
                 var pointer=stack.mallocLong(1);
                 check(vkCreateDescriptorPool(context.device(),VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(SETS_PER_PAGE).pPoolSizes(sizes),null,pointer),"Blaze descriptor page");pool=pointer.get(0);

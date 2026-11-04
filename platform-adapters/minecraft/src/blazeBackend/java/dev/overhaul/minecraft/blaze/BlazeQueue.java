@@ -35,6 +35,8 @@ final class BlazeQueue implements AutoCloseable {
             pending.operations.add(operation);stagingBytes=nextBytes;
         }catch(RuntimeException|Error failure){try{operation.close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
     }
+    /** The newest operation not yet submitted; recording it later still keeps its place in order. */
+    Operation last(){return pending.operations.isEmpty()?null:pending.operations.get(pending.operations.size()-1);}
     /** Removed native objects cannot be resolved by later draws; existing snapshots retire first. */
     void retire(AutoCloseable resource){
         if(resource==null)return;

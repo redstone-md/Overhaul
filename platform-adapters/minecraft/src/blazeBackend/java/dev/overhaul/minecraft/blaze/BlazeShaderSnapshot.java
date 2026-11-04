@@ -6,20 +6,24 @@ import dev.overhaul.shader.compat.ProgramBindings;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
+import org.lwjgl.system.MemoryUtil;
 
-/** Actual CPU uniform values copied at draw time, independent of later animation writes. */
+/** Actual CPU uniform values copied at draw time. The bytes live in shared render-thread storage and last until the next capture. */
 public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuffer uniforms, Map<String, Object> samplers) {
     public BlazeShaderSnapshot {
-        uniforms = uniforms.asReadOnlyBuffer().order(ByteOrder.nativeOrder());
-        samplers = Collections.unmodifiableMap(new LinkedHashMap<>(samplers));
+        samplers = Collections.unmodifiableMap(samplers);
     }
     @Override public ByteBuffer uniforms() { return uniforms.duplicate().order(ByteOrder.nativeOrder()); }
 
+    private static ByteBuffer scratch = ByteBuffer.allocateDirect(4096).order(ByteOrder.nativeOrder());
+
     public static BlazeShaderSnapshot capture(BlazeProgramCompiler.Program program,
             Map<String, Uniform> source, Map<String, Object> samplers) {
-        ByteBuffer values = ByteBuffer.allocateDirect(program.bindings().uniformBytes()).order(ByteOrder.nativeOrder());
+        int bytes = program.bindings().uniformBytes();
+        if (scratch.capacity() < bytes) scratch = ByteBuffer.allocateDirect(Math.max(bytes, scratch.capacity() * 2)).order(ByteOrder.nativeOrder());
+        ByteBuffer values = scratch.clear().limit(bytes).slice().order(ByteOrder.nativeOrder());
+        MemoryUtil.memSet(values, 0);
         for (var entry : program.bindings().uniforms().entrySet()) {
             Uniform uniform = source.get(entry.getKey());
             if (uniform != null) copy(values, entry.getValue(), uniform);

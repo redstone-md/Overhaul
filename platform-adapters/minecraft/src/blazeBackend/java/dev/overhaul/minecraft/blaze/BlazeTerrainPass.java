@@ -77,7 +77,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
                 bytes.clear();
                 uniforms.write(bytes);
             }
-            descriptors = owner.descriptors().acquire(program, uniforms, samples);
+            descriptors = owner.descriptors().acquire(program, uniforms, uniforms.size(), samples);
             pipeline = pipelines.get(program, state, target, descriptors.layout());
         } catch (RuntimeException | Error failure) {
             close();
@@ -107,7 +107,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             target.begin(command, stack);
             vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
-            vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout(), 0, stack.longs(descriptors.set()), null);
+            vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout(), 0, stack.longs(descriptors.set()), stack.ints(0));
             BlazePass.dynamicState(command, stack, state, clip);
             for (Draw draw : draws) draw.record(command, pipeline.layout(), multiDraw);
             vkCmdEndRenderPass(command);
