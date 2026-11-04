@@ -17,10 +17,26 @@ public final class ShaderPackSource implements AutoCloseable {
     private static final int MAX_SOURCE_BYTES = 1_048_576;
     private final Path directory;
     private final ZipFile archive;
+    private final java.util.Map<String,byte[]> packaged;
     private boolean closed;
 
     private ShaderPackSource(Path directory, ZipFile archive) {
-        this.directory = directory; this.archive = archive;
+        this(directory,archive,null);
+    }
+    private ShaderPackSource(Path directory,ZipFile archive,java.util.Map<String,byte[]> packaged){this.directory=directory;this.archive=archive;this.packaged=packaged;}
+
+    /** Shipped production packs use the same bounded catalog/preprocessor without extracting temporary files. */
+    public static ShaderPackSource packaged(Class<?> owner,String root,List<String> names)throws IOException{
+        if(!root.startsWith("/")||root.contains("..")||names.size()>64)throw new IllegalArgumentException("Invalid packaged shader root");
+        java.util.Map<String,byte[]> data=new java.util.LinkedHashMap<>();long total=0;
+        for(String name:names){
+            String path=normalize(name);if(data.containsKey(path))throw new IOException("Duplicate packaged shader: "+path);
+            try(InputStream input=owner.getResourceAsStream(root+"/"+path)){
+                if(input==null)throw new IOException("Missing packaged shader: "+path);
+                byte[] bytes=readLimited(input,path,MAX_SOURCE_BYTES);total+=bytes.length;if(total>16_777_216)throw new IOException("Packaged shader source bound exceeded");data.put(path,bytes);
+            }
+        }
+        return new ShaderPackSource(null,null,java.util.Map.copyOf(data));
     }
 
     public static ShaderPackSource open(Path pack) throws IOException {
@@ -49,6 +65,7 @@ public final class ShaderPackSource implements AutoCloseable {
         if (closed) throw new IOException("Shader pack is closed");
         if(maximumBytes<1||maximumBytes>33_554_432)throw new IllegalArgumentException("Asset read bound exceeds [1,32MiB]");
         String normalized = normalize(shaderPath);
+        if(packaged!=null){byte[] bytes=packaged.get(normalized);if(bytes==null)throw new IOException("Missing packaged shader: "+normalized);if(bytes.length>maximumBytes)throw new IOException("Packaged shader asset too large");return bytes.clone();}
         if (archive != null) {
             ZipEntry entry = archive.getEntry("shaders/" + normalized);
             if (entry == null || entry.isDirectory()) throw new IOException("Missing shader: " + normalized);
@@ -66,6 +83,7 @@ public final class ShaderPackSource implements AutoCloseable {
     public synchronized List<String> paths() throws IOException {
         if (closed) throw new IOException("Shader pack is closed");
         Set<String> paths = new TreeSet<>();
+        if(packaged!=null)return packaged.keySet().stream().sorted().toList();
         if (archive != null) {
             var entries = archive.entries();
             while (entries.hasMoreElements()) {
