@@ -58,6 +58,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private GpuBuffer indices;
     private IndexType indexType;
     private PassBindings.Scissor scissor;
+    private PassBindings.Viewport viewport;
     private boolean sealed,recorded,recordingSucceeded,closed,complete;
     private int drawCount;
     private dev.overhaul.vulkan.FrameRing.Submission submission;
@@ -91,6 +92,8 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         if(source.remaining()<size)throw new IllegalArgumentException("Push constants are too small");
         ByteBuffer input=source.duplicate();input.limit(input.position()+size);constants=ByteBuffer.allocateDirect(size);constants.put(input).flip();
     }
+    /** NeoForge extends the shared backend API with per-draw viewport changes. */
+    public void setViewport(int x,int y,int width,int height){requireCapture();viewport=new PassBindings.Viewport(x,y,width,height);}
     @Override public void enableScissor(int x,int y,int width,int height){requireCapture();if(width<0||height<0)throw new IllegalArgumentException("Negative scissor dimensions");scissor=new PassBindings.Scissor(x,y,width,height);}
     @Override public void disableScissor(){requireCapture();scissor=null;}
     @Override public void setVertexBuffer(int slot,GpuBufferSlice slice){
@@ -113,7 +116,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
             if(uniforms[slot]==null)throw new IllegalStateException("Missing uniform "+pipeline.uniforms().get(slot).name());
             if(uniforms[slot] instanceof TextureViewAndSampler pair){var view=owner.texture(pair.view());if(!shadow&&attachments.overlaps(view))throw new UnsupportedOperationException("Attachment feedback requires separate resource versions");sampled.add(view);}
         }
-        var state=new PassBindings(pipeline,uniforms,vertices,indices,indexType,constants,scissor);
+        var state=new PassBindings(pipeline,uniforms,vertices,indices,indexType,constants,scissor,viewport);
         var selected=sceneProgram(state);if(selected!=null)for(var expected:replacement(state,selected).code.inputs.bindings()){
             var source=state.vertices().get(expected.slot());if(source==null)throw new IllegalStateException("Missing scene vertex buffer slot "+expected.slot());PassDescriptors.checkRange(source,owner.buffer(source.buffer()).size());
         }
