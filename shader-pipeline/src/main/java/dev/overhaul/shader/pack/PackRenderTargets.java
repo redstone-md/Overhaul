@@ -87,13 +87,17 @@ public final class PackRenderTargets {
                 Format format;String raw=directives.getOrDefault(index+"Format",index==1&&legacyDepth?"RGBA32F":"RGBA8");
                 try{format=Format.valueOf(raw.equals("RGBA")?"RGBA8":raw);}catch(IllegalArgumentException failure){throw invalid("Unsupported colortex format: "+raw);}
                 boolean clear=bool(directives.getOrDefault(index+"Clear","true"));
-                String[] size=properties.values().getOrDefault("size.buffer.colortex"+index,"1.0 1.0").split("\\s+");
+                String[] size=sizeProperty(index).split("\\s+");
                 if(size.length!=2)throw invalid("Target size requires width and height");dimension(size[0],1024);dimension(size[1],1024);
                 String rawColor=directives.get(index+"ClearColor");boolean fog=index==0&&rawColor==null;
                 Color color=rawColor==null?(index==1?new Color(1,1,1,1):new Color(0,0,0,0)):color(rawColor);
                 result.put(index,new Target(index,format,clear,color,fog,size[0],size[1],mipmapped.contains(index)));
             }
             return new PackRenderTargets(result);
+        }
+        private String sizeProperty(int index){
+            for(String name:colorNames(index)){String value=properties.values().get("size.buffer."+name);if(value!=null)return value;}
+            return "1.0 1.0";
         }
         private static boolean bool(String value){if(!value.equals("true")&&!value.equals("false"))throw invalid("Expected literal target boolean: "+value);return Boolean.parseBoolean(value);}
         private static Color color(String value){
