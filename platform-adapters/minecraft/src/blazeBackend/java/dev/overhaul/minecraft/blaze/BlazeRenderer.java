@@ -24,6 +24,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Set<BlazeMesh> meshes=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GpuBuffer> glDeviceBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private BlazeTerrain terrain;
+    private BlazeDh dh;
     private BlazeRawFramebuffers rawFramebuffers;
     private float foreignClearDepth=1;
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
@@ -94,6 +95,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(failure instanceof RuntimeException)throw(RuntimeException)failure;if(failure instanceof Error)throw(Error)failure;
     }
     public BlazeTerrain terrain(){requireOpen();if(terrain==null)terrain=new BlazeTerrain(this);return terrain;}
+    public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
     GpuBuffer newGlDeviceBuffer(long size){
         requireOpen();
@@ -101,7 +103,7 @@ public final class BlazeRenderer implements AutoCloseable {
         glDeviceBuffers.add(buffer);return buffer;
     }
     /** Captured terrain draws reach the queue first: the retirement must follow every draw that still reads the buffer. */
-    void retireGlDeviceBuffer(GpuBuffer buffer){requireOpen();if(terrain!=null)terrain.flush();glDeviceBuffers.remove(buffer);queue.retire(buffer);}
+    void retireGlDeviceBuffer(GpuBuffer buffer){requireOpen();if(terrain!=null)terrain.flush();if(dh!=null)dh.flush();glDeviceBuffers.remove(buffer);queue.retire(buffer);}
     void writeGlDeviceBuffer(GpuBuffer target,long offset,long source,long bytes){requireOpen();transfers.write(target,offset,source,bytes);}
     void copyGlDeviceBuffer(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes){requireOpen();transfers.copy(source,sourceOffset,target,targetOffset,bytes);}
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
@@ -199,6 +201,7 @@ public final class BlazeRenderer implements AutoCloseable {
         failure=release(context::waitIdle,failure);
         for(BlazeMesh mesh:new ArrayList<>(meshes))failure=release(mesh::close,failure);
         if(terrain!=null)failure=release(terrain::close,failure);
+        if(dh!=null)failure=release(dh::close,failure);
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
         for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();
         for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();

@@ -30,7 +30,7 @@
     "TimerQueryBlazeMixin",
     "VeilShaderCompilerBlazeMixin",
     "DefaultChunkRendererBlazeMixin",
-    "FlywheelBackendBlazeMixin"
+    "FlywheelBackendBlazeMixin","DhTerrainBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhPostProcessBlazeMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }

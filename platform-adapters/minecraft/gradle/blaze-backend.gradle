@@ -13,7 +13,7 @@ if ((target.java as int) != blazeTarget.java) throw new GradleException('Blaze3D
 sourceSets.main.java.srcDir 'src/blazeBackend/java'
 sourceSets.main.java.srcDir "src/${blazeTarget.source}/java"
 sourceSets.main.resources.srcDir 'src/blazeBackend/resources'
-// Sodium is optional at runtime; its classes are compile-time stubs for a @Pseudo mixin and are never packaged.
+// Sodium and Distant Horizons are optional at runtime; their classes are compile-time stubs for @Pseudo mixins and are never packaged.
 sourceSets.create('blazeSodiumStubs') { java.srcDirs = ['src/blazeSodiumStubs/java'] }
 dependencies {
     blazeSodiumStubsCompileOnly 'org.joml:joml:1.10.5'
