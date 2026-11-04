@@ -426,3 +426,32 @@ to preserve per-face ordering and exact mapped/decal UVs. See the
 The controlled [OpenGL comparison contract](docs/PERFORMANCE_COMPARISON.md)
 requires actual uncapped presentation support before throughput sampling. The
 current Vulkan swapchain is FIFO-only; no FPS advantage has been established.
+
+## Active production increment: owned cascaded shadows
+
+Add an owned 26.3 world-rendering mode with two to four camera-fitted shadow
+cascades and actual terrain receivers. External Iris packs retain their existing
+single projection and separate full/opaque depth roles. A shipped caster program
+reuses the ordinary off-camera terrain/entity/block-entity capture; prepared
+geometry and animation are produced once and emitted into each cascade.
+
+Fit overlapping practical depth splits from the actual frame projection and
+camera. Stabilize each light-space footprint on a world-space texel grid using
+double camera coordinates, and preserve upstream caster depth coverage. Own
+single-layer depth attachment views and independent full/opaque depth storage per
+cascade. Captured passes retain their cascade index and immutable GPU camera
+buffer; queued draws must never depend on a later mutable camera selection.
+
+The owned terrain shader route preserves the original texture sampling, alpha
+cutout, chunk fade and fog. Cascade selection and overlap blending interpolate
+between the actual lightmap sample and a block-light/ambient sample with the same
+block-light coordinate and zero skylight. This supplies a real receiver path
+without darkening fog or replacing block light with a fabricated constant.
+Entity/block-entity receivers and arbitrary pack-authored cascade conventions
+remain separate required work after this terrain increment.
+
+Keep camera fitting, native depth ownership, shader adaptation and draw capture in
+orthogonal classes below 500 lines, reusing existing image, descriptor, pipeline
+and lifetime machinery. No tests or test files are permitted in this phase.
+Builds and game launches remain root-coordinated; preserve the active NeoForge
+1.21.1 world and do not change its output directories or runtime artifacts.
