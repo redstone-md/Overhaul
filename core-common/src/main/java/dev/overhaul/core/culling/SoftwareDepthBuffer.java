@@ -15,7 +15,8 @@ public final class SoftwareDepthBuffer {
     private final float[][] levels;
     private final float[] triangle=new float[9];
     private final double[] edgeA=new double[16],edgeB=new double[16],edgeC=new double[16];
-    private boolean dirty;
+    // Level-zero cells changed since the hierarchy was last valid; empty when minimum exceeds maximum.
+    private int dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY;
 
     public SoftwareDepthBuffer(int width, int height) {
         if (width < 1 || height < 1 || (long) width * height > 16_777_216) {
@@ -34,8 +35,13 @@ public final class SoftwareDepthBuffer {
     }
 
     public void clear() {
-        Arrays.fill(levels[0], 1f);
-        dirty = true;
+        for (float[] level : levels) Arrays.fill(level, 1f);
+        markClean();
+    }
+
+    private void markClean() {
+        dirtyMinX = dirtyMinY = Integer.MAX_VALUE;
+        dirtyMaxX = dirtyMaxY = 0;
     }
 
     public int width(){return width;}
@@ -92,10 +98,14 @@ public final class SoftwareDepthBuffer {
                 if(!full)continue;
                 double far=base+dx*(x+(dx>0?1:0))+dy*(y+(dy>0?1:0))+excess;
                 float depth=Math.nextUp((float)Math.max(0,Math.min(1,far)));
-                int index=y*width+x;levels[0][index]=Math.min(levels[0][index],depth);
+                int index=y*width+x;
+                if(depth<levels[0][index]){
+                    levels[0][index]=depth;
+                    dirtyMinX=Math.min(dirtyMinX,x);dirtyMaxX=Math.max(dirtyMaxX,x+1);
+                    dirtyMinY=Math.min(dirtyMinY,y);dirtyMaxY=Math.max(dirtyMaxY,y+1);
+                }
             }
         }
-        dirty=true;
     }
 
     private void validate(float x, float y, float z) {
@@ -117,15 +127,18 @@ public final class SoftwareDepthBuffer {
         if (minX < 0 || minY < 0 || maxX > width || maxY > height
                 || minX >= maxX || minY >= maxY || !Float.isFinite(nearestDepth)
                 || nearestDepth < 0 || nearestDepth > 1) return false;
-        if (dirty) rebuild();
+        if (dirtyMaxX > 0) rebuild();
         return test(levels.length - 1, 0, 0, minX, minY, maxX, maxY, nearestDepth);
     }
 
+    /** Occluders arrive between tests, so only the parents of changed cells are recomputed. */
     private void rebuild() {
+        int minX = dirtyMinX, minY = dirtyMinY, maxX = dirtyMaxX, maxY = dirtyMaxY;
         for (int level = 1; level < levels.length; level++) {
             int childWidth = widths[level - 1], childHeight = heights[level - 1];
-            for (int y = 0; y < heights[level]; y++) {
-                for (int x = 0; x < widths[level]; x++) {
+            minX >>= 1; minY >>= 1; maxX = (maxX + 1) >> 1; maxY = (maxY + 1) >> 1;
+            for (int y = minY; y < maxY; y++) {
+                for (int x = minX; x < maxX; x++) {
                     float maximum = 0;
                     for (int dy = 0; dy < 2; dy++) {
                         for (int dx = 0; dx < 2; dx++) {
@@ -139,7 +152,7 @@ public final class SoftwareDepthBuffer {
                 }
             }
         }
-        dirty = false;
+        markClean();
     }
 
     private boolean test(int level, int x, int y, int minX, int minY, int maxX, int maxY, float near) {
