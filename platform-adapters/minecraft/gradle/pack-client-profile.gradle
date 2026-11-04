@@ -1,0 +1,24 @@
+// Runs a third-party modpack from its own game directory, with or without Overhaul loaded,
+// so both configurations of a comparison share the same mods, world and loader version.
+def profile = providers.gradleProperty('packProfile').get()
+if (!(profile ==~ /[a-z0-9-]+/)) throw new GradleException('packProfile must be a lowercase directory suffix')
+def profileDirectory = project.file("run/${targetName}-${profile}")
+def withoutOverhaul = providers.gradleProperty('packBaseline').isPresent()
+def heap = providers.gradleProperty('packHeap').getOrElse('8G')
+if (withoutOverhaul) neoForge.addModdingDependenciesTo(sourceSets.create('packBaseline'))
+
+neoForge.runs {
+    client {
+        client()
+        gameDirectory = profileDirectory
+        loggingConfigFile = project.file('gradle/pack-client-log4j2.xml')
+        jvmArguments.addAll("-Xms${heap}".toString(), "-Xmx${heap}".toString())
+        if (providers.gradleProperty('packWorld').isPresent()) {
+            programArguments.addAll('--quickPlaySingleplayer', providers.gradleProperty('packWorld').get())
+        }
+        if (withoutOverhaul) {
+            sourceSet = sourceSets.packBaseline
+            loadedMods = []
+        }
+    }
+}

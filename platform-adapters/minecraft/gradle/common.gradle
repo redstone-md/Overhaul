@@ -1,5 +1,7 @@
 ext.targetName = providers.gradleProperty('target').getOrElse('fabric-26.3')
 ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetName]
+// A modpack may require a newer loader than the pinned compile target.
+if (providers.gradleProperty('loaderVersionOverride').isPresent()) target.loaderVersion = providers.gradleProperty('loaderVersionOverride').get()
 ext.set('loom.platform', target.loader)
 ext.overhaulMixinConfigs = ['overhaul.mixins.json']
 def sectionQueries = ['1.20.1', '1.21.1', '26.3'].contains(target.minecraft)

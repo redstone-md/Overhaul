@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Modpacks can emit millions of log lines, which exhausts the Gradle daemon streaming the client console. -->
+<Configuration status="warn" shutdownHook="disable">
+    <Appenders>
+        <Console name="Console">
+            <PatternLayout pattern="[%d{HH:mm:ss}] [%t/%level] [%c{2.}]: %msg{nolookup}%n%tEx"/>
+        </Console>
+        <RollingRandomAccessFile name="File" fileName="logs/latest.log" filePattern="logs/%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="[%d{ddMMMyyyy HH:mm:ss.SSS}] [%t/%level] [%logger]: %msg{nolookup}%n%xEx"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy/>
+                <OnStartupTriggeringPolicy/>
+            </Policies>
+            <DefaultRolloverStrategy max="20" fileIndex="min"/>
+        </RollingRandomAccessFile>
+    </Appenders>
+    <Loggers>
+        <Logger level="info" name="com.mojang"/>
+        <Logger level="info" name="net.minecraft"/>
+        <!-- Diagonal Blocks reports one stack trace per wall block state it cannot convert: over 180000 per reload. -->
+        <Logger name="Puzzles Lib">
+            <filters>
+                <RegexFilter regex="^Failed to modify unbaked model$" onMatch="DENY" onMismatch="NEUTRAL"/>
+            </filters>
+        </Logger>
+        <Root level="INFO">
+            <AppenderRef ref="Console" level="warn"/>
+            <AppenderRef ref="File"/>
+        </Root>
+    </Loggers>
+</Configuration>
