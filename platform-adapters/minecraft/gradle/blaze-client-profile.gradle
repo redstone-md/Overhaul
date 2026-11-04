@@ -1,0 +1,56 @@
+// This owned development profile avoids reusing FML's early OpenGL window.
+if (!(target.loader in ['forge', 'neoforge'])) throw new GradleException('The owned FML client profile requires Forge or NeoForge')
+def profileDirectory = layout.projectDirectory.dir("run/${targetName}-blaze")
+def prepareProfile = tasks.register('prepareBlazeClientProfile') {
+    group = 'application'
+    description = 'Prepares only the owned Blaze client profile and validates its FML early-window setting.'
+    doLast {
+        def expected = layout.projectDirectory.asFile.canonicalFile.toPath()
+                .resolve('run').resolve("${targetName}-blaze")
+        def directory = profileDirectory.asFile
+        def config = profileDirectory.file('config/fml.toml').asFile
+        if (directory.canonicalFile.toPath() != expected
+                || config.canonicalFile.toPath() != expected.resolve('config/fml.toml')) {
+            throw new GradleException('Refusing an owned Blaze profile redirected outside its expected directory')
+        }
+        if (!config.exists()) {
+            if (!config.parentFile.isDirectory() && !config.parentFile.mkdirs()) {
+                throw new GradleException("Cannot create owned Blaze configuration directory: ${config.parentFile}")
+            }
+            java.nio.file.Files.writeString(config.toPath(), 'earlyWindowControl = false\n',
+                    java.nio.charset.StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE_NEW)
+        }
+        // FML generates simple root options. Fail closed on ambiguous multiline root values.
+        def root = true
+        Boolean earlyWindow = null
+        config.readLines('UTF-8').each { line ->
+            def text = line.trim()
+            if (!text || text.startsWith('#')) return
+            if (text.startsWith('[')) { root = false; return }
+            if (!root) return
+            def multilineCollection = (text ==~ /[^=]+=\s*[\[\{].*/)
+                    && !(text ==~ /[^=]+=\s*(?:\[.*\]|\{.*\})\s*(?:#.*)?$/)
+            if (text.contains('"""') || text.contains("'''") || multilineCollection) {
+                throw new GradleException("Cannot safely inspect multiline root TOML in owned profile ${config}; existing content was preserved")
+            }
+            def option = text =~ /^(?:earlyWindowControl|"earlyWindowControl"|'earlyWindowControl')\s*=\s*(true|false)\s*(?:#.*)?$/
+            if (option.matches()) {
+                if (earlyWindow != null) throw new GradleException("Duplicate root earlyWindowControl in owned profile ${config}")
+                earlyWindow = Boolean.valueOf(option.group(1))
+            }
+        }
+        if (earlyWindow != Boolean.FALSE) {
+            throw new GradleException("Owned Blaze profile requires root earlyWindowControl=false in ${config}; existing content was preserved")
+        }
+    }
+}
+tasks.matching { it.name == 'runClient' }.configureEach { dependsOn prepareProfile }
+
+// Configure the loader's run model after its normal directory defaults, not JavaExec.workingDir.
+gradle.projectsEvaluated {
+    if (target.loader == 'forge') {
+        loom.runs.named('client') { getRunDirectory().set(profileDirectory) }
+    } else {
+        neoForge.runs.named('client') { gameDirectory.set(profileDirectory) }
+    }
+}
