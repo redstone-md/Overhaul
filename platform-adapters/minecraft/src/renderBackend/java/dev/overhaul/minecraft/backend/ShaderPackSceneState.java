@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.backend;
 
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.textures.GpuTexture;
+import dev.overhaul.minecraft.shader.CascadeShadowFrame;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -33,13 +34,16 @@ public final class ShaderPackSceneState implements AutoCloseable {
         try{clear();generation=replacement;this.configuration=configuration;}catch(RuntimeException|Error failure){replacement.close();throw failure;}
     }
     public void begin(GpuTextureView color,GpuTextureView depth,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms){
+        begin(color,depth,fog,uniforms,null);
+    }
+    public void begin(GpuTextureView color,GpuTextureView depth,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms,CascadeShadowFrame cascades){
         owner.requireOpen();if(generation==null||framePins!=null)throw new IllegalStateException("Shader-pack frame is missing its generation or already began");
         var lane=owner.commands();framePins=new BackendPins(owner,color,depth);
         try{
             frame=new PackGraphRuntime.Frame(owner.texture(color),depth==null?null:owner.texture(depth),fog,Map.of());
             if(generation.scene()&&(generation.color().image().width(0)!=frame.color().image().width(frame.color().baseMip())
                     ||generation.color().image().height(0)!=frame.color().image().height(frame.color().baseMip())))throw new IllegalArgumentException("Scene colortex0 must preserve game color extent for ordinary image transfers");
-            generation.begin(lane,frame,uniforms);active=generation.scene();
+            generation.begin(lane,frame,uniforms,cascades);active=generation.scene();
         }catch(RuntimeException|Error failure){framePins.close();framePins=null;frame=null;throw failure;}
     }
     public void finish(){
@@ -56,13 +60,20 @@ public final class ShaderPackSceneState implements AutoCloseable {
     public void captureShadows(Runnable opaque,Runnable translucent){
         owner.requireOpen();if(framePins==null||generation==null||!generation.hasShadows())return;
         if(shadowCapture)throw new IllegalStateException("Nested shadow caster capture");
-        generation.prepareShadows(owner.commands());shadowCapture=true;
+        var cascades=generation.cascades();
+        if(cascades!=null)cascades.clear();else generation.prepareShadows(owner.commands());
+        shadowCapture=true;
         try{
-            opaque.run();generation.snapshotOpaqueShadow(owner.commands());
-            translucent.run();generation.finishShadows(owner.commands(),frame);
+            if(cascades!=null)cascades.capture(opaque,translucent);
+            else{
+                opaque.run();generation.snapshotOpaqueShadow(owner.commands());
+                translucent.run();generation.finishShadows(owner.commands(),frame);
+            }
         }finally{shadowCapture=false;}
     }
     boolean isShadowCapture(){owner.requireOwner();return shadowCapture;}
+    /** The cascades published for the frame in progress; null outside it and on the external pack route. */
+    CascadeShadowGeneration cascades(){owner.requireOwner();return framePins!=null?generation.cascades():null;}
     public void afterOpaque(){
         owner.requireOpen();if(framePins==null)throw new IllegalStateException("Opaque boundary outside a captured shader-pack world frame");
         generation.afterOpaque(owner.commands(),frame);

@@ -58,6 +58,10 @@ public final class CascadeShadowCameras {
         }
         captured=true;
     }
+    public CascadeShadowFrame frame(){
+        if(!captured)throw new IllegalStateException("Cascade camera is not captured");
+        return new CascadeShadowFrame(resolution,splits,starts,projections,views,receivers);
+    }
     public int count(){return count;}
     public float splitDepth(int cascade){require(cascade);return splits[cascade];}
     public float blendStart(int cascade){require(cascade);return starts[cascade];}

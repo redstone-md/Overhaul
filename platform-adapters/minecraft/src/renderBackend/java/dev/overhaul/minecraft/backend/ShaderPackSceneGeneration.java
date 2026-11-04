@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.util.TextureViewAndSampler;
+import dev.overhaul.minecraft.shader.CascadeShadowFrame;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShadercCompiler;
@@ -33,6 +34,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
     private PackGraphRuntime.Uniforms uniforms;
     private SceneFallbackTexture identityTexture,normalTexture,specularTexture;
     private final PackShadowSettings shadowSettings;
+    private CascadeShadowGeneration cascades;
     /** A null policy keeps the external pack route; owned cascades have no pack graph or colortex targets. */
     ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,CascadeShadowSettings cascadePolicy){
         super(owner);this.pack=pack;selection=new SceneProgramSelection(pack);shadows=new ShadowProgramSelection(pack);
@@ -41,7 +43,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
             if(cascadePolicy==null){
                 var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(SceneProgramSelection.VANILLA_DRAWN);bound.addAll(ShadowProgramSelection.SUPPORTED);
                 runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
-            }
+            }else cascades=new CascadeShadowGeneration(owner,cascadePolicy);
             if(scene()||hasShadows()){identityTexture=SceneFallbackTexture.identity(owner);normalTexture=SceneFallbackTexture.flatNormal(owner);specularTexture=SceneFallbackTexture.noSpecular(owner);}
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
@@ -50,11 +52,12 @@ final class ShaderPackSceneGeneration extends BackendResource {
     boolean hasShadows(){return shadows.present();}
     PackShadowSettings shadowSettings(){return shadowSettings;}
     boolean ownsWorldPasses(){return runtime!=null;}
+    CascadeShadowGeneration cascades(){return cascades;}
     boolean ownsColor(GpuImageView view){return runtime!=null&&view.image()==color().image();}
     GpuImageView color(){requireNativeAlive();return runtime.color(0);}
-    void begin(ImmediateCommands lane,PackGraphRuntime.Frame frame,PackGraphRuntime.Uniforms uniforms){
+    void begin(ImmediateCommands lane,PackGraphRuntime.Frame frame,PackGraphRuntime.Uniforms uniforms,CascadeShadowFrame cascadeFrame){
         requireOpen();this.uniforms=uniforms;if(identityTexture!=null){identityTexture.initialize(lane);normalTexture.initialize(lane);specularTexture.initialize(lane);}
-        if(runtime!=null)runtime.beginFrame(lane,frame,uniforms);for(var pipeline:pipelines.values())pipeline.update();for(var pipeline:shadowPipelines.values())pipeline.update();
+        if(runtime!=null)runtime.beginFrame(lane,frame,uniforms);else cascades.beginFrame(cascadeFrame);for(var pipeline:pipelines.values())pipeline.update();for(var pipeline:shadowPipelines.values())pipeline.update();
     }
     void afterOpaque(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.afterOpaque(lane,frame,uniforms);}
     void prepareShadows(ImmediateCommands lane){requireOpen();runtime.prepareShadows(lane);}
@@ -84,8 +87,13 @@ final class ShaderPackSceneGeneration extends BackendResource {
     }
     PassAttachments shadowAttachments(CompiledShaderPack.Program program,List<BackendResource> capturedSources){
         if(program.stage()!=CompiledShaderPack.Stage.SHADOW)throw new IllegalArgumentException("A shadow attachment set requires a shadow program");
-        List<BackendResource> sources=new ArrayList<>(capturedSources);if(!sources.contains(this))sources.add(this);
-        int resolution=pack.shadow().resolution();return new PassAttachments(owner(),runtime.shadowTargets(program),runtime.shadowDepth(0),sources,resolution,resolution);
+        int resolution=pack.shadow().resolution();return new PassAttachments(owner(),runtime.shadowTargets(program),runtime.shadowDepth(0),pinned(capturedSources),resolution,resolution);
+    }
+    PassAttachments cascadeAttachments(int cascade,List<BackendResource> capturedSources){
+        int resolution=cascades.resolution();return new PassAttachments(owner(),List.of(),cascades.depth(cascade),pinned(capturedSources),resolution,resolution);
+    }
+    private List<BackendResource> pinned(List<BackendResource> capturedSources){
+        List<BackendResource> sources=new ArrayList<>(capturedSources);if(!sources.contains(this))sources.add(this);return sources;
     }
     Sample sample(ScenePackPipeline pipeline,String name,PassBindings state){
         Sample routed=runtime==null?null:runtimeSample(pipeline,name);if(routed!=null)return routed;
@@ -128,6 +136,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
     }
     @Override protected void destroyNative(){
         for(var pipeline:pipelines.values())pipeline.close();pipelines.clear();for(var pipeline:shadowPipelines.values())pipeline.close();shadowPipelines.clear();if(runtime!=null){runtime.close();runtime=null;}
+        if(cascades!=null){cascades.close();cascades=null;}
         if(identityTexture!=null){identityTexture.close();identityTexture=null;}
         if(normalTexture!=null){normalTexture.close();normalTexture=null;}
         if(specularTexture!=null){specularTexture.close();specularTexture=null;}

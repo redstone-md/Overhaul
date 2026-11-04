@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.minecraft.shader.CascadeShadowFrame;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -50,7 +51,9 @@ final class ScenePackPipeline implements AutoCloseable {
             update();
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
-    void update(){generation.fill(program,values);if(uniforms!=null){upload.clear();values.copyTo(upload);upload.flip();uniforms.write(upload);}}
+    void update(){generation.fill(program,values);if(uniforms!=null)write(uniforms);}
+    void writeCascade(GpuBuffer target,CascadeShadowFrame frame,int cascade){generation.fill(program,values);frame.fill(cascade,values);write(target);}
+    private void write(GpuBuffer target){upload.clear();values.copyTo(upload);upload.flip();target.write(upload);}
     boolean needsDepthRefresh(){
         return program.stage()!=CompiledShaderPack.Stage.SHADOW&&code.bindings.samplers().keySet().stream().anyMatch(name->{
             if(generation.pack().textures().image(program,name)!=null)return false;
@@ -64,7 +67,9 @@ final class ScenePackPipeline implements AutoCloseable {
         var baseline=OverhaulPipelineState.describe(original.info(),stages,descriptorLayout,java.util.Collections.nCopies(count,VK_FORMAT_UNDEFINED),key.depth());
         boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOW;
         List<NativeGraphicsPipeline.Color> colors=new ArrayList<>();
-        for(int location=0;location<program.code().framebuffer().colorTargets().size();location++){
+        // Depth-only owned cascades have no color attachment for a shadow program's output to reach.
+        int locations=key.colors().isEmpty()?0:program.code().framebuffer().colorTargets().size();
+        for(int location=0;location<locations;location++){
             int target=program.code().framebuffer().colorTargets().get(location);
             var inherited=baseline.colors().get(location<original.info().colorTargetStates().size()?location:0);
             boolean explicit=program.state().blends().containsKey("*")||program.state().blends().containsKey((shadow?"shadowcolor":"colortex")+target);
@@ -78,9 +83,12 @@ final class ScenePackPipeline implements AutoCloseable {
         variants.put(key,result);return result;
     }
     void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors gameDescriptors,ScenePackDescriptors packDescriptors){
+        bind(command,bindings,attachments,gameDescriptors,packDescriptors,uniforms);
+    }
+    void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors gameDescriptors,ScenePackDescriptors packDescriptors,GpuBuffer uniformBuffer){
         var owner=original.owner();var pipeline=variant(attachments);
         try(MemoryStack stack=MemoryStack.stackPush()){
-            long packSet=packDescriptors.set(this,bindings),gameSet=gameDescriptors.set(original,bindings.uniforms());
+            long packSet=packDescriptors.set(this,bindings,uniformBuffer),gameSet=gameDescriptors.set(original,bindings.uniforms());
             vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(packSet,gameSet),null);
             if(code.normals){var source=bindings.vertices().get(code.inputs.storage().slot());if(source==null||source.offset()%4!=0||source.offset()/4>Integer.MAX_VALUE)throw new UnsupportedShaderException("Scene vertex address cannot be represented by its SSBO word offset");
                 vkCmdPushConstants(command,pipeline.layout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,stack.ints((int)(source.offset()/4)));}

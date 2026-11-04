@@ -84,6 +84,12 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             }
         };
     }
+    /** Fits the owned cascades to this frame's camera and returns them detached from the mutable fit. */
+    CascadeShadowFrame cascades(CascadeShadowCameras cameras,float distance){
+        var position=state.cameraRenderState.pos;
+        cameras.capture(projection,view,position.x,position.y,position.z,near,Math.min(state.cameraRenderState.depthFar,distance),shadow.lightRotation(),distance);
+        return cameras.frame();
+    }
     @Override public void fill(CompiledShaderPack.Program program,UniformBlock values){
         for(String name:values.bindings().uniforms().keySet())if(!custom.fill(name,values))switch(name){
             case "viewWidth","overhaulViewportHeight"->{if(name.equals("viewWidth"))values.setFloat(name,width);else values.setFloat(name,height);}

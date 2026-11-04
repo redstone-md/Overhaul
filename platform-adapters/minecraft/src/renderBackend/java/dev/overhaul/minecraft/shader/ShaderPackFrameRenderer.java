@@ -28,6 +28,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
     private final ShaderPackFrameUniforms uniforms=new ShaderPackFrameUniforms();
     private ShaderPackSceneState scenes;
     private CompiledShaderPack activePack;
+    private CascadeShadowCameras cameras;
     private ShaderPackConfiguration configuration,blocked;
     private int width,height;
     private boolean installed,prepared,captured,closed;
@@ -51,11 +52,12 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
                 try{pack=CompiledShaderPack.compileForDimension(source,dimension,selected,definitions,compiler);}
                 catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}
                 scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades());activePack=pack;installed=true;
+                var policy=nextConfiguration.cascades();cameras=policy==null?null:new CascadeShadowCameras(policy.count(),policy.resolution(),policy.splitLambda(),policy.blendFraction());
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+nextConfiguration.requested(),failure);}
         }
         uniforms.capture(minecraft,state,target.width,target.height,projection,activePack);var fog=state.cameraRenderState.fogData.color;
-        scenes.begin(target.getColorTextureView(),target.getDepthTextureView(),new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),uniforms);captured=true;prepared=false;
+        scenes.begin(target.getColorTextureView(),target.getDepthTextureView(),new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),uniforms,cameras==null?null:uniforms.cascades(cameras,configuration.cascades().distance()));captured=true;prepared=false;
     }
     public void render(RenderTarget target,LevelRenderState state){
         requireOpen();if(!ShaderPackConfiguration.requestedAny()){invalidate();return;}
@@ -94,7 +96,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
         requireOpen();
         try{if(scenes!=null)scenes.clear();}
         finally{
-            prepared=captured=false;installed=false;activePack=null;configuration=blocked=null;uniforms.resetHistory();
+            prepared=captured=false;installed=false;activePack=null;cameras=null;configuration=blocked=null;uniforms.resetHistory();
             if(minecraft.levelRenderer instanceof ShadowCasterAccess shadows)shadows.overhaul$releaseShadows();
         }
     }

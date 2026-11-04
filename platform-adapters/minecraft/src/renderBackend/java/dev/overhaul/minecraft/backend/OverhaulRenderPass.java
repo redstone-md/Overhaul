@@ -39,6 +39,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private final ShaderPackSceneGeneration scene;
     private final boolean shadow;
     private final ScenePackDescriptors sceneDescriptors;
+    private final CascadePassCameras cameras;
     private final Map<CompiledShaderPack.Program,PassAttachments> sceneAttachments=new LinkedHashMap<>();
     private PassAttachments ordinaryLoading;
     private final BackendDrawStatistics.Recording drawMetrics=new BackendDrawStatistics.Recording();
@@ -65,6 +66,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
 
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
         this.owner=owner;owner.requireOpen();shadow=owner.shaderPacks().isShadowCapture();descriptors=new PassDescriptors(owner);scene=owner.shaderPacks().capture();sceneDescriptors=scene==null?null:new ScenePackDescriptors(owner);
+        cameras=shadow&&scene!=null&&scene.cascades()!=null?new CascadePassCameras(scene.cascades()):null;
         try{if(scene!=null)retain(scene);attachments=new PassAttachments(owner,descriptor,this::retain,scene);}
         catch(RuntimeException|Error failure){releasePins();throw failure;}
     }
@@ -121,6 +123,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         var selected=sceneProgram(state);if(selected!=null)for(var expected:replacement(state,selected).code.inputs.bindings()){
             var source=state.vertices().get(expected.slot());if(source==null)throw new IllegalStateException("Missing scene vertex buffer slot "+expected.slot());PassDescriptors.checkRange(source,owner.buffer(source.buffer()).size());
         }
+        if(selected!=null&&cameras!=null)cameras.capture(replacement(state,selected));
         return state;
     }
     @Override public void drawIndexed(int indexCount,int instanceCount,int firstIndex,int vertexOffset,int firstInstance){
@@ -258,13 +261,14 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
                 if(entry.bindings()==null){if(current!=null){vkCmdEndRenderPass(command);current=null;}entry.draw().accept(command);continue;}
                 var state=entry.bindings();var selected=sceneProgram(state);if(selected==null)continue;
                 var pipeline=scene.shadowPipeline(state.pipeline());
-                var desired=sceneAttachments.computeIfAbsent(selected,program->scene.shadowAttachments(program,attachments.resourceSources()));
+                var desired=sceneAttachments.computeIfAbsent(selected,program->cameras!=null?scene.cascadeAttachments(cameras.cascade(),attachments.resourceSources()):scene.shadowAttachments(program,attachments.resourceSources()));
                 if(current!=desired||currentPipeline!=pipeline){
                     if(current!=null){vkCmdEndRenderPass(command);current=null;}
                     scene.sampleTransitions(command,pipeline,state,desired,transitions);
                     desired.begin(command,transitions);current=desired;currentPipeline=pipeline;
                 }
-                pipeline.bind(command,state,desired,descriptors,sceneDescriptors);entry.draw().accept(command);
+                if(cameras!=null)pipeline.bind(command,state,desired,descriptors,sceneDescriptors,cameras.buffer(pipeline));else pipeline.bind(command,state,desired,descriptors,sceneDescriptors);
+                entry.draw().accept(command);
             }
         }finally{if(current!=null)vkCmdEndRenderPass(command);}
     }
@@ -283,7 +287,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         if(closed)return;owner.requireOwner();
         if(submission!=null){submission.await();if(closed)return;}
         closed=true;
-        try{descriptors.close();if(sceneDescriptors!=null)sceneDescriptors.close();for(var targets:sceneAttachments.values())targets.close();sceneAttachments.clear();if(ordinaryLoading!=null)ordinaryLoading.close();attachments.close();}
+        try{descriptors.close();if(sceneDescriptors!=null)sceneDescriptors.close();if(cameras!=null)cameras.close();for(var targets:sceneAttachments.values())targets.close();sceneAttachments.clear();if(ordinaryLoading!=null)ordinaryLoading.close();attachments.close();}
         finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();timestampResets.clear();timestampKeys.clear();sampled.clear();bufferReads.clear();releasePins();}}
     }
 }
