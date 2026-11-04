@@ -14,7 +14,7 @@ final class OverhaulImageOperation implements OverhaulGpuOperation {
         }
     }
     private final OverhaulDeviceBackend owner;
-    private final Object[] resources;
+    private final BackendResource[] resources;
     private final BackendPins pins;
     private final Runnable callback;
     private final List<ImageCommand> commands=new ArrayList<>();
@@ -23,8 +23,11 @@ final class OverhaulImageOperation implements OverhaulGpuOperation {
     private long stagingBytes;
 
     OverhaulImageOperation(OverhaulDeviceBackend owner,Runnable callback,Object... resources) {
-        this.owner=owner; this.callback=callback; this.resources=resources.clone();
-        pins=new BackendPins(owner,resources);
+        this.owner=owner; this.callback=callback; this.resources=new BackendResource[resources.length];
+        for (int index=0;index<resources.length;index++) {
+            this.resources[index]=resources[index]==null?null:owner.backendResource(resources[index]);
+        }
+        pins=new BackendPins(owner,(Object[])this.resources);
     }
     void add(ImageCommand command) {
         commands.add(command); stagingBytes=Math.addExact(stagingBytes,command.stagingBytes());
@@ -44,7 +47,7 @@ final class OverhaulImageOperation implements OverhaulGpuOperation {
         return ranges.stream().anyMatch(range->range.overlaps(buffer,offset,length));
     }
     @Override public boolean usesResource(BackendResource resource) {
-        for (Object endpoint:resources) if (resource==endpoint) return true;
+        for (BackendResource endpoint:resources) if (resource==endpoint) return true;
         return false;
     }
     @Override public void close() {

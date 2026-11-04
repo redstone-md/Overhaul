@@ -70,8 +70,9 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     }
     private void requireCapture(){owner.requireOpen();if(closed||sealed)throw new IllegalStateException("Render pass no longer accepts commands");}
     private void retain(Object resource){
-        if(resource==null||retained.contains(resource))return;
-        if(!(resource instanceof BackendResource backend)||backend.owner()!=owner)throw new IllegalArgumentException("Foreign backend resource");
+        if(resource==null)return;
+        BackendResource backend=owner.backendResource(resource);
+        if(retained.contains(backend))return;
         AutoCloseable pin=owner.retain(backend);retained.add(backend);pins.add(pin);
     }
     @Override public void pushDebugGroup(Supplier<String> label){requireCapture();debugGroups.push(java.util.Objects.requireNonNull(label.get()));}

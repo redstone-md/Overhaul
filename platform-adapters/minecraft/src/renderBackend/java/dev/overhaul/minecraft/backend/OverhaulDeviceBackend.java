@@ -136,16 +136,23 @@ public final class OverhaulDeviceBackend implements GpuDeviceBackend,NativeFrame
     @Override public List<String> getLastDebugMessages() { requireOwner(); return context.validationErrors(); }
     @Override public boolean isDebuggingEnabled() { return debugging; }
 
-    private <T extends BackendResource> T owned(Object resource,Class<T> type) {
+    BackendResource backendResource(Object resource) {
         requireOwner();
-        if (!type.isInstance(resource)||type.cast(resource).owner()!=this) throw new IllegalArgumentException("Foreign backend resource");
+        BackendResource backend=resource instanceof OverhaulBuffer buffer?buffer.resource()
+                :resource instanceof BackendResource handle?handle:null;
+        if (backend==null||backend.owner()!=this) throw new IllegalArgumentException("Foreign backend resource");
+        return backend;
+    }
+    private <T> T owned(Object resource,Class<T> type) {
+        if (!type.isInstance(resource)) throw new IllegalArgumentException("Foreign backend resource");
+        backendResource(resource);
         return type.cast(resource);
     }
     @Override public dev.overhaul.vulkan.GpuBuffer buffer(GpuBuffer buffer) { return owned(buffer,OverhaulBuffer.class).nativeBuffer(); }
     public dev.overhaul.vulkan.GpuImage image(GpuTexture texture) { return shaderPacks.redirect(owned(texture,OverhaulTexture.class).image()); }
     @Override public dev.overhaul.vulkan.GpuImageView texture(GpuTextureView view) { return shaderPacks.redirect(owned(view,OverhaulTextureView.class).nativeView()); }
     @Override public dev.overhaul.vulkan.GpuSampler sampler(GpuSampler sampler) { return owned(sampler,OverhaulSampler.class).nativeSampler(); }
-    @Override public AutoCloseable retain(Object resource) { return owned(resource,BackendResource.class).pin(); }
+    @Override public AutoCloseable retain(Object resource) { return backendResource(resource).pin(); }
     @Override public void prepareTimestamp(GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).prepare(index); }
     @Override public void resetTimestamp(VkCommandBuffer command,GpuQueryPool pool,int index) { owned(pool,OverhaulQueryPool.class).reset(command,index); }
     @Override public long timestampGeneration(GpuQueryPool pool,int index) { return owned(pool,OverhaulQueryPool.class).generation(index); }

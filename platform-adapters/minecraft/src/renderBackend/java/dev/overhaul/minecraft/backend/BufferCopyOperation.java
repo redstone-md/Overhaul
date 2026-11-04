@@ -9,6 +9,7 @@ import static org.lwjgl.vulkan.VK10.*;
 final class BufferCopyOperation implements OverhaulGpuOperation {
     private final OverhaulDeviceBackend owner;
     private final OverhaulBuffer source,target;
+    private final BackendResource sourceResource,targetResource;
     private final long sourceOffset,targetOffset,length;
     private final BackendPins pins;
     private long stagingBytes;
@@ -32,7 +33,8 @@ final class BufferCopyOperation implements OverhaulGpuOperation {
         if (length<1||length>target.length()||sourceOffset<0||sourceOffset>src.size()-length
                 ||targetOffset<0||targetOffset>dst.size()-length) throw new IllegalArgumentException("Buffer copy range exceeds allocation");
         if (src==dst&&overlap(sourceOffset,length,targetOffset,length)) throw new IllegalArgumentException("Buffer copy ranges overlap");
-        pins=new BackendPins(owner,src,dst);
+        sourceResource=owner.backendResource(src); targetResource=owner.backendResource(dst);
+        pins=new BackendPins(owner,sourceResource,targetResource);
     }
     @Override public void record(VkCommandBuffer command) {
         try (MemoryStack stack=MemoryStack.stackPush()) {
@@ -51,7 +53,7 @@ final class BufferCopyOperation implements OverhaulGpuOperation {
     @Override public boolean usesBuffer(OverhaulBuffer buffer,long offset,long size) {
         return buffer==source&&overlap(sourceOffset,length,offset,size)||buffer==target&&overlap(targetOffset,length,offset,size);
     }
-    @Override public boolean usesResource(BackendResource resource) { return resource==source||resource==target; }
+    @Override public boolean usesResource(BackendResource resource) { return resource==sourceResource||resource==targetResource; }
     @Override public long stagingBytes() { return stagingBytes; }
     static boolean overlap(long first,long length,long second,long size) { return length>0&&size>0&&first<second+size&&second<first+length; }
     @Override public void close() { pins.close(); }
