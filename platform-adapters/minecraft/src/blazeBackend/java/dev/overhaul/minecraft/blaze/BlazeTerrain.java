@@ -127,8 +127,7 @@ public final class BlazeTerrain implements AutoCloseable {
 
     /** Sodium's batch memory is rewritten next frame, so its parallel arrays become an owned indirect command slice here. */
     public void draw(long elementPointers, long elementCounts, long baseVertices, int count) {
-        
-        if (count == 0 || vertices == null || indices == null || owner.drawingForeign()) return;
+        if (count == 0 || vertices == null || indices == null || owner.drawingNowhere()) return;
         if (pending == null) pending = new BlazeTerrainPass(owner, owner.currentTarget(), owner.drawState().snapshot(), this::uniforms, program, this::pipeline);
         BlazeBufferPool.Slice commands = owner.hostStorage().acquire(count * COMMAND_BYTES);
         try {

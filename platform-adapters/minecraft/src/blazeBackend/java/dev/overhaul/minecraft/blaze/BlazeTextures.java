@@ -19,6 +19,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /** Device-owned texture namespace, upload pixel-store state and deterministic resource closure. */
 public final class BlazeTextures implements AutoCloseable {
     public record Sampled(GpuImageView view,GpuSampler sampler){}
+    /** One subresource of a texture that a framebuffer renders to. */
+    record Attachment(GpuImage image,int mip,int layer){}
     private final VulkanContext context;
     private final GpuAllocator allocator;
     private final ImmediateCommands commands;
@@ -45,6 +47,16 @@ public final class BlazeTextures implements AutoCloseable {
         requireOpen();if(view.image().context()!=context||view.layerCount()!=1)throw new IllegalArgumentException("Foreign or layered borrowed texture");
         int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,view));return id;
     }
+    /** The renderable storage behind a name, or null while the name holds none at that level. */
+    Attachment attachment(int id,int level){
+        requireOpen();BlazeTexture texture=textures.get(id);if(texture==null||!texture.defined(level))return null;
+        texture.attach();return new Attachment(texture.image(),texture.mip(level),texture.layer());
+    }
+    void renderbufferStorage(int id,int internal,int width,int height){
+        requireOpen();var texture=texture(id);texture.attach();texture.allocate(internal,width,height,1,commands);
+    }
+    /** Immutable storage: the same image as a full mip chain defined level by level. */
+    void storage(int target,int levels,int internal,int width,int height){target(target);current().allocate(internal,width,height,levels,commands);}
     private int nextId(){if(next<=0)throw new IllegalStateException("Texture namespace exhausted");return next++;}
     public void delete(int id){
         requireOpen();if(id==0)return;BlazeTexture texture=textures.remove(id);if(texture==null)return;
@@ -112,12 +124,12 @@ public final class BlazeTextures implements AutoCloseable {
         transfer(image,new ImageRegion(mip,texture.layer(),0,0,image.width(mip),image.height(mip)),format,type,address);
     }
     public void read(BlazeTarget target,int x,int y,int width,int height,int format,int type,long address){
-        requireOpen();if(width==0||height==0)return;
-        var image=readImage(target,format);transfer(image,new ImageRegion(0,0,x,y,width,height),format,type,address);
+        requireOpen();if(width==0||height==0||target==null)return;
+        var image=readImage(target,format);transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,address);
     }
     public void read(BlazeTarget target,int x,int y,int width,int height,int format,int type,ByteBuffer destination){
-        requireOpen();if(width==0||height==0)return;
-        var image=readImage(target,format);transfer(image,new ImageRegion(0,0,x,y,width,height),format,type,destination);
+        requireOpen();if(width==0||height==0||target==null)return;
+        var image=readImage(target,format);transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,destination);
     }
     private GpuImage readImage(BlazeTarget target,int format){
         if(target==null)throw new IllegalStateException("No read framebuffer is bound");
@@ -134,10 +146,10 @@ public final class BlazeTextures implements AutoCloseable {
         var bytes=immediate().readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().bytesPerPixel(),destination,layout,region.width(),region.height(),format,type);
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
-        target(target);if(width==0||height==0)return;var texture=current();
+        target(target);if(width==0||height==0||source==null)return;var texture=current();
         var from=readImage(source,GL_RGBA);var to=texture.image();var destination=region(texture,level,xOffset,yOffset,width,height);
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
-        var area=new ImageRegion(0,0,x,y,width,height);
+        var area=new ImageRegion(source.level(),0,x,y,width,height);
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
         var bytes=immediate().readback(from,area,0);int stride=Math.multiplyExact(width,4),size=Math.multiplyExact(stride,height);
         var layout=new BlazePixelStore.Layout(stride,0,size);

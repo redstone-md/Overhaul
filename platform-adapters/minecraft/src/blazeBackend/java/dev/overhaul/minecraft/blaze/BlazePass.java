@@ -10,6 +10,8 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Immutable draw capture; all descriptor and uniform storage is returned after its fence. */
 final class BlazePass implements BlazeQueue.Operation {
+    /** Reading an image while it is the render target needs a pass dependency that does not exist here. */
+    static final class SamplingFeedback extends RuntimeException { SamplingFeedback() { super("Framebuffer sampling feedback", null, false, false); } }
     private final BlazeTarget target;
     private final BlazeMesh.Snapshot mesh;
     private final BlazeDrawState.Snapshot state;
@@ -25,7 +27,7 @@ final class BlazePass implements BlazeQueue.Operation {
         try{
             for(String name:shader.program().bindings().samplers().keySet()){
                 BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name));
-                if(sample.view().image()==target.color()||sample.view().image()==target.depth())throw new UnsupportedOperationException("Framebuffer sampling feedback requires an explicit pass dependency");
+                if(sample.view().image()==target.color()||sample.view().image()==target.depth())throw new SamplingFeedback();
                 samples.add(sample);
             }
             ByteBuffer bytes=shader.uniforms();

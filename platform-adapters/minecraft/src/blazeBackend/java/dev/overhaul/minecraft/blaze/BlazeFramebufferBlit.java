@@ -8,8 +8,8 @@ public final class BlazeFramebufferBlit {
     private static final int NEAREST=9728,LINEAR=9729,COLOR=0x4000,DEPTH=0x100;
     private BlazeFramebufferBlit(){}
     public static void copy(BlazeRenderer owner,int sx0,int sy0,int sx1,int sy1,int dx0,int dy0,int dx1,int dy1,int mask,int filter){
-        // A raw framebuffer has no image to copy to or from.
-        if(owner.drawingForeign()||owner.readingForeign())return;
+        // A raw framebuffer with nothing attached has no image to copy to or from.
+        if(owner.drawingNowhere()||owner.readingNowhere())return;
         if(owner.readTarget()==owner.currentTarget()){
             BlazeGlBoundary.reportOnce("self blit","A framebuffer blit had the same source and destination and was skipped");
             return;
@@ -24,6 +24,7 @@ public final class BlazeFramebufferBlit {
             return;
         }
         BlazeTarget source=owner.readTarget(),target=owner.currentTarget();
+        if(source.level()!=0||target.level()!=0){BlazeGlBoundary.reportOnce("mip blit","A framebuffer blit touched a mip level above 0 and was skipped");return;}
         var raster=owner.drawState().snapshot();
         long left=Math.max(Math.max((long)dx0,0),(long)dx0-sx0),bottom=Math.max(Math.max((long)dy0,0),(long)dy0-sy0);
         long right=Math.min(Math.min((long)dx1,target.width()),(long)dx0+source.width()-sx0);
@@ -35,22 +36,27 @@ public final class BlazeFramebufferBlit {
         if(right<=left||top<=bottom)return;
         var from=new ImageRegion(0,0,(int)(sx0+left-dx0),(int)(sy0+bottom-dy0),(int)(right-left),(int)(top-bottom));
         var to=new ImageRegion(0,0,(int)left,(int)bottom,(int)(right-left),(int)(top-bottom));
-        if((mask&COLOR)!=0)copy(owner,source.color(),from,target.color(),to);
-        if((mask&DEPTH)!=0){
-            if(source.depth()==null||target.depth()==null)throw new UnsupportedOperationException("Depth blit without both depth attachments");
-            copy(owner,source.depth(),from,target.depth(),to);
+        if((mask&COLOR)!=0){
+            // A plain copy needs one format; mod targets are often floating point.
+            if(source.color().format()==target.color().format())copy(owner,source.color(),from,target.color(),to);
+            else owner.blitImage(source.color(),corners(from),target.color(),corners(to),filter);
         }
+        if((mask&DEPTH)!=0&&depthCopies(source,target))copy(owner,source.depth(),from,target.depth(),to);
     }
     private static void scaled(BlazeRenderer owner,int[] from,int[] to,int mask,int filter){
         BlazeTarget source=owner.readTarget(),target=owner.currentTarget();
+        if(source.level()!=0||target.level()!=0){BlazeGlBoundary.reportOnce("mip blit","A framebuffer blit touched a mip level above 0 and was skipped");return;}
         if(owner.drawState().snapshot().scissor())BlazeGlBoundary.reportOnce("scaled blit scissor","A scaled framebuffer blit ran under a scissor; the scissor was not applied");
         // Vulkan rejects corners outside the image, where OpenGL clips and keeps the scale.
         if(!clip(from,to,source.width(),source.height())||!clip(to,from,target.width(),target.height()))return;
         if((mask&COLOR)!=0)owner.blitImage(source.color(),from,target.color(),to,filter);
-        if((mask&DEPTH)!=0){
-            if(source.depth()==null||target.depth()==null)throw new UnsupportedOperationException("Depth blit without both depth attachments");
-            owner.blitImage(source.depth(),from,target.depth(),to,NEAREST);
-        }
+        if((mask&DEPTH)!=0&&depthCopies(source,target))owner.blitImage(source.depth(),from,target.depth(),to,NEAREST);
+    }
+    private static int[] corners(ImageRegion region){return new int[]{region.x(),region.y(),region.x()+region.width(),region.y()+region.height()};}
+    private static boolean depthCopies(BlazeTarget source,BlazeTarget target){
+        boolean copies=source.depth()!=null&&target.depth()!=null&&source.depth().format()==target.depth().format();
+        if(!copies)BlazeGlBoundary.reportOnce("depth blit","A depth blit lacked a depth attachment or matching formats and was skipped");
+        return copies;
     }
     /** Pulls the corners of {@code rectangle} inside its image and moves {@code other} by the same fraction. */
     private static boolean clip(int[] rectangle,int[] other,int width,int height){

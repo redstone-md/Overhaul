@@ -16,7 +16,7 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** The single owner of native resources for one selected no-API game window. */
 public final class BlazeRenderer implements AutoCloseable {
-    /** Names from this value up are raw OpenGL framebuffers that mods assembled; they have no Vulkan target. */
+    /** Names from this value up are raw OpenGL framebuffers that mods assemble; {@link BlazeRawFramebuffers} owns them. */
     static final int FOREIGN_FRAMEBUFFERS=0x40000000;
     private final VulkanContext context;
     private final long windowHandle;
@@ -24,7 +24,8 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Set<BlazeMesh> meshes=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GpuBuffer> glDeviceBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private BlazeTerrain terrain;
-    private int foreignDraw,foreignRead;
+    private BlazeRawFramebuffers rawFramebuffers;
+    private float foreignClearDepth=1;
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
     private GpuAllocator allocator;
@@ -59,6 +60,7 @@ public final class BlazeRenderer implements AutoCloseable {
             }
             descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage);
             programs=new BlazePrograms(this::forgetProgram);textures=new BlazeTextures(context,allocator,commands,queue,transfers);
+            rawFramebuffers=new BlazeRawFramebuffers(context,allocator,queue,textures);
             backBuffer=new BlazeTarget(context,allocator,commands,Math.max(1,width),Math.max(1,height),true);
             backBuffer.attach(queue);
             presenter=new SwapchainPresenter(context,width,height);this.width=width;this.height=height;
@@ -105,45 +107,58 @@ public final class BlazeRenderer implements AutoCloseable {
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
     public BlazeMesh newMesh(){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,meshes::remove);meshes.add(mesh);return mesh;}
     public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
-    public void unregisterTarget(int id){requireOpen();targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
+    BlazeRawFramebuffers rawFramebuffers(){requireOpen();return rawFramebuffers;}
+    public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)rawFramebuffers.delete(id);else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
     public BlazeTarget currentTarget(){return target(drawTarget);}
     public BlazeTarget readTarget(){return target(readTarget);}
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
-    private BlazeTarget target(int id){requireOpen();BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
+    /** Null only for a raw framebuffer with nothing renderable attached. */
+    private BlazeTarget target(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
     public void bindFramebuffer(int kind,int id){
-        boolean foreign=id>=FOREIGN_FRAMEBUFFERS;
-        if(foreign)BlazeGlBoundary.reportOnce("foreign framebuffer","A mod bound a raw OpenGL framebuffer; it has no Vulkan target, so what it renders there is dropped");
-        else target(id);
+        if(id<FOREIGN_FRAMEBUFFERS)target(id);
         switch(kind){
-            case 0x8D40-> {if(!foreign){drawTarget=id;readTarget=id;}foreignDraw=foreign?id:0;foreignRead=foreignDraw;}
-            case 0x8CA9-> {if(!foreign)drawTarget=id;foreignDraw=foreign?id:0;}
-            case 0x8CA8-> {if(!foreign)readTarget=id;foreignRead=foreign?id:0;}
+            case 0x8D40-> {drawTarget=id;readTarget=id;}
+            case 0x8CA9->drawTarget=id;
+            case 0x8CA8->readTarget=id;
             default->throw new UnsupportedOperationException("Framebuffer target: 0x"+Integer.toHexString(kind));}
-        state.framebufferBindings(foreignDraw!=0?foreignDraw:drawTarget,foreignRead!=0?foreignRead:readTarget);
+        state.framebufferBindings(drawTarget,readTarget);
     }
-    /** True while the draw framebuffer is a mod's raw one: its output must not land on the last real target. */
-    boolean drawingForeign(){return foreignDraw!=0;}
-    boolean readingForeign(){return foreignRead!=0;}
+    /** The name bound to a framebuffer binding point, as raw attachment calls address it. */
+    int boundFramebuffer(int kind){return kind==0x8CA8?readTarget:drawTarget;}
+    /** True while the draw framebuffer has nowhere to put output: it must not land on the last real target. */
+    boolean drawingNowhere(){return currentTarget()==null;}
+    boolean readingNowhere(){return readTarget()==null;}
 
     public void draw(BlazeMesh mesh){
-        if(foreignDraw!=0)return;
+        if(drawingNowhere())return;
         String missing=programs.incompleteActive();
         if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}
         draw(mesh,programs.activeSnapshot());
     }
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
-    public void clear(int mask){requireOpen();if(foreignDraw!=0)return;currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
+    public void clear(int mask){clear(mask,clearValues());}
+    /**
+     * Distant Horizons sets a reverse-Z clear depth for its own framebuffer and never restores it, so a depth set
+     * while a mod framebuffer is bound stays with mod framebuffers instead of reaching the game's targets.
+     */
+    void clearDepth(double depth){if(drawTarget>=FOREIGN_FRAMEBUFFERS)foreignClearDepth=(float)Math.max(0,Math.min(1,depth));else state.clearDepth(depth);}
+    BlazeDrawState.Clear clearValues(){
+        var values=state.clear();
+        return drawTarget>=FOREIGN_FRAMEBUFFERS?new BlazeDrawState.Clear(values.r(),values.g(),values.b(),values.a(),foreignClearDepth):values;
+    }
+    void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){
         requireOpen();if(mesh.state().indexCount()==0)return;BlazeTarget target=currentTarget();
-        queue.add(new BlazePass(this,target,mesh,shader,state.snapshot()),0);
+        try{queue.add(new BlazePass(this,target,mesh,shader,state.snapshot()),0);}
+        catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");}
     }
 
     NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program,BlazeMeshState mesh,
             BlazeDrawState.Snapshot draw,BlazeTarget target,long descriptorLayout){
         int topology=mesh.topology();
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
-        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.depth()!=null);
+        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.color().format(),target.depth()==null?null:target.depth().format());
         NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return existing;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
         var description=new NativeGraphicsPipeline.Description(List.of(
@@ -160,7 +175,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(descriptors!=null)descriptors.forget(program);
     }
     private record PipelineKey(BlazeProgramCompiler.Program program,BlazeMeshState.Layout layout,int topology,
-            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,boolean depthAttachment){}
+            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,ImageFormat colorFormat,ImageFormat depthFormat){}
 
     public void resize(int width,int height){
         requireOpen();if(width<0||height<0)throw new IllegalArgumentException("Negative window size");
@@ -187,6 +202,7 @@ public final class BlazeRenderer implements AutoCloseable {
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
         for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();
         for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();
+        if(rawFramebuffers!=null)failure=release(rawFramebuffers::close,failure);
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
         if(backBuffer!=null)failure=release(backBuffer::close,failure);if(presenter!=null)failure=release(presenter::close,failure);
         if(descriptors!=null)failure=release(descriptors::close,failure);

@@ -15,7 +15,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /** LOAD-preserving framebuffer: repeated GUI batches never clear previous batches. */
 public final class BlazeTarget implements AutoCloseable {
     private final VulkanContext context;
-    private final int width, height;
+    private final int width, height, level;
+    private final boolean ownsColor, ownsDepth;
     private GpuImage color, depth;
     private GpuImageView colorView, depthView;
     private long renderPass, framebuffer;
@@ -24,12 +25,32 @@ public final class BlazeTarget implements AutoCloseable {
 
     public BlazeTarget(VulkanContext context, GpuAllocator allocator, ImmediateCommands commands, int width, int height, boolean useDepth) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("Empty framebuffer");
-        this.context=context;this.width=width;this.height=height;
+        this.context=context;this.width=width;this.height=height;level=0;ownsColor=true;ownsDepth=true;
         try {
             color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             colorView=color.view(0,1,0,1);commands.clearColor(color,0,0,0,0,0,0);
             if(useDepth){depth=allocator.createImage(ImageFormat.D32_SFLOAT,width,height,1,1,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
                 depthView=depth.view(0,1,0,1);commands.clearDepth(depth,0,0,1);}
+            createPass();
+        } catch(RuntimeException|Error failure){close();throw failure;}
+    }
+
+    /**
+     * A target over images a mod attached; they stay owned by their textures. Vulkan needs a colour attachment for
+     * pipelines to stay compatible, so a depth-only framebuffer gets a private colour image nothing reads.
+     */
+    BlazeTarget(VulkanContext context, GpuAllocator allocator, BlazeTextures.Attachment colorAttachment, BlazeTextures.Attachment depthAttachment) {
+        if (colorAttachment == null && depthAttachment == null) throw new IllegalArgumentException("Framebuffer without attachments");
+        this.context=context;ownsColor=colorAttachment==null;ownsDepth=false;
+        BlazeTextures.Attachment sized=colorAttachment!=null?colorAttachment:depthAttachment;
+        level=sized.mip();
+        int fitWidth=sized.image().width(sized.mip()),fitHeight=sized.image().height(sized.mip());
+        if(depthAttachment!=null){fitWidth=Math.min(fitWidth,depthAttachment.image().width(depthAttachment.mip()));fitHeight=Math.min(fitHeight,depthAttachment.image().height(depthAttachment.mip()));}
+        width=fitWidth;height=fitHeight;
+        try {
+            color=ownsColor?allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT):colorAttachment.image();
+            colorView=ownsColor?color.view(0,1,0,1):color.view(colorAttachment.mip(),1,colorAttachment.layer(),1);
+            if(depthAttachment!=null){depth=depthAttachment.image();depthView=depth.view(depthAttachment.mip(),1,depthAttachment.layer(),1);}
             createPass();
         } catch(RuntimeException|Error failure){close();throw failure;}
     }
@@ -70,9 +91,10 @@ public final class BlazeTarget implements AutoCloseable {
     void clear(ImmediateCommands commands,int mask,BlazeDrawState.Snapshot raster,BlazeDrawState.Clear values){
         if(closing)throw new IllegalStateException("Framebuffer is closed");
         if((mask&~(0x4000|0x100|0x400))!=0)throw new UnsupportedOperationException("Unknown framebuffer clear mask");
-        boolean colorClear=(mask&0x4000)!=0&&raster.color().writeMask()!=0;
+        boolean maskedColor=(mask&0x4000)!=0&&raster.color().writeMask()!=0;
         boolean depthClear=(mask&0x100)!=0&&depth!=null&&raster.depth().write();
-        if(colorClear&&raster.color().writeMask()!=15)throw new UnsupportedOperationException("Masked color clear requires explicit component lowering");
+        if(maskedColor&&raster.color().writeMask()!=15)BlazeGlBoundary.reportOnce("masked clear","A colour clear used a partial write mask, which is not lowered; the colour was not cleared");
+        boolean colorClear=maskedColor&&raster.color().writeMask()==15;
         int x=raster.scissor()?Math.max(0,raster.sx()):0,y=raster.scissor()?Math.max(0,raster.sy()):0;
         long right=raster.scissor()?Math.min(width,(long)raster.sx()+raster.sw()):width,top=raster.scissor()?Math.min(height,(long)raster.sy()+raster.sh()):height;
         if((!colorClear&&!depthClear)||right<=x||top<=y)return;
@@ -96,7 +118,7 @@ public final class BlazeTarget implements AutoCloseable {
     }
     public GpuImage color(){return color;}public GpuImage depth(){return depth;}public GpuImageView colorView(){return colorView;}
     public GpuImageView depthView(){return depthView;}
-    public int width(){return width;}public int height(){return height;}long renderPass(){return renderPass;}long framebuffer(){return framebuffer;}
+    public int width(){return width;}public int height(){return height;}int level(){return level;}long renderPass(){return renderPass;}long framebuffer(){return framebuffer;}
     @Override public void close(){
         if(closing)return;closing=true;
         if(queue!=null)queue.retire(this::destroy);else destroy();
@@ -105,6 +127,6 @@ public final class BlazeTarget implements AutoCloseable {
         if(framebuffer!=0){vkDestroyFramebuffer(context.device(),framebuffer,null);framebuffer=0;}
         if(renderPass!=0){vkDestroyRenderPass(context.device(),renderPass,null);renderPass=0;}
         if(depthView!=null){depthView.close();depthView=null;}if(colorView!=null){colorView.close();colorView=null;}
-        if(depth!=null){depth.close();depth=null;}if(color!=null){color.close();color=null;}
+        if(depth!=null){if(ownsDepth)depth.close();depth=null;}if(color!=null){if(ownsColor)color.close();color=null;}
     }
 }

@@ -29,7 +29,11 @@ public final class BlazeGlBoundary implements FunctionProvider {
             LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer,
             LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer,
             LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer, LibFFI.ffi_type_pointer);
-    private static final int GL_TRUE = 1;
+    /** Floating point arguments travel in other registers, so these entries need their true signature. */
+    private static final Map<String, FFICIF> REAL_SIGNATURES = Map.of(
+            "glClearColor", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float),
+            "glClearDepth", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_double));
+    private static final int GL_TRUE = 1, GL_DEPTH_CLEAR_VALUE = 0x0B73, GL_COLOR_CLEAR_VALUE = 0x0C22;
     private static final int GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
     private static final int GL_ALREADY_SIGNALED = 0x911A;
     private static final Set<String> UNTRANSLATED_PREFIXES = Set.of("glDraw", "glMultiDraw", "glDispatch", "glBlitFramebuffer", "glBlitNamedFramebuffer");
@@ -41,13 +45,15 @@ public final class BlazeGlBoundary implements FunctionProvider {
         long pointer(int index) { return MemoryUtil.memGetAddress(MemoryUtil.memGetAddress(address + (long) index * Long.BYTES)); }
         int integer(int index) { return (int) pointer(index); }
         boolean flag(int index) { return (integer(index) & 0xFF) != 0; }
+        float real(int index) { return MemoryUtil.memGetFloat(MemoryUtil.memGetAddress(address + (long) index * Long.BYTES)); }
+        double wide(int index) { return MemoryUtil.memGetDouble(MemoryUtil.memGetAddress(address + (long) index * Long.BYTES)); }
     }
 
     private static final class Entry implements CallbackI {
         private final String name;
         private final Answer answer;
         private Entry(String name, Answer answer) { this.name = name; this.answer = answer; }
-        @Override public FFICIF getCallInterface() { return SIGNATURE; }
+        @Override public FFICIF getCallInterface() { return REAL_SIGNATURES.getOrDefault(name, SIGNATURE); }
         @Override public void callback(long result, long arguments) {
             long value = 0;
             try {
@@ -110,6 +116,21 @@ public final class BlazeGlBoundary implements FunctionProvider {
         return inert;
     }
 
+    /** Veil saves the clear values this way and restores them afterwards, so no answer would restore stack garbage. */
+    private double[] reals(int name) {
+        var renderer = RenderSystem.isOnRenderThreadOrInit() ? BlazeFrontend.current() : null;
+        if (renderer != null && name == GL_DEPTH_CLEAR_VALUE) return new double[]{renderer.clearValues().depth()};
+        if (renderer != null && name == GL_COLOR_CLEAR_VALUE) {
+            var clear = renderer.clearValues();
+            return new double[]{clear.r(), clear.g(), clear.b(), clear.a()};
+        }
+        int[] several = integers(name);
+        if (several == null) return new double[]{integer(name)};
+        double[] values = new double[several.length];
+        for (int index = 0; index < several.length; index++) values[index] = several[index];
+        return values;
+    }
+
     private void queries() {
         answers.put("glGetString", arguments -> strings.computeIfAbsent(arguments.integer(0),
                 name -> MemoryUtil.memAddress(MemoryUtil.memUTF8(string(name)))));
@@ -122,6 +143,18 @@ public final class BlazeGlBoundary implements FunctionProvider {
                 // Callers size the buffer for the whole answer; writing less leaves their stack garbage in it.
                 for (int index = 0; index < several.length; index++) MemoryUtil.memPutInt(target + index * (long) Integer.BYTES, several[index]);
             }
+            return 0;
+        });
+        answers.put("glGetFloatv", arguments -> {
+            long target = arguments.pointer(1);
+            double[] values = reals(arguments.integer(0));
+            for (int index = 0; index < values.length; index++) MemoryUtil.memPutFloat(target + index * (long) Float.BYTES, (float) values[index]);
+            return 0;
+        });
+        answers.put("glGetDoublev", arguments -> {
+            long target = arguments.pointer(1);
+            double[] values = reals(arguments.integer(0));
+            for (int index = 0; index < values.length; index++) MemoryUtil.memPutDouble(target + index * (long) Double.BYTES, values[index]);
             return 0;
         });
         Answer object = arguments -> objectNames.getAndIncrement();
