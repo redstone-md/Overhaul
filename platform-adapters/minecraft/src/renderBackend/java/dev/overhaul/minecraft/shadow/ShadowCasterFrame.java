@@ -56,7 +56,7 @@ public final class ShadowCasterFrame {
         }
         for(var section:sections){
             long node=section.getSectionNode();int x=SectionPos.x(node),z=SectionPos.z(node);
-            if(!chunks.add(ChunkPos.asLong(x,z)))continue;
+            if(!chunks.add(ChunkPos.pack(x,z)))continue;
             var chunk=level.getChunkSource().getChunk(x,z,ChunkStatus.FULL,false);if(chunk==null)continue;
             for(var entity:chunk.getBlockEntities().values())extractBlock(entity,renderer,main.worldPartialTicks);
         }

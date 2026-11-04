@@ -25,7 +25,7 @@ public abstract class SubmitCollectionDomainMixin implements SubmitDomainCollect
             "submitBreakingBlockModel", "submitItem", "submitCustomGeometry"}, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/feature/phase/SimpleFeatureRenderPhase;submit(Lnet/minecraft/client/renderer/feature/submit/SubmitNode;)V"),
             require = 12, allow = 12)
-    private void overhaul$tagSimple(SimpleFeatureRenderPhase<?> phase, SubmitNode submit, Operation<Void> original) {
+    private void overhaul$tagSimple(SimpleFeatureRenderPhase phase, SubmitNode submit, Operation<Void> original) {
         ModelSubmitDomainAccess.capture(submit, overhaul$domains.current());
         original.call(phase, submit);
     }
