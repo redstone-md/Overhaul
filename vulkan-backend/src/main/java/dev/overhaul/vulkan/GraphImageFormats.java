@@ -35,6 +35,14 @@ final class GraphImageFormats {
                 case RGBA32F -> ImageFormat.RGBA32_SFLOAT;
                 case RGB10_A2 -> ImageFormat.RGB10A2_UNORM;
                 case R11F_G11F_B10F -> ImageFormat.RG11B10_UFLOAT;
+                case R8_SNORM -> ImageFormat.R8_SNORM;
+                case RG8_SNORM -> ImageFormat.RG8_SNORM;
+                case RGB8_SNORM -> ImageFormat.RGB8_SNORM;
+                case RGBA8_SNORM -> ImageFormat.RGBA8_SNORM;
+                case R16_SNORM -> ImageFormat.R16_SNORM;
+                case RG16_SNORM -> ImageFormat.RG16_SNORM;
+                case RGB16_SNORM -> ImageFormat.RGB16_SNORM;
+                case RGBA16_SNORM -> ImageFormat.RGBA16_SNORM;
                 case DEPTH16 -> ImageFormat.D16_UNORM;
                 case DEPTH24_STENCIL8 -> ImageFormat.D24_UNORM_S8_UINT;
                 case DEPTH32F -> ImageFormat.D32_SFLOAT;

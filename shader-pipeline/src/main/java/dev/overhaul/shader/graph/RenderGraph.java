@@ -15,6 +15,7 @@ import java.util.Set;
 public final class RenderGraph {
     public enum Format { R8,RG8,RGB8,RGBA8,RGBA8_SRGB,BGRA8,BGRA8_SRGB,R16,RG16,RGB16,RGBA16,
         R16F,RG16F,RGB16F,RGBA16F,R32F,RG32F,RGB32F,RGBA32F,RGB10_A2,R11F_G11F_B10F,
+        R8_SNORM,RG8_SNORM,RGB8_SNORM,RGBA8_SNORM,R16_SNORM,RG16_SNORM,RGB16_SNORM,RGBA16_SNORM,
         DEPTH16,DEPTH24_STENCIL8,DEPTH32F,DEPTH32F_STENCIL8 }
     /** Imported storage can hold graph-written versions while remaining externally owned. */
     public record Resource(String name, Format format, int width, int height, boolean imported) {

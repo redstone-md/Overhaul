@@ -10,7 +10,16 @@ import java.util.regex.Pattern;
 /** Active GLSL target directives and dimension-dependent allocations, independent of Vulkan ownership. */
 public final class PackRenderTargets {
     private static final Pattern DIRECTIVE=Pattern.compile("\\bconst\\s+(int|bool|vec4)\\s+((?:colortex(?:[0-9]|1[0-5])|gcolor|gdepth|gnormal|composite|gaux[1-4]))(Format|ClearColor|Clear|MipmapEnabled)\\s*=\\s*([^;]+);");
-    public enum Format { R8,RG8,RGB8,RGBA8,R16,RG16,RGB16,RGBA16,R16F,RG16F,RGB16F,RGBA16F,R32F,RG32F,RGB32F,RGBA32F,RGB10_A2,R11F_G11F_B10F }
+    public enum Format { R8,RG8,RGB8,RGBA8,R16,RG16,RGB16,RGBA16,R16F,RG16F,RGB16F,RGBA16F,R32F,RG32F,RGB32F,RGBA32F,RGB10_A2,R11F_G11F_B10F,R8_SNORM,RG8_SNORM,RGB8_SNORM,RGBA8_SNORM,R16_SNORM,RG16_SNORM,RGB16_SNORM,RGBA16_SNORM;
+        /** Three-channel formats are not color-attachable on common GPUs; the wider format's alpha holds what the pack never reads. */
+        static Format attachable(String name){
+            return switch(name){
+                case "RGBA","RGB8"->RGBA8;case "RGB16"->RGBA16;case "RGB16F"->RGBA16F;case "RGB32F"->RGBA32F;
+                case "RGB8_SNORM"->RGBA8_SNORM;case "RGB16_SNORM"->RGBA16_SNORM;
+                default->valueOf(name);
+            };
+        }
+    }
     public record Color(float red,float green,float blue,float alpha){
         public Color{if(!Float.isFinite(red)||!Float.isFinite(green)||!Float.isFinite(blue)||!Float.isFinite(alpha))throw invalid("Nonfinite target clear color");}
     }
@@ -85,7 +94,7 @@ public final class PackRenderTargets {
             Map<Integer,Target> result=new LinkedHashMap<>();used.putIfAbsent(0,true);
             for(int index:used.keySet()){
                 Format format;String raw=directives.getOrDefault(index+"Format",index==1&&legacyDepth?"RGBA32F":"RGBA8");
-                try{format=Format.valueOf(raw.equals("RGBA")?"RGBA8":raw);}catch(IllegalArgumentException failure){throw invalid("Unsupported colortex format: "+raw);}
+                try{format=Format.attachable(raw);}catch(IllegalArgumentException failure){throw invalid("Unsupported colortex format: "+raw);}
                 boolean clear=bool(directives.getOrDefault(index+"Clear","true"));
                 String[] size=sizeProperty(index).split("\\s+");
                 if(size.length!=2)throw invalid("Target size requires width and height");dimension(size[0],1024);dimension(size[1],1024);
