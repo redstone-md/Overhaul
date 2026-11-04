@@ -1,0 +1,35 @@
+// Game runtimes follow Minecraft's tier; build tools keep the compiler's JDK.
+def gameTaskNames = ['runClient', 'runServer', 'runData', 'runClientData', 'runServerData'] as Set
+def requiredMajor = target.java as int
+def requestedHome = providers.gradleProperty('gameJavaHome').map { file(it).canonicalFile }
+def gameLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(requiredMajor)
+}
+
+def gameTasks = tasks.withType(JavaExec).matching { gameTaskNames.contains(it.name) }
+// NeoForge explicitly assigns its compiler-derived launcher while registering runs.
+// Append our lazy task configuration after every loader's project defaults.
+gradle.projectsEvaluated {
+    gameTasks.configureEach {
+        if (requestedHome.isPresent()) {
+            def binary = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win') ? 'java.exe' : 'java'
+            executable = new File(requestedHome.get(), "bin/${binary}")
+            // JavaBasePlugin derives an exact-installation launcher from this executable.
+            // Leave that convention active instead of setting a conflicting launcher.
+            javaLauncher.unset()
+        } else {
+            javaLauncher.set(gameLauncher)
+        }
+        doFirst {
+            def selected = javaLauncher.get()
+            def metadata = selected.metadata
+            if (metadata.languageVersion.asInt() != requiredMajor) {
+                throw new GradleException("${name} requires Java ${requiredMajor}, selected ${metadata.languageVersion}")
+            }
+            if (requestedHome.isPresent() && metadata.installationPath.asFile.canonicalFile != requestedHome.get()) {
+                throw new GradleException("${name} selected a different installation than gameJavaHome: ${metadata.installationPath.asFile}")
+            }
+            logger.lifecycle("Overhaul game runtime: Java ${metadata.languageVersion} at ${selected.executablePath.asFile}")
+        }
+    }
+}

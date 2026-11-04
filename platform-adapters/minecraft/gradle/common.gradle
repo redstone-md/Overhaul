@@ -33,6 +33,7 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(25)
     withSourcesJar()
 }
+apply from: 'gradle/game-runtime.gradle'
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = target.java as int
