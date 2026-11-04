@@ -78,8 +78,11 @@ final class BlazeSourceLowering {
     static String surrogate(String type){
         if(type.equals("int")||type.equals("uint"))return "float";
         if(type.matches("[iu]vec[234]"))return type.substring(1);
-        if(type.equals("float")||type.matches("vec[234]"))return type;
+        if(type.equals("float")||type.matches("vec[234]")||matrix(type))return type;
         throw new UnsupportedShaderException("Unsupported Blaze3D stage type: "+type);
     }
+    /** The type a varying is declared with while locations are assigned; a matrix keeps its type so each column gets a location. */
+    static String schemaType(String type){return matrix(type)?type:"vec4";}
+    private static boolean matrix(String type){return type.matches("mat[234]");}
     private static boolean integer(String type){return type.equals("int")||type.equals("uint")||type.startsWith("ivec")||type.startsWith("uvec");}
 }

@@ -31,12 +31,13 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         // Translation assigns one stable location schema; linking uses the optimized interfaces below.
         // Temporary declarations are removed before compilation, never given invented vertex values.
         String vertexSchema=varyingSchema(vertexStage),fragmentSchema=varyingSchema(fragmentStage);
-        for(String name:fragmentStage.varyings().keySet())if(!vertexStage.varyings().containsKey(name))vertexSchema+="\nvarying vec4 "+name+";\n";
+        for(var entry:fragmentStage.varyings().entrySet())if(!vertexStage.varyings().containsKey(entry.getKey()))
+            vertexSchema+="\nvarying "+BlazeSourceLowering.schemaType(entry.getValue())+" "+entry.getKey()+";\n";
         var lowered = translator.translate(vertexSchema,fragmentSchema, CoordinateConvention.OPENGL_RENDER_TARGET);
         String vertexText=declarations(lowered.vertex(),lowered.bindings().attributes(),vertexStage.attributes(),"in",java.util.Set.of(),false);
         vertexText=declarations(vertexText,lowered.bindings().varyings(),vertexStage.varyings(),"out",vertexStage.flatVaryings(),true);
-        for(String name:fragmentStage.varyings().keySet())if(!vertexStage.varyings().containsKey(name))
-            vertexText=vertexText.replace("layout(location="+lowered.bindings().varyings().get(name)+") out vec4 "+name+";","");
+        for(var entry:fragmentStage.varyings().entrySet())if(!vertexStage.varyings().containsKey(entry.getKey()))
+            vertexText=vertexText.replace("layout(location="+lowered.bindings().varyings().get(entry.getKey())+") out "+BlazeSourceLowering.schemaType(entry.getValue())+" "+entry.getKey()+";","");
         String fragmentText=declarations(lowered.fragment(),lowered.bindings().varyings(),fragmentStage.varyings(),"in",fragmentStage.flatVaryings(),true);
         var declared=lowered.bindings();
         var bindings=new ProgramBindings(declared.uniforms(),declared.uniformBytes(),declared.samplers(),declared.attributes(),
@@ -49,7 +50,7 @@ public final class BlazeProgramCompiler implements AutoCloseable {
 
     private static String varyingSchema(BlazeSourceLowering.Stage stage){
         String source=stage.source();
-        for(var entry:stage.varyings().entrySet())source=source.replace("varying "+BlazeSourceLowering.surrogate(entry.getValue())+" "+entry.getKey()+";","varying vec4 "+entry.getKey()+";");
+        for(var entry:stage.varyings().entrySet())source=source.replace("varying "+BlazeSourceLowering.surrogate(entry.getValue())+" "+entry.getKey()+";","varying "+BlazeSourceLowering.schemaType(entry.getValue())+" "+entry.getKey()+";");
         return source;
     }
 
@@ -69,7 +70,7 @@ public final class BlazeProgramCompiler implements AutoCloseable {
             String name=entry.getKey(),type=entry.getValue();
             Integer location=locations.get(name);
             if(location==null)throw new UnsupportedShaderException("Missing stage declaration: "+name);
-            String declaration="layout(location="+location+") "+direction+" "+(varying?"vec4":BlazeSourceLowering.surrogate(type))+" "+name+";";
+            String declaration="layout(location="+location+") "+direction+" "+(varying?BlazeSourceLowering.schemaType(type):BlazeSourceLowering.surrogate(type))+" "+name+";";
             if(!source.contains(declaration))throw new UnsupportedShaderException("Unrecognized translated varying declaration");
             source=source.replace(declaration,"layout(location="+location+") "+(flat.contains(name)?"flat ":"")+direction+" "+type+" "+name+";");
         }
