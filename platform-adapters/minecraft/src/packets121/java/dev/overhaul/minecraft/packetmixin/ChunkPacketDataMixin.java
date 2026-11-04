@@ -3,21 +3,29 @@ package dev.overhaul.minecraft.packetmixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.overhaul.minecraft.packet.ChunkPacketDecode;
-import dev.overhaul.minecraft.packet.ChunkPacketPayloadAccess;
+import dev.overhaul.minecraft.packet.ChunkPacketPayloadBinding;
 import dev.overhaul.minecraft.packet.OwnedChunkPayload;
+import java.util.List;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ClientboundLevelChunkPacketData.class)
-public abstract class ChunkPacketDataMixin implements ChunkPacketPayloadAccess {
-    @Unique private OwnedChunkPayload overhaul$payload;
+public abstract class ChunkPacketDataMixin implements ChunkPacketPayloadBinding {
+    @Shadow @Final private byte[] buffer;
+    @Shadow @Final private List<?> blockEntitiesData;
+    @Unique private volatile OwnedChunkPayload overhaul$payload;
     @Override public OwnedChunkPayload overhaul$chunkPayload(){return overhaul$payload;}
+    @Override public synchronized void overhaul$bindChunkPayload(OwnedChunkPayload payload){
+        overhaul$payload=ChunkPacketPayloadBinding.validate(overhaul$payload,buffer,blockEntitiesData!=null,payload);
+    }
     @WrapOperation(method="<init>(Lnet/minecraft/network/RegistryFriendlyByteBuf;II)V",at=@At(value="INVOKE",target="Lnet/minecraft/network/RegistryFriendlyByteBuf;readVarInt()I"),require=1,allow=1)
     private int overhaul$sectionBytes(RegistryFriendlyByteBuf source,Operation<Integer> original){
         int length=original.call(source);

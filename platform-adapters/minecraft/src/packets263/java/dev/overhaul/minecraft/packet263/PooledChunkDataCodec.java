@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.packet263;
 
 import com.mojang.datafixers.util.Function3;
 import dev.overhaul.minecraft.packet.ChunkPacketDecode;
+import dev.overhaul.minecraft.packet.ChunkPacketPayloadBinding;
 import dev.overhaul.minecraft.packet.OwnedChunkPayload;
 import java.util.Objects;
 import java.util.function.Function;
