@@ -17,6 +17,7 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
     private final OverhaulDeviceBackend owner;
     private final OverhaulTransientMemory transientMemory;
     private final OverhaulImageTransfers images;
+    private final OverhaulUploadStaging uploads;
     private OverhaulRenderPass activePass;
     private boolean closed;
 
@@ -24,6 +25,7 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
         this.owner=owner;
         transientMemory=new OverhaulTransientMemory(owner);
         images=new OverhaulImageTransfers(owner);
+        uploads=new OverhaulUploadStaging(owner);
     }
 
     public OverhaulDeviceBackend owner() { return owner; }
@@ -53,8 +55,7 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
         requireNoPass();
         if (source.remaining()>destination.length()) throw new IllegalArgumentException("Source exceeds destination slice");
         if (source.remaining()==0) return;
-        var staging=transientMemory.uploadStaging(java.util.List.of(source),4,GpuBuffer.USAGE_COPY_SRC,source.remaining(),1);
-        owner.queue().enqueue(new BufferCopyOperation(owner,staging,destination));
+        owner.queue().enqueue(new BufferCopyOperation(owner,uploads.upload(source),destination));
     }
 
     @Override public void copyToBuffer(GpuBufferSlice source,GpuBufferSlice destination) {
@@ -129,6 +130,6 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
         if (closed) return;
         requireOpen();
         if (activePass!=null) { activePass.close(); activePass=null; }
-        owner.queue().drain(); transientMemory.close(); closed=true;
+        owner.queue().drain(); transientMemory.close(); uploads.close(); closed=true;
     }
 }
