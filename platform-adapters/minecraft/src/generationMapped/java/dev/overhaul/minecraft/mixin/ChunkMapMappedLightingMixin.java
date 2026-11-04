@@ -6,11 +6,13 @@ import java.util.concurrent.Executor;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.thread.ProcessorMailbox;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Desc;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -31,8 +33,8 @@ public abstract class ChunkMapMappedLightingMixin {
         return overhaul$lightStrand.executor();
     }
 
-    @Inject(method = "close()V", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;close()V"), require = 1, allow = 1)
+    @Inject(method = "close()V", remap = false, at = @At(value = "INVOKE",
+            desc = @Desc(owner = PoiManager.class, value = "close"), remap = false), require = 1, allow = 1)
     private void overhaul$lightClosed(CallbackInfo callback) {
         // Generation's original-future drain has completed, and queueSorter.close
         // has closed this exact mailbox. Join only its backing wakeups before IO closes.

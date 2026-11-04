@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Every selected-device query is resolved locally; an unsupported query cannot reach a missing GL context. */
-@Mixin(GlStateManager.class)
+@Mixin(value=GlStateManager.class, remap=false)
 public abstract class GlStateManagerBlazeCapabilitiesMixin {
     @Inject(method="_getInteger",at=@At("HEAD"),cancellable=true)
     private static void overhaul$integer(int name,CallbackInfoReturnable<Integer> callback){

@@ -27,6 +27,6 @@ public abstract class UniformBlazeMixin {
     private static void overhaul$sampler(int location,int value,CallbackInfo callback){var programs=BlazePrograms.current();if(programs!=null){programs.samplerUnit(location,value);callback.cancel();}}
     @Inject(method="upload",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$upload(CallbackInfo callback){if(overhaul$owned){dirty=false;callback.cancel();}}
-    @Inject(method="close",at=@At("HEAD"),cancellable=true,require=1)
+    @Inject(method="close",at=@At("HEAD"),cancellable=true,require=1,remap=false)
     private void overhaul$close(CallbackInfo callback){if(overhaul$owned){if(overhaul$closed)callback.cancel();overhaul$closed=true;}}
 }

@@ -31,9 +31,9 @@ public abstract class WindowBlazeMixin {
     @Unique private boolean overhaul$blazeRequested;
     @Unique private BlazeRenderer overhaul$blazeRenderer;
 
-    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwDefaultWindowHints()V"),require=1,allow=1)
+    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwDefaultWindowHints()V",remap=false),require=1,allow=1)
     private void overhaul$captureSelection(Operation<Void> original){overhaul$blazeRequested=BlazeFrontend.requested();original.call();}
-    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwWindowHint(II)V"))
+    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwWindowHint(II)V",remap=false))
     private void overhaul$noApiHints(int hint,int value,Operation<Void> original){
         if(!overhaul$blazeRequested){original.call(hint,value);return;}
         if(hint==GLFW_CLIENT_API){original.call(hint,GLFW_NO_API);return;}
@@ -41,10 +41,10 @@ public abstract class WindowBlazeMixin {
                 ||hint==GLFW_OPENGL_FORWARD_COMPAT||hint==GLFW_CONTEXT_CREATION_API)return;
         original.call(hint,value);
     }
-    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwMakeContextCurrent(J)V"),require=1,allow=1)
+    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwMakeContextCurrent(J)V",remap=false),require=1,allow=1)
     private void overhaul$noGlContext(long handle,Operation<Void> original){if(!overhaul$blazeRequested)original.call(handle);}
 
-    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/opengl/GL;createCapabilities()Lorg/lwjgl/opengl/GLCapabilities;"),require=1,allow=1)
+    @WrapOperation(method="<init>",at=@At(value="INVOKE",target="Lorg/lwjgl/opengl/GL;createCapabilities()Lorg/lwjgl/opengl/GLCapabilities;",remap=false),require=1,allow=1)
     private GLCapabilities overhaul$installDevice(Operation<GLCapabilities> original){
         if(!overhaul$blazeRequested)return original.call();
         Minecraft client=Minecraft.getInstance();if(client==null){overhaul$releaseFailedWindow();throw new IllegalStateException("Blaze3D Vulkan initialization requires its owning Minecraft instance");}
@@ -75,7 +75,7 @@ public abstract class WindowBlazeMixin {
             try{if(installed!=null)installed.free();}finally{if(!same)defaultErrorCallback.free();}
         }finally{glfwDestroyWindow(window);}
     }
-    @WrapOperation(method="updateVsync",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwSwapInterval(I)V"),require=1,allow=1)
+    @WrapOperation(method="updateVsync",at=@At(value="INVOKE",target="Lorg/lwjgl/glfw/GLFW;glfwSwapInterval(I)V",remap=false),require=1,allow=1)
     private void overhaul$presentationPolicy(int interval,Operation<Void> original){
         if(overhaul$blazeRenderer==null)original.call(interval);else overhaul$blazeRenderer.presentMode(interval!=0);
     }
@@ -83,7 +83,7 @@ public abstract class WindowBlazeMixin {
     private void overhaul$resizeSurface(long handle,int width,int height,CallbackInfo callback){
         if(handle==window&&overhaul$blazeRenderer!=null)overhaul$blazeRenderer.resize(width,height);
     }
-    @WrapMethod(method="close")
+    @WrapMethod(method="close",remap=false)
     private void overhaul$closeDevice(Operation<Void> original){
         BlazeRenderer renderer=overhaul$blazeRenderer;overhaul$blazeRenderer=null;Throwable failure=null;
         try{if(renderer!=null)renderer.close();}catch(RuntimeException|Error error){failure=error;}

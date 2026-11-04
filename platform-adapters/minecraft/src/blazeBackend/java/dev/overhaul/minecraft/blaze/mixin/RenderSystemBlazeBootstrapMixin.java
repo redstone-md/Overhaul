@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Native limits and presentation replace GL initialization; original event polling and render-call replay remain. */
-@Mixin(RenderSystem.class)
+@Mixin(value=RenderSystem.class, remap=false)
 public abstract class RenderSystemBlazeBootstrapMixin {
     @Shadow private static String apiDescription;
     @Shadow private static int MAX_SUPPORTED_TEXTURE_SIZE;

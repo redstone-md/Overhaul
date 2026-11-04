@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** The shared game upload paths remain intact; only device calls enter the owned texture namespace. */
-@Mixin(GlStateManager.class)
+@Mixin(value=GlStateManager.class, remap=false)
 public abstract class GlTextureBlazeMixin {
     @Inject(method="_genTexture",at=@At("HEAD"),cancellable=true)
     private static void overhaul$generate(CallbackInfoReturnable<Integer> result){var renderer=BlazeFrontend.current();if(renderer!=null)result.setReturnValue(renderer.textures().generate());}

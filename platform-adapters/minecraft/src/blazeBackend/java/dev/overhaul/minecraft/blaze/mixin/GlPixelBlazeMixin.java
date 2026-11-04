@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(GlStateManager.class)
+@Mixin(value=GlStateManager.class, remap=false)
 public abstract class GlPixelBlazeMixin {
     @Inject(method="_pixelStore",at=@At("HEAD"),cancellable=true)
     private static void overhaul$store(int name,int value,CallbackInfo callback){var renderer=BlazeFrontend.current();if(renderer!=null){renderer.textures().pixelStore(name,value);callback.cancel();}}

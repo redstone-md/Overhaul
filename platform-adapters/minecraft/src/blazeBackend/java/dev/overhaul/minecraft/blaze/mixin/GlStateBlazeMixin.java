@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** The game still determines state changes; the selected device stores their exact native meaning. */
-@Mixin(GlStateManager.class)
+@Mixin(value=GlStateManager.class, remap=false)
 public abstract class GlStateBlazeMixin {
     @Unique private static BlazeDrawState overhaul$state(){var renderer=BlazeFrontend.current();return renderer==null?null:renderer.drawState();}
     @Inject(method="_enableDepthTest",at=@At("HEAD"),cancellable=true,require=1)

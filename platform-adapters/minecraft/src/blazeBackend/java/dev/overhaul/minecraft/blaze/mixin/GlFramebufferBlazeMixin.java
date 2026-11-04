@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Public framebuffer operations resolve only real owned attachments. */
-@Mixin(GlStateManager.class)
+@Mixin(value=GlStateManager.class, remap=false)
 public abstract class GlFramebufferBlazeMixin {
     @Inject(method="_glBindFramebuffer",at=@At("HEAD"),cancellable=true,require=1)
     private static void overhaul$bind(int target,int id,CallbackInfo c){var owner=BlazeFrontend.current();if(owner!=null){owner.bindFramebuffer(target,id);c.cancel();}}

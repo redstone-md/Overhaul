@@ -22,9 +22,9 @@ public abstract class VertexBufferBlazeMixin implements BlazeVertexBufferAccess 
     @Unique private BlazeMesh overhaul$mesh;
     @Unique private boolean overhaul$owned;
 
-    @Redirect(method="<init>",at=@At(value="INVOKE",target="Lcom/mojang/blaze3d/platform/GlStateManager;_glGenBuffers()I"),require=2,allow=2)
+    @Redirect(method="<init>",at=@At(value="INVOKE",target="Lcom/mojang/blaze3d/platform/GlStateManager;_glGenBuffers()I",remap=false),require=2,allow=2)
     private int overhaul$bufferId(){var owner=BlazeFrontend.current();if(owner==null)return GlStateManager._glGenBuffers();overhaul$owned=true;return owner.nextHandle();}
-    @Redirect(method="<init>",at=@At(value="INVOKE",target="Lcom/mojang/blaze3d/platform/GlStateManager;_glGenVertexArrays()I"),require=1,allow=1)
+    @Redirect(method="<init>",at=@At(value="INVOKE",target="Lcom/mojang/blaze3d/platform/GlStateManager;_glGenVertexArrays()I",remap=false),require=1,allow=1)
     private int overhaul$arrayId(){var owner=BlazeFrontend.current();if(owner==null)return GlStateManager._glGenVertexArrays();overhaul$owned=true;return owner.nextHandle();}
 
     @Override public boolean overhaul$owned(){return overhaul$owned;}
@@ -46,7 +46,7 @@ public abstract class VertexBufferBlazeMixin implements BlazeVertexBufferAccess 
     private static void overhaul$unbind(CallbackInfo callback){if(BlazeFrontend.current()!=null)callback.cancel();}
     @Inject(method="draw()V",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$draw(CallbackInfo callback){var owner=BlazeFrontend.current();if(overhaul$owned){if(overhaul$mesh!=null)BlazeFrontend.require().draw(overhaul$mesh);callback.cancel();}else if(owner!=null)throw new IllegalStateException("OpenGL vertex buffer cannot draw on the owned device");}
-    @Inject(method="close()V",at=@At("HEAD"),cancellable=true,require=1)
+    @Inject(method="close()V",at=@At("HEAD"),cancellable=true,require=1,remap=false)
     private void overhaul$close(CallbackInfo callback){
         if(!overhaul$owned)return;
         if(overhaul$mesh!=null){overhaul$mesh.close();overhaul$mesh=null;}
