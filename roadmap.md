@@ -397,6 +397,10 @@ does not complete pathfinding, tick scheduling, rendering or remaining versions.
   mutation draining. That change is proposed, not implemented in this checkpoint.
 - Dedicated servers, live Forge/NeoForge sessions, other versions/mods and full
   tick/pathfinding ownership remain required, as does the original full scope.
+- 2026-11-04: 1.20.1 and 1.21.1 share this integration since `da279e2`, and the
+  jar verifier now expects that. NeoForge 1.21.1 has a static class and pack audit
+  only; see [entity queries](docs/ENTITY_QUERY_INTEGRATION.md). Its oracle, live
+  run and measured tick gain remain open.
 
 ## Next ordinary model-rendering contract
 
