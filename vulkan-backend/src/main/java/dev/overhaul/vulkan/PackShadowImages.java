@@ -54,7 +54,7 @@ final class PackShadowImages implements AutoCloseable {
                 SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,levels-1,1,
                 comparison?SamplerSettings.Compare.LESS_OR_EQUAL:SamplerSettings.Compare.NONE));samplers.add(sampler);return sampler;
     }
-    private static ImageFormat depthFormat(VulkanContext context,boolean linear){
+    static ImageFormat depthFormat(VulkanContext context,boolean linear){
         try(MemoryStack stack=MemoryStack.stackPush()){
             int required=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|(linear?VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT:0);
             var properties=VkFormatProperties.malloc(stack);
@@ -97,13 +97,7 @@ final class PackShadowImages implements AutoCloseable {
     void clear(PackFrameGraph plan){
         for(int index=0;index<2;index++){
             for(GpuImageView target:depth[index].levels()){
-                String name=plan.write(target);
-                plan.pass("clear-shadow-depth-"+name,Map.of(name,VulkanRenderGraph.Usage.TRANSFER_WRITE),pass->{
-                    try(MemoryStack stack=MemoryStack.stackPush()){
-                        var range=VkImageSubresourceRange.calloc(1,stack).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).baseMipLevel(target.baseMip()).levelCount(1).layerCount(1);
-                        vkCmdClearDepthStencilImage(pass.command(),target.image().handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VkClearDepthStencilValue.calloc(stack).depth(1).stencil(0),range);
-                    }
-                });
+                ShadowDepthPasses.clear(plan,target);
             }
             var color=settings.colors().targets().get(index);
             if(color!=null&&(!initialized||color.clear()))for(var image:colors[index])for(var level:image.levels())PackGraphRuntime.clear(plan,level,color.color());
@@ -111,14 +105,7 @@ final class PackShadowImages implements AutoCloseable {
     }
     void initialized(){initialized=true;}
     void snapshotOpaque(PackFrameGraph plan){
-        String read=plan.read(depth(0)),write=plan.write(depth(1));
-        plan.pass("retain-opaque-shadow-depth",Map.of(read,VulkanRenderGraph.Usage.TRANSFER_READ,write,VulkanRenderGraph.Usage.TRANSFER_WRITE),pass->{
-            try(MemoryStack stack=MemoryStack.stackPush()){
-                var region=VkImageCopy.calloc(1,stack);region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).layerCount(1);
-                region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).layerCount(1);region.extent().set(settings.resolution(),settings.resolution(),1);
-                vkCmdCopyImage(pass.command(),depth(0).image().handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,depth(1).image().handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,region);
-            }
-        });
+        ShadowDepthPasses.copy(plan,depth(0),depth(1));
     }
     void generateDepth(PackFrameGraph plan,int index){if(depth[index].levels().size()>1)depthMipmaps.generate(plan,depth[index].levels());}
     void generateColor(PackFrameGraph plan,int index,PackMipmaps mipmaps){if(colors[index][current[index]]!=null)mipmaps.generate(plan,colors[index][current[index]].levels());}
