@@ -77,7 +77,7 @@ public final class CompiledShaderPack {
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
         stage(discovered.name().substring(discovered.name().lastIndexOf('/')+1));
-        return new Sources(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX),preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT));
+        return new Sources(PackCoreProfile.lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),PackCoreProfile.lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)));
     }
     /** One program of a generation, recorded into the builders that aggregate pack-wide requirements. */
     public static Program compileProgram(ShaderPackCatalog.Program discovered,Sources sources,ShadercCompiler compiler,
