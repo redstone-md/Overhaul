@@ -2,12 +2,14 @@ package dev.overhaul.minecraft.shader;
 
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
+import dev.overhaul.shader.pack.PackIdMap;
 import dev.overhaul.shader.pack.PackSmoothing;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,22 +19,23 @@ import net.minecraft.world.phys.HitResult;
 
 /** Effects, held items, fog and the smoothed values, sampled from the camera entity once per frame. */
 final class ShaderPackPlayerUniforms {
-    private static final int GL_LINEAR=9729,FOG_SPHERE=0,FOG_CYLINDER=1,UNKNOWN_ID=-1;
+    private static final int GL_LINEAR=9729,FOG_SPHERE=0,FOG_CYLINDER=1;
     private final ShaderPackBiomeValues biome=new ShaderPackBiomeValues();
     private float wetness,eyeBlock,eyeSky,centerDepth,nightVision,blindness,darkness,darknessLight,mood;
     private float fogStart,fogEnd,fogDensity;
-    private int fogShape,lightMain,lightOff,atlasWidth,atlasHeight;
+    private int fogShape,lightMain,lightOff,itemMain,itemOff,atlasWidth,atlasHeight;
     private boolean hideGui,started;
     private Entity entity;
     private float health,maxHealth;
 
-    void capture(Minecraft minecraft,LevelRenderState state,float seconds,PackSmoothing smoothing,ShaderPackEnvironmentUniforms environment,float near,float far){
+    void capture(Minecraft minecraft,LevelRenderState state,float seconds,PackSmoothing smoothing,PackIdMap ids,ShaderPackEnvironmentUniforms environment,float near,float far){
         float partial=state.worldPartialTicks;entity=minecraft.getCameraEntity();
         LivingEntity living=entity instanceof LivingEntity found?found:null;
         effects(minecraft,living,partial);
         health=living==null?0:living.getHealth();maxHealth=living==null?0:living.getMaxHealth();
         mood=minecraft.player instanceof LocalPlayer player?player.getCurrentMood():0;
         lightMain=living==null?0:light(living.getMainHandItem());lightOff=living==null?0:light(living.getOffhandItem());
+        itemMain=living==null?PackIdMap.UNKNOWN:id(ids,living.getMainHandItem());itemOff=living==null?PackIdMap.UNKNOWN:id(ids,living.getOffhandItem());
         hideGui=minecraft.gui.hud.isHidden();
         fog(state);
         var atlas=minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTexture();atlasWidth=atlas.getWidth(0);atlasHeight=atlas.getHeight(0);
@@ -54,6 +57,7 @@ final class ShaderPackPlayerUniforms {
         darkness=blend*minecraft.options.darknessEffectScale().get().floatValue();
         darknessLight=Math.max(0,(float)Math.cos((living.tickCount-partial)*Math.PI*0.025f)*0.45f*blend);
     }
+    private static int id(PackIdMap ids,ItemStack stack){return stack.isEmpty()?PackIdMap.UNKNOWN:ids.item(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());}
     private static int light(ItemStack stack){return stack.getItem() instanceof BlockItem item?item.getBlock().defaultBlockState().getLightEmission():0;}
     /** Vanilla no longer has one fog range or shape: the nearer of its two ranges decides what is visible. */
     private void fog(LevelRenderState state){
@@ -88,7 +92,9 @@ final class ShaderPackPlayerUniforms {
             case "hideGUI"->values.setInt(name,hideGui?1:0);
             case "heldBlockLightValue"->values.setInt(name,lightMain);
             case "heldBlockLightValue2"->values.setInt(name,lightOff);
-            case "heldItemId","heldItemId2","entityId","blockEntityId"->values.setInt(name,UNKNOWN_ID);
+            case "heldItemId"->values.setInt(name,itemMain);
+            case "heldItemId2"->values.setInt(name,itemOff);
+            case "entityId","blockEntityId"->values.setInt(name,PackIdMap.UNKNOWN);
             case "atlasSize"->values.setIntVector(name,atlasWidth,atlasHeight);
             default->{return false;}
         }
@@ -113,7 +119,9 @@ final class ShaderPackPlayerUniforms {
             case "hideGUI"->hideGui?1:0;
             case "heldBlockLightValue"->lightMain;
             case "heldBlockLightValue2"->lightOff;
-            case "heldItemId","heldItemId2","entityId","blockEntityId"->UNKNOWN_ID;
+            case "heldItemId"->itemMain;
+            case "heldItemId2"->itemOff;
+            case "entityId","blockEntityId"->PackIdMap.UNKNOWN;
             case "atlasSize"->component==0?atlasWidth:atlasHeight;
             case "is_alive"->flag(entity!=null&&entity.isAlive());
             case "is_burning"->flag(entity!=null&&entity.isOnFire());

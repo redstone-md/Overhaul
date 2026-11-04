@@ -37,7 +37,8 @@ public final class PackInterfaceCatalog {
                 "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef");
         add(table,Binding.BOUND,"int","frameCounter","worldTime","worldDay","moonPhase","isEyeInWater","fogMode","fogShape","heldBlockLightValue","heldBlockLightValue2","hideGUI");
         add(table,Binding.BOUND,"ivec2","eyeBrightness","eyeBrightnessSmooth","atlasSize");
-        add(table,Binding.CONSTANT,"int","heldItemId","heldItemId2","entityId","blockEntityId");
+        add(table,Binding.BOUND,"int","heldItemId","heldItemId2");
+        add(table,Binding.CONSTANT,"int","entityId","blockEntityId");
         add(table,Binding.BOUND,"vec3","cameraPosition","previousCameraPosition","fogColor","skyColor","sunPosition","moonPosition",
                 "shadowLightPosition","upPosition");
         add(table,Binding.BOUND,"mat4","gbufferProjection","gbufferProjectionInverse","gbufferModelView","gbufferModelViewInverse",

@@ -52,7 +52,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
         if(!Float.isFinite(near)||near<=0)throw new UnsupportedShaderException("Unsupported shader-pack camera near plane");
         if(!initialized){System.arraycopy(projection,0,previousProjection,0,16);System.arraycopy(view,0,previousView,0,16);
             var position=state.cameraRenderState.pos;previousX=position.x;previousY=position.y;previousZ=position.z;}
-        player.capture(minecraft,state,frameTime,pack.smoothing(),environment,near,state.cameraRenderState.depthFar);
+        player.capture(minecraft,state,frameTime,pack.smoothing(),pack.ids(),environment,near,state.cameraRenderState.depthFar);
         custom.update(frameTime,this);
     }
     @Override public double read(String name,int component){

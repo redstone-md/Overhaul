@@ -12,10 +12,10 @@ import java.util.TreeSet;
  * Deterministic discovery; dimension folders replace, rather than merge with, root programs.
  * {@code diagnostics} block the pack, while {@code warnings} describe what it runs without.
  */
-public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics, List<PackDiagnostic> warnings) {
+public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics, List<PackDiagnostic> warnings, PackIdMap ids) {
     public ShaderPackCatalog { programs = List.copyOf(programs); diagnostics = List.copyOf(diagnostics); warnings = List.copyOf(warnings); }
     public ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics) {
-        this(programs,properties,diagnostics,List.of());
+        this(programs,properties,diagnostics,List.of(),PackIdMap.empty());
     }
 
     public static ShaderPackCatalog discover(ShaderPackSource pack, Integer dimension, Map<String,Boolean> options) throws IOException {
@@ -53,7 +53,8 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
             try { programs.add(new Program(name,name+".vsh",name+".fsh",properties.program(name,merged))); }
             catch (UnsupportedShaderException failure) { diagnostics.add(name+": "+failure.getMessage()); }
         }
-        return new ShaderPackCatalog(programs,properties,diagnostics,warnings);
+        PackIdMap ids = PackIdMap.load(pack,paths,discovered.defines(options,macros),warnings);
+        return new ShaderPackCatalog(programs,properties,diagnostics,warnings,ids);
     }
 
     /** A properties file that cannot be evaluated is reported like any other blocking pack feature. */
