@@ -111,6 +111,7 @@ final class BlazeGlRoutes {
         put(table, "glDeleteTextures", (renderer, a) -> each(a, address -> renderer.textures().delete(MemoryUtil.memGetInt(address))));
         put(table, "glActiveTexture", (renderer, a) -> renderer.textures().active(a.integer(0)));
         put(table, "glBindTexture", (renderer, a) -> { if (a.integer(0) == TEXTURE_2D) renderer.textures().bind(a.integer(1)); });
+        put(table, "glGenerateMipmap", (renderer, a) -> renderer.textures().generateMipmap(a.integer(0)));
         put(table, "glPixelStorei", (renderer, a) -> renderer.textures().pixelStore(a.integer(0), a.integer(1)));
         put(table, "glTexParameteri", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.integer(2)));
         put(table, "glTexImage2D", (renderer, a) -> {

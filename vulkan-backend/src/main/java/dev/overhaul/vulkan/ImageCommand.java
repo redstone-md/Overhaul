@@ -137,6 +137,29 @@ public final class ImageCommand implements AutoCloseable {
             operation.transition(target,targetLevel,command,finish(target,targetBefore));
         });
     }
+    /** Fills every level above {@code base} by downsampling the one before it, like glGenerateMipmap. */
+    public static ImageCommand mipmaps(VulkanContext context,GpuImage image,int base,int layer) {
+        ImageRegion first=ImageRegion.whole(image,base,layer);
+        validateImage(context,image,first,VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        if (image.format().isDepth()) throw new IllegalArgumentException("Mipmaps require a colour image");
+        return new ImageCommand(context,(operation,command)-> {
+            requireDefined(image,first);
+            int finished=finish(image,image.layout(base,layer));
+            for (int level=base+1;level<image.mipLevels();level++) {
+                operation.transition(image,ImageRegion.whole(image,level-1,layer),command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                operation.transition(image,ImageRegion.whole(image,level,layer),command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                try (MemoryStack stack=MemoryStack.stackPush()) {
+                    VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
+                    blit.srcSubresource().aspectMask(image.format().aspectMask()).mipLevel(level-1).baseArrayLayer(layer).layerCount(1);
+                    blit.dstSubresource().aspectMask(image.format().aspectMask()).mipLevel(level).baseArrayLayer(layer).layerCount(1);
+                    blit.srcOffsets(1).set(image.width(level-1),image.height(level-1),1);
+                    blit.dstOffsets(1).set(image.width(level),image.height(level),1);
+                    vkCmdBlitImage(command,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,blit,VK_FILTER_LINEAR);
+                }
+            }
+            for (int level=base;level<image.mipLevels();level++) operation.transition(image,ImageRegion.whole(image,level,layer),command,finished);
+        });
+    }
     private static void requireRectangle(int[] corners,int width,int height) {
         if (corners.length!=4||Math.min(corners[0],corners[2])<0||Math.max(corners[0],corners[2])>width
                 ||Math.min(corners[1],corners[3])<0||Math.max(corners[1],corners[3])>height) throw new IllegalArgumentException("Image blit rectangle exceeds its image");

@@ -28,6 +28,9 @@ final class BlazeTexture implements AutoCloseable {
     int layer(){return borrowed==null?0:borrowed.baseLayer();}
     boolean defined(int level){return level>=0&&(borrowed!=null?level<borrowed.mipCount():defined!=null&&level<defined.length&&defined[level]);}
     void define(int level){if(borrowed!=null||defined==null||level<0||level>=defined.length)throw new IllegalArgumentException("Undefined texture mip allocation");defined[level]=true;}
+    /** The levels a mipmap generation just wrote. */
+    void defineMipmaps(int first){for(int level=first;defined!=null&&level<defined.length;level++)defined[level]=true;}
+    int baseLevel(){return base;}
     boolean complete(){
         if(!defined(base)||max<base)return false;var source=image();int first=mip(base);
         boolean mipmapped=min!=GL_NEAREST&&min!=GL_LINEAR;

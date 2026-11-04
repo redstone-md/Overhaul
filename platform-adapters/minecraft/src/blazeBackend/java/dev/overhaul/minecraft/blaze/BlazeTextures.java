@@ -173,6 +173,11 @@ public final class BlazeTextures implements AutoCloseable {
         else throw new UnsupportedOperationException("Unsupported texture sampler payload: "+(value==null?"null":value.getClass().getName()));
         return sampled(id);
     }
+    public void generateMipmap(int target){
+        requireOpen();target(target);var texture=current();
+        if(texture.borrowed()||!texture.defined(texture.baseLevel()))return;
+        transfers.mipmaps(texture.image(),texture.baseLevel(),0);texture.defineMipmaps(texture.baseLevel()+1);
+    }
     public Sampled resolveBound(int unit){return sampled(boundId(unit));}
     private Sampled sampled(int id){
         var texture=texture(id);if(!texture.complete())texture=incomplete();var view=texture.view();
