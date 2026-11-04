@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
-import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
+import dev.overhaul.minecraft.shader.OwnedReceiverShaders;
+import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import org.lwjgl.system.MemoryStack;
@@ -10,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 import static org.lwjgl.vulkan.VK10.*;
 
-/** One game terrain pipeline with the receiver shaders: same state, game set 0, receiver set 1. */
-final class CascadeTerrainPipeline implements AutoCloseable {
+/** One receiving game pipeline with the receiver shaders: same state, game set 0, receiver set 1. */
+final class CascadeReceiverPipeline implements AutoCloseable {
     private static final String CHUNK_INPUT="ChunkPosition",MULTIDRAW="MULTIDRAW_TERRAIN";
     private record Formats(List<Integer> colors,int depth){Formats{colors=List.copyOf(colors);}}
     private final OverhaulDeviceBackend owner;
@@ -20,22 +21,30 @@ final class CascadeTerrainPipeline implements AutoCloseable {
     private final List<NativeGraphicsPipeline.Shader> shaders;
     private final Map<Formats,NativeGraphicsPipeline> variants=new HashMap<>();
 
-    CascadeTerrainPipeline(OverhaulDeviceBackend owner,OverhaulPipeline original,OwnedTerrainShaders sources,long receiverLayout){
+    CascadeReceiverPipeline(OverhaulDeviceBackend owner,OverhaulPipeline original,OwnedReceiverShaders sources,long receiverLayout){
         this.owner=owner;this.original=original;this.receiverLayout=receiverLayout;
         var metadata=original.compileMetadata();Map<String,String> defines=new HashMap<>(metadata.defines());
         if(metadata.inputs().stream().anyMatch(input->input.fields().containsKey(CHUNK_INPUT)))defines.putIfAbsent(MULTIDRAW,"1");
         var names=original.uniforms().stream().map(uniform->uniform.name()).toList();
         try(ShadercCompiler compiler=new ShadercCompiler()){
-            var compiled=sources.compile(defines,metadata.flags(),names,compiler);
+            var compiled=sources.compile(program(metadata.family()),metadata.modelInstances(),defines,metadata.flags(),names,compiler);
             shaders=List.of(new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",compiled.vertex().directBuffer()),
                     new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",compiled.fragment().directBuffer()));
         }
     }
-    /** Excludes the pipelines whose shaders are not the pinned terrain text this receiver rewrites. */
+    /** World geometry only: the hand and GUI items share these programs outside any world space, with an unknown domain. */
     static boolean accepts(OverhaulPipeline pipeline){
         var metadata=pipeline.compileMetadata();
-        return metadata!=null&&metadata.family()==PipelineCompileMetadata.Family.TERRAIN&&!metadata.modelInstances()
-                &&!metadata.defined("OIT")&&!metadata.defined("OIT_ACCUMULATE")&&!metadata.defined("OIT_ALPHA_ONLY");
+        if(metadata==null||metadata.defined("OIT")||metadata.defined("OIT_ACCUMULATE")||metadata.defined("OIT_ALPHA_ONLY"))return false;
+        if(metadata.family()==PipelineCompileMetadata.Family.TERRAIN)return !metadata.modelInstances();
+        return metadata.domain()==SceneDrawDomain.ENTITY||metadata.domain()==SceneDrawDomain.BLOCK_ENTITY;
+    }
+    private static OwnedReceiverShaders.Program program(PipelineCompileMetadata.Family family){
+        return switch(family){
+            case TERRAIN->OwnedReceiverShaders.Program.TERRAIN;
+            case ENTITY->OwnedReceiverShaders.Program.ENTITY;
+            case BLOCK->OwnedReceiverShaders.Program.BLOCK;
+        };
     }
     void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors descriptors,long receiverSet){
         var variant=variant(attachments.renderPass,attachments.colorFormats(),attachments.depthFormat());

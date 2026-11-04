@@ -4,7 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.util.TextureViewAndSampler;
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
-import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
+import dev.overhaul.minecraft.shader.OwnedReceiverShaders;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShadercCompiler;
@@ -37,14 +37,14 @@ final class ShaderPackSceneGeneration extends BackendResource {
     private final PackShadowSettings shadowSettings;
     private CascadeShadowGeneration cascades;
     /** A null policy keeps the external pack route; owned cascades have no pack graph or colortex targets. */
-    ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,CascadeShadowSettings cascadePolicy,OwnedTerrainShaders terrain){
+    ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,CascadeShadowSettings cascadePolicy,OwnedReceiverShaders receivers){
         super(owner);this.pack=pack;selection=new SceneProgramSelection(pack);shadows=new ShadowProgramSelection(pack);
         shadowSettings=cascadePolicy==null?pack.shadow():pack.shadow().withCamera(cascadePolicy.resolution(),cascadePolicy.distance());
         try{
             if(cascadePolicy==null){
                 var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(SceneProgramSelection.VANILLA_DRAWN);bound.addAll(ShadowProgramSelection.SUPPORTED);
                 runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
-            }else cascades=new CascadeShadowGeneration(owner,cascadePolicy,terrain);
+            }else cascades=new CascadeShadowGeneration(owner,cascadePolicy,receivers);
             if(scene()||hasShadows()){identityTexture=SceneFallbackTexture.identity(owner);normalTexture=SceneFallbackTexture.flatNormal(owner);specularTexture=SceneFallbackTexture.noSpecular(owner);}
         }catch(RuntimeException|Error failure){close();throw failure;}
     }

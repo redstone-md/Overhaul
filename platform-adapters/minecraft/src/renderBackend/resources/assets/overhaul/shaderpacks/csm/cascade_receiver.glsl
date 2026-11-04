@@ -1,6 +1,6 @@
-layout(location = 5) in vec4 overhaulShadowedColor;
-layout(location = 6) in vec3 overhaulPosition;
-layout(location = 7) in float overhaulViewDepth;
+layout(location = 8) in vec4 overhaulShadowedColor;
+layout(location = 9) in vec3 overhaulPosition;
+layout(location = 10) in float overhaulViewDepth;
 
 layout(std140, set = 1, binding = 0) uniform CascadeReceiver {
     mat4 CascadeMatrix[4];

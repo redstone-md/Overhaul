@@ -50,7 +50,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
                 String dimension=key.identifier().toString();CompiledShaderPack pack;
                 try{pack=CompiledShaderPack.compileForDimension(source,dimension,selected,definitions,compiler);}
                 catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}
-                scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades(),nextConfiguration.cascades()==null?null:OwnedTerrainShaders.load(minecraft.getResourceManager()));activePack=pack;installed=true;
+                scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades(),nextConfiguration.cascades()==null?null:OwnedReceiverShaders.load(minecraft.getResourceManager()));activePack=pack;installed=true;
                 var policy=nextConfiguration.cascades();cameras=policy==null?null:new CascadeShadowCameras(policy.count(),policy.resolution(),policy.splitLambda(),policy.blendFraction());
                 LoggerFactory.getLogger(ShaderPackFrameRenderer.class).info("Shader pack installed: {} ({}x{}){}",nextConfiguration.requested(),target.width,target.height,policy==null?"":" with "+policy.count()+" shadow cascades at "+policy.resolution());
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
@@ -70,12 +70,15 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
     private ShaderPackSource open(ShaderPackConfiguration requested)throws IOException{
         return requested.cascades()!=null?OwnedCsmPack.open():ShaderPackSource.open(minecraft.gameDirectory.toPath().resolve(requested.requested()).normalize());
     }
-    /** Owned receivers rewrite exact vanilla terrain text: any other shader bytes keep vanilla terrain, loudly. */
+    /** Owned receivers rewrite exact vanilla scene text: any other shader bytes keep the vanilla scene, loudly. */
     private boolean receiversCertified(ShaderPackConfiguration requested){
         if(requested.cascades()==null||requested.equals(configuration))return true;
-        var gate=new ShaderResourceGate(OwnedTerrainShaders.MANIFEST);if(gate.eligible(minecraft.getResourceManager()))return true;
-        LoggerFactory.getLogger(ShaderPackFrameRenderer.class).warn("Owned cascaded shadows disabled: {}",gate.reason());
-        invalidate();blocked=requested;return false;
+        for(String manifest:OwnedReceiverShaders.MANIFESTS){
+            var gate=new ShaderResourceGate(manifest);if(gate.eligible(minecraft.getResourceManager()))continue;
+            LoggerFactory.getLogger(ShaderPackFrameRenderer.class).warn("Owned cascaded shadows disabled: {}",gate.reason());
+            invalidate();blocked=requested;return false;
+        }
+        return true;
     }
     private static Map<String,Boolean> options(String text){
         Map<String,Boolean> result=new LinkedHashMap<>();for(var entry:definitions(text).entrySet()){

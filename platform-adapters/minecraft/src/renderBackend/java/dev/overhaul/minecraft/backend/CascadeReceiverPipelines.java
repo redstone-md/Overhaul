@@ -1,6 +1,6 @@
 package dev.overhaul.minecraft.backend;
 
-import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
+import dev.overhaul.minecraft.shader.OwnedReceiverShaders;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
@@ -10,14 +10,14 @@ import java.util.Map;
 import static dev.overhaul.vulkan.VulkanException.check;
 import static org.lwjgl.vulkan.VK10.*;
 
-/** The generation's receiver descriptor layout and its adapted pipeline for each game terrain pipeline. */
-final class CascadeTerrainPipelines implements AutoCloseable {
+/** The generation's receiver descriptor layout and its adapted pipeline for each receiving game pipeline. */
+final class CascadeReceiverPipelines implements AutoCloseable {
     private final OverhaulDeviceBackend owner;
-    private final OwnedTerrainShaders sources;
-    private final Map<OverhaulPipeline,CascadeTerrainPipeline> pipelines=new IdentityHashMap<>();
+    private final OwnedReceiverShaders sources;
+    private final Map<OverhaulPipeline,CascadeReceiverPipeline> pipelines=new IdentityHashMap<>();
     private long receiverLayout;
 
-    CascadeTerrainPipelines(OverhaulDeviceBackend owner,OwnedTerrainShaders sources){
+    CascadeReceiverPipelines(OverhaulDeviceBackend owner,OwnedReceiverShaders sources){
         this.owner=owner;this.sources=sources;
         try(MemoryStack stack=MemoryStack.stackPush()){
             VkDescriptorSetLayoutBinding.Buffer bindings=VkDescriptorSetLayoutBinding.calloc(2,stack);
@@ -29,8 +29,8 @@ final class CascadeTerrainPipelines implements AutoCloseable {
         }
     }
     long receiverLayout(){return receiverLayout;}
-    CascadeTerrainPipeline pipeline(OverhaulPipeline original){
-        return pipelines.computeIfAbsent(original,key->new CascadeTerrainPipeline(owner,key,sources,receiverLayout));
+    CascadeReceiverPipeline pipeline(OverhaulPipeline original){
+        return pipelines.computeIfAbsent(original,key->new CascadeReceiverPipeline(owner,key,sources,receiverLayout));
     }
     @Override public void close(){
         for(var pipeline:pipelines.values())pipeline.close();pipelines.clear();

@@ -23,10 +23,10 @@ final class CascadeReceiverBinding implements AutoCloseable {
     private long set;
 
     CascadeReceiverBinding(OverhaulDeviceBackend owner,CascadeShadowGeneration source){this.owner=owner;this.source=source;frame=source.frame();}
-    boolean accepts(PassBindings state){return CascadeTerrainPipeline.accepts(state.pipeline());}
+    boolean accepts(PassBindings state){return CascadeReceiverPipeline.accepts(state.pipeline());}
     /** Compiles and uploads while the draw is captured, so a failure never lands inside a native render pass. */
     GpuImageView prepare(PassBindings state){
-        source.terrain().pipeline(state.pipeline());
+        source.receivers().pipeline(state.pipeline());
         if(uniforms==null){
             uniforms=source.uniforms().acquire(CascadeShadowFrame.RECEIVER_BYTES);
             ByteBuffer data=ByteBuffer.allocateDirect(CascadeShadowFrame.RECEIVER_BYTES).order(ByteOrder.nativeOrder());
@@ -35,7 +35,7 @@ final class CascadeReceiverBinding implements AutoCloseable {
         return source.sampledDepth();
     }
     void bind(VkCommandBuffer command,PassBindings state,PassAttachments attachments,PassDescriptors descriptors){
-        source.terrain().pipeline(state.pipeline()).bind(command,state,attachments,descriptors,set());
+        source.receivers().pipeline(state.pipeline()).bind(command,state,attachments,descriptors,set());
     }
     private long set(){
         if(set!=0)return set;
@@ -43,7 +43,7 @@ final class CascadeReceiverBinding implements AutoCloseable {
         try(MemoryStack stack=MemoryStack.stackPush()){
             pool=owner.descriptorPools().acquire(SHAPE);LongBuffer pointer=stack.mallocLong(1);
             check(vkAllocateDescriptorSets(owner.context().device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default()
-                    .descriptorPool(pool.handle()).pSetLayouts(stack.longs(source.terrain().receiverLayout())),pointer),"cascade receiver descriptor allocation");
+                    .descriptorPool(pool.handle()).pSetLayouts(stack.longs(source.receivers().receiverLayout())),pointer),"cascade receiver descriptor allocation");
             pool.allocated();long allocated=pointer.get(0);
             VkWriteDescriptorSet.Buffer writes=VkWriteDescriptorSet.calloc(2,stack);
             writes.get(0).sType$Default().dstSet(allocated).dstBinding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)

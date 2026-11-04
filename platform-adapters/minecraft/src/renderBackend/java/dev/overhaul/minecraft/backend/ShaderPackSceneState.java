@@ -3,7 +3,7 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
-import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
+import dev.overhaul.minecraft.shader.OwnedReceiverShaders;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -29,9 +29,9 @@ public final class ShaderPackSceneState implements AutoCloseable {
     public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration){
         install(pack,width,height,compiler,configuration,null,null);
     }
-    public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration,CascadeShadowSettings cascades,OwnedTerrainShaders terrain){
+    public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration,CascadeShadowSettings cascades,OwnedReceiverShaders receivers){
         owner.requireOpen();if(framePins!=null)throw new IllegalStateException("Cannot replace a pack during captured world rendering");
-        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler,cascades,terrain);
+        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler,cascades,receivers);
         try{clear();generation=replacement;this.configuration=configuration;}catch(RuntimeException|Error failure){replacement.close();throw failure;}
     }
     public void begin(GpuTextureView color,GpuTextureView depth,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms){
