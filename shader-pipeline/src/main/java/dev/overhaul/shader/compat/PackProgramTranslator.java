@@ -44,9 +44,7 @@ public final class PackProgramTranslator {
 
     public TranslatedProgram translate(String vertex, String fragment, CoordinateConvention coordinates) {
         String vs = stripComments(vertex), fs = stripComments(fragment);
-        // These legacy texture operations are lowered to core Vulkan GLSL below.
-        String textureExtension="(?m)^\\s*#extension\\s+GL_ARB_shader_texture_lod\\s*:\\s*(?:enable|require|warn|disable)\\s*$";
-        vs=vs.replaceAll(textureExtension,"");fs=fs.replaceAll(textureExtension,"");
+        vs=PackExtensions.lower(vs);fs=PackExtensions.lower(fs);
         if (coordinates == null) throw new NullPointerException("coordinates");
         rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
         var declarations = PackDeclarationNormalizer.declarations(vs,fs);
