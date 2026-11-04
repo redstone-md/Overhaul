@@ -27,7 +27,8 @@
     "GlFramebufferBlazeMixin",
     "RenderTargetBlazeMixin",
     "MainTargetBlazeMixin",
-    "TimerQueryBlazeMixin"
+    "TimerQueryBlazeMixin",
+    "VeilShaderCompilerBlazeMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }
