@@ -8,7 +8,8 @@ public final class BlazeFramebufferBlit {
     private static final int NEAREST=9728,LINEAR=9729,COLOR=0x4000,DEPTH=0x100;
     private BlazeFramebufferBlit(){}
     public static void copy(BlazeRenderer owner,int sx0,int sy0,int sx1,int sy1,int dx0,int dy0,int dx1,int dy1,int mask,int filter){
-        // A raw framebuffer keeps the current target bound, so its resolve arrives as a copy onto itself.
+        // A raw framebuffer has no image to copy to or from.
+        if(owner.drawingForeign()||owner.readingForeign())return;
         if(owner.readTarget()==owner.currentTarget()){
             BlazeGlBoundary.reportOnce("self blit","A framebuffer blit had the same source and destination and was skipped");
             return;

@@ -22,6 +22,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private final long windowHandle;
     private final BlazeDrawState state=new BlazeDrawState();
     private final Set<BlazeMesh> meshes=Collections.newSetFromMap(new IdentityHashMap<>());
+    private int foreignDraw,foreignRead;
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
     private GpuAllocator allocator;
@@ -97,23 +98,28 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
     private BlazeTarget target(int id){requireOpen();BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
     public void bindFramebuffer(int kind,int id){
-        if(id>=FOREIGN_FRAMEBUFFERS){
-            BlazeGlBoundary.reportOnce("foreign framebuffer","A mod bound a raw OpenGL framebuffer; it has no Vulkan target, so the current target stays bound");
-            return;
-        }
-        target(id);
-        switch(kind){case 0x8D40-> {drawTarget=id;readTarget=id;}case 0x8CA9->drawTarget=id;case 0x8CA8->readTarget=id;
+        boolean foreign=id>=FOREIGN_FRAMEBUFFERS;
+        if(foreign)BlazeGlBoundary.reportOnce("foreign framebuffer","A mod bound a raw OpenGL framebuffer; it has no Vulkan target, so what it renders there is dropped");
+        else target(id);
+        switch(kind){
+            case 0x8D40-> {if(!foreign){drawTarget=id;readTarget=id;}foreignDraw=foreign?id:0;foreignRead=foreignDraw;}
+            case 0x8CA9-> {if(!foreign)drawTarget=id;foreignDraw=foreign?id:0;}
+            case 0x8CA8-> {if(!foreign)readTarget=id;foreignRead=foreign?id:0;}
             default->throw new UnsupportedOperationException("Framebuffer target: 0x"+Integer.toHexString(kind));}
-        state.framebufferBindings(drawTarget,readTarget);
+        state.framebufferBindings(foreignDraw!=0?foreignDraw:drawTarget,foreignRead!=0?foreignRead:readTarget);
     }
+    /** True while the draw framebuffer is a mod's raw one: its output must not land on the last real target. */
+    boolean drawingForeign(){return foreignDraw!=0;}
+    boolean readingForeign(){return foreignRead!=0;}
 
     public void draw(BlazeMesh mesh){
+        if(foreignDraw!=0)return;
         String missing=programs.incompleteActive();
         if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}
         draw(mesh,programs.activeSnapshot());
     }
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
-    public void clear(int mask){requireOpen();currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
+    public void clear(int mask){requireOpen();if(foreignDraw!=0)return;currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){
         requireOpen();if(mesh.state().indexCount()==0)return;BlazeTarget target=currentTarget();

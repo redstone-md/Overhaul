@@ -133,6 +133,16 @@ public final class BlazeGlBoundary implements FunctionProvider {
         answers.put("glCheckFramebufferStatus", arguments -> GL_FRAMEBUFFER_COMPLETE);
         answers.put("glCheckNamedFramebufferStatus", arguments -> GL_FRAMEBUFFER_COMPLETE);
         answers.put("glClientWaitSync", arguments -> GL_ALREADY_SIGNALED);
+        // Mods restore saved bindings only for names GL still recognises (Distant Horizons), so every issued name stays valid.
+        Answer known = arguments -> arguments.integer(0) != 0 ? GL_TRUE : 0;
+        for (String name : new String[]{"glIsFramebuffer", "glIsTexture", "glIsBuffer", "glIsProgram", "glIsShader",
+                "glIsVertexArray", "glIsRenderbuffer", "glIsSampler", "glIsQuery"}) {
+            answers.put(name, known);
+        }
+        answers.put("glGetFramebufferAttachmentParameteriv", arguments -> {
+            MemoryUtil.memPutInt(arguments.pointer(3), 0);
+            return 0;
+        });
     }
 
     private void names() {
