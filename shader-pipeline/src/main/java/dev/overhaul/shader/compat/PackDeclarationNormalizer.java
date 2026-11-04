@@ -12,8 +12,10 @@ import java.util.regex.Pattern;
  * gl_FrontColor and gl_TexCoord. Arrays, blocks and non-constant indices stay rejected downstream.
  */
 final class PackDeclarationNormalizer {
-    private static final Pattern MULTI = Pattern.compile("\\b(uniform|attribute|varying)\\s+(\\w+)\\s+(\\w+(?:\\s*,\\s*\\w+)+)\\s*;");
-    private static final Pattern CORE_INTERFACE = Pattern.compile("(?m)^[ \\t]*(in|out)\\s+(float|vec[234])\\s+(\\w+)\\s*;");
+    private static final String QUALIFIER = "(?:flat|smooth|noperspective|centroid)";
+    private static final Pattern MULTI = Pattern.compile("\\b((?:"+QUALIFIER+"\\s+)?(?:uniform|attribute|varying))\\s+(\\w+)\\s+(\\w+(?:\\s*,\\s*\\w+)+)\\s*;");
+    private static final Pattern MULTI_CORE = Pattern.compile("(?m)^[ \\t]*((?:"+QUALIFIER+"\\s+)?(?:in|out))\\s+(\\w+)\\s+(\\w+(?:\\s*,\\s*\\w+)+)\\s*;");
+    private static final Pattern CORE_INTERFACE = Pattern.compile("(?m)^[ \\t]*("+QUALIFIER+"\\s+)?(in|out)\\s+(float|vec[234]|u?int|[iu]vec[234]|mat[234])\\s+(\\w+)\\s*;");
     private static final Pattern TEX_COORD = Pattern.compile("\\bgl_TexCoord\\s*\\[\\s*([0-7])\\s*]");
     private static final Pattern RESERVED = Pattern.compile("\\boverhaulVarying\\w*");
     private static final Pattern FRONT_COLOR = Pattern.compile("\\bgl_FrontColor\\b");
@@ -43,13 +45,15 @@ final class PackDeclarationNormalizer {
         return new Stages(lowerTexCoords(vs),lowerTexCoords(fs));
     }
 
-    private static String expand(String source) {
-        Matcher matcher = MULTI.matcher(source);
+    private static String expand(String source) { return expand(expand(source,MULTI),MULTI_CORE); }
+    private static String expand(String source, Pattern pattern) {
+        Matcher matcher = pattern.matcher(source);
         StringBuilder result = new StringBuilder();
         while (matcher.find()) {
             List<String> declarations = new ArrayList<>();
             for (String name : matcher.group(3).split(",")) declarations.add(matcher.group(1)+" "+matcher.group(2)+" "+name.trim()+";");
-            matcher.appendReplacement(result,Matcher.quoteReplacement(String.join(" ",declarations)));
+            // One per line, because core declarations are recognized only at the start of a line.
+            matcher.appendReplacement(result,Matcher.quoteReplacement(String.join("\n",declarations)));
         }
         matcher.appendTail(result);
         return result.toString();
@@ -65,16 +69,16 @@ final class PackDeclarationNormalizer {
         Matcher matcher = CORE_INTERFACE.matcher(source);
         StringBuilder result = new StringBuilder();
         while (matcher.find()) {
-            String direction = matcher.group(1), type = matcher.group(2), name = matcher.group(3);
+            String qualifier = matcher.group(1) == null ? "" : matcher.group(1).trim()+" ", direction = matcher.group(2), type = matcher.group(3), name = matcher.group(4);
             String replacement;
-            if (vertex) replacement = (direction.equals("in") ? "attribute " : "varying ")+type+" "+name+";";
-            else if (direction.equals("in")) replacement = "varying "+type+" "+name+";";
+            if (vertex) replacement = direction.equals("in") ? "attribute "+type+" "+name+";" : qualifier+"varying "+type+" "+name+";";
+            else if (direction.equals("in")) replacement = qualifier+"varying "+type+" "+name+";";
             else { outputs.add(name); replacement = matcher.group(); }
             matcher.appendReplacement(result,Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(result);
         if (vertex || outputs.size() != 1) return result.toString();
-        return Pattern.compile("(?m)^[ \\t]*out\\s+(float|vec[234])\\s+"+Pattern.quote(outputs.get(0))+"\\s*;")
+        return Pattern.compile("(?m)^[ \\t]*out\\s+(\\w+)\\s+"+Pattern.quote(outputs.get(0))+"\\s*;")
                 .matcher(result).replaceFirst("layout(location=0) out $1 "+Matcher.quoteReplacement(outputs.get(0))+";");
     }
 

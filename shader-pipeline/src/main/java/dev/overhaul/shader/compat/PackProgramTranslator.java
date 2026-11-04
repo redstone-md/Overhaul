@@ -15,7 +15,10 @@ import java.util.regex.Pattern;
  */
 public final class PackProgramTranslator {
     private static final String BODY_MARKER="\n// OVERHAUL_COMPATIBILITY_BODY\n";
-    private static final Pattern DECLARATION = Pattern.compile("\\b(uniform|attribute|varying)\\s+(\\w+)\\s+(\\w+)\\s*;");
+    private static final Pattern DECLARATION = Pattern.compile("(?:\\b(flat|smooth|noperspective|centroid)\\s+)?\\b(uniform|attribute|varying)\\s+(\\w+)\\s+(\\w+)\\s*;");
+    private static final Set<String> ATTRIBUTE_TYPES = Set.of("float","vec2","vec3","vec4");
+    private static final Set<String> INTEGER_VARYINGS = Set.of("int","ivec2","ivec3","ivec4","uint","uvec2","uvec3","uvec4");
+    private static final Map<String,Integer> VARYING_SLOTS = Map.of("mat2",2,"mat3",3,"mat4",4);
     private static final Pattern BUILTIN = Pattern.compile("\\bgl_\\w+\\b");
     private static final Pattern FRAG_DATA = Pattern.compile("gl_FragData\\s*\\[\\s*([0-7])\\s*]");
     private static final Set<String> BUILTINS = Set.of("gl_Position", "gl_FragCoord", "gl_FrontFacing",
@@ -62,7 +65,7 @@ public final class PackProgramTranslator {
         scan(vs, true, uniforms, samplers, attributes, vertexVaryings);
         scan(fs, false, uniforms, samplers, attributes, fragmentVaryings);
         for (Map.Entry<String,String> entry : fragmentVaryings.entrySet()) {
-            if (!entry.getValue().equals(vertexVaryings.get(entry.getKey()))) {
+            if (!varyingType(entry.getValue()).equals(varyingType(vertexVaryings.getOrDefault(entry.getKey(),"")))) {
                 throw unsupported("Fragment input has no matching vertex varying: " + entry.getKey());
             }
         }
@@ -109,18 +112,24 @@ public final class PackProgramTranslator {
                              Map<String,String> samplers, Map<String,String> attributes, Map<String,String> varyings) {
         Matcher matcher = DECLARATION.matcher(source);
         while (matcher.find()) {
-            String kind = matcher.group(1), type = matcher.group(2), name = matcher.group(3);
+            String qualifier = matcher.group(1), kind = matcher.group(2), type = matcher.group(3), name = matcher.group(4);
             if (kind.equals("uniform")) {
                 if (type.equals("sampler2D")||type.equals("sampler2DShadow")) put(samplers,name,type);
                 else if (SIZES.containsKey(type)) put(uniforms,name,type);
                 else throw unsupported("Unsupported uniform type: " + type);
                 if (samplers.containsKey(name) && uniforms.containsKey(name)) throw unsupported("Conflicting uniform: " + name);
             } else {
-                if (!Set.of("float","vec2","vec3","vec4").contains(type)) throw unsupported("Unsupported interface type: " + type);
+                boolean integer = INTEGER_VARYINGS.contains(type);
                 if (kind.equals("attribute")) {
+                    if (!ATTRIBUTE_TYPES.contains(type)) throw unsupported("Unsupported interface type: " + type);
                     if (!vertex) throw unsupported("Attributes are vertex-stage inputs");
                     put(attributes,name,type);
-                } else put(varyings,name,type);
+                } else {
+                    if (!ATTRIBUTE_TYPES.contains(type) && !integer && !VARYING_SLOTS.containsKey(type)) throw unsupported("Unsupported interface type: " + type);
+                    // Vulkan requires a flat integer fragment input; a vertex output may omit the qualifier.
+                    if (integer && !vertex) qualifier = "flat";
+                    put(varyings,name,qualifier == null ? type : qualifier+" "+type);
+                }
             }
         }
         String remaining = DECLARATION.matcher(source).replaceAll("");
@@ -134,11 +143,17 @@ public final class PackProgramTranslator {
         if (prior != null && !prior.equals(type)) throw unsupported("Conflicting type for " + name);
     }
 
+    /** A matrix fills one location per column, so the next interface value starts after it. */
     private static Map<String,Integer> locations(Map<String,String> values) {
         Map<String,Integer> result = new LinkedHashMap<>();
-        for (String name : values.keySet()) result.put(name,result.size());
+        int next = 0;
+        for (var entry : values.entrySet()) {
+            result.put(entry.getKey(),next);
+            next += VARYING_SLOTS.getOrDefault(varyingType(entry.getValue()),1);
+        }
         return result;
     }
+    private static String varyingType(String declared) { return declared.substring(declared.lastIndexOf(' ')+1); }
 
     private static int alignment(String type) {
         if (type.startsWith("mat") || type.endsWith("3") || type.endsWith("4")) return 16;
