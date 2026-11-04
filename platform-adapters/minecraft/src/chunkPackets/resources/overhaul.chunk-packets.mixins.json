@@ -4,7 +4,7 @@
   "package": "dev.overhaul.minecraft.packetmixin",
   "compatibilityLevel": "${compatibility}",
   "refmap": "overhaul.refmap.json",
-  "mixins": ["ConnectionChunkPacketMixin", "ChunkPacketDecoderMixin", "ChunkPacketDataMixin"],
-  "client": ["ChunkPacketApplyMixin"],
+  "mixins": ["${connectionMixin}", "${decoderMixin}", "${dataMixin}"],
+  "client": ["${applyMixin}"],
   "injectors": {"defaultRequire": 1}
 }
