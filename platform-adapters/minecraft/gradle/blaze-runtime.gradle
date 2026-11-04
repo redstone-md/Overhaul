@@ -123,7 +123,7 @@ tasks.named('processResources') {
         def mixins = new File(destinationDir, 'overhaul.blaze.mixins.json')
         def blazeMixins = new groovy.json.JsonSlurper().parse(mixins)
         if (target.loader != 'forge') blazeMixins.remove('refmap')
-        blazeMixins.client = ((blazeMixins.client ?: []) + blazeTarget.uploadMixin).unique()
+        blazeMixins.client = ((blazeMixins.client ?: []) + blazeTarget.uploadMixin + blazeTarget.tierMixins).unique()
         mixins.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(blazeMixins))
         if (target.loader == 'fabric') {
             def metadata = new File(destinationDir, 'fabric.mod.json')

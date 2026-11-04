@@ -1,9 +1,10 @@
 // Keep the renderer shared; only the game's mesh/upload boundary varies by tier.
 def tiers = [
         '1.20.1': [source: 'blaze120', lwjgl: '3.3.1', java: 17,
-                   loaders: ['fabric', 'forge'], uploadMixin: 'VertexBufferUpload120Mixin'],
+                   loaders: ['fabric', 'forge'], uploadMixin: 'VertexBufferUpload120Mixin', tierMixins: []],
         '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
-                   loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin']
+                   loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
+                   tierMixins: ['LevelRendererSections121Mixin', 'CompiledSection121Accessor']]
 ]
 ext.blazeTarget = tiers[target.minecraft]
 if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
