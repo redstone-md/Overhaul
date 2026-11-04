@@ -148,8 +148,8 @@ tasks.named('processResources') {
         }
     }
 }
+if (target.loader == 'forge') overhaulMixinConfigs.add('overhaul.blaze.mixins.json')
 tasks.named('jar') {
-    if (target.loader == 'forge') doFirst { manifest.attributes('MixinConfigs': 'overhaul.mixins.json,overhaul.blaze.mixins.json') }
     manifest.attributes('Overhaul-Blaze-Native-Classifier': nativeClassifier,
             'Overhaul-Artifact-Variant': clientVariant)
 }

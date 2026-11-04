@@ -1,6 +1,7 @@
 ext.targetName = providers.gradleProperty('target').getOrElse('fabric-26.3')
 ext.target = new groovy.json.JsonSlurper().parse(file('targets.json'))[targetName]
 ext.set('loom.platform', target.loader)
+ext.overhaulMixinConfigs = ['overhaul.mixins.json']
 def sectionQueries = ['1.20.1', '1.21.1', '26.3'].contains(target.minecraft)
 def chunkGeneration = ['1.20.1', '1.21.1', '26.3'].contains(target.minecraft)
 def mappedGeneration = ['1.20.1', '1.21.1'].contains(target.minecraft)
@@ -207,7 +208,7 @@ tasks.named('jar') {
             'dev/overhaul/minecraft/mixin/EntitySectionStorageMixin.class'
     manifest.attributes('Implementation-Version': project.version, 'Overhaul-Tier': target.tier)
     if (target.loader == 'forge' && target.tier != 'legacy') {
-        manifest.attributes('MixinConfigs': 'overhaul.mixins.json')
+        doFirst { manifest.attributes('MixinConfigs': overhaulMixinConfigs.unique().join(',')) }
     }
 }
 

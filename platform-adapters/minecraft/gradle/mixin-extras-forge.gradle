@@ -1,0 +1,38 @@
+// Forge 1.18.2+ requires its own bootstrap provider; Fabric and NeoForge supply theirs.
+def mixinExtrasVersion = '0.5.5'
+configurations {
+    mixinExtrasForgeRuntime { canBeConsumed = false; transitive = false }
+}
+configurations.implementation.extendsFrom(configurations.mixinExtrasForgeRuntime)
+dependencies {
+    compileOnly "io.github.llamalad7:mixinextras-common:${mixinExtrasVersion}"
+    annotationProcessor "io.github.llamalad7:mixinextras-common:${mixinExtrasVersion}"
+    mixinExtrasForgeRuntime("io.github.llamalad7:mixinextras-forge:${mixinExtrasVersion}") {
+        transitive = false
+    }
+}
+
+def runtimeJar = providers.provider { configurations.mixinExtrasForgeRuntime.singleFile }
+tasks.named('processResources') {
+    inputs.file runtimeJar
+    inputs.property('mixinExtrasForgeVersion', mixinExtrasVersion)
+    // Registered after the selected renderer profile, preserving its nested runtime entries.
+    doLast {
+        def library = runtimeJar.get()
+        def nestedDirectory = 'META-INF/jarjar'
+        def nestedPath = "${nestedDirectory}/${library.name}"
+        // Preserve the original MixinConfigs bootstrap manifest and all provider classes.
+        copy { from library; into new File(destinationDir, nestedDirectory) }
+        def descriptor = new File(destinationDir, "${nestedDirectory}/metadata.json")
+        def metadata = descriptor.isFile() ? new groovy.json.JsonSlurper().parse(descriptor) : [jars: []]
+        def group = 'io.github.llamalad7'
+        def artifact = 'mixinextras-forge'
+        metadata.jars = (metadata.jars ?: []).findAll { entry ->
+            entry.identifier.group != group || entry.identifier.artifact != artifact
+        } + [[identifier: [group: group, artifact: artifact],
+              version: [range: "[${mixinExtrasVersion},)", artifactVersion: mixinExtrasVersion],
+              path: nestedPath, isObfuscated: false]]
+        descriptor.parentFile.mkdirs()
+        descriptor.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata)), 'UTF-8')
+    }
+}

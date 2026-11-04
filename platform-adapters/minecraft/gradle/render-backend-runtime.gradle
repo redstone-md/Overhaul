@@ -81,9 +81,4 @@ tasks.named('processResources') {
     }
 }
 
-tasks.named('jar') {
-    // The common adapter manifest is configured later; apply its selected backend counterpart at archive time.
-    if (target.loader == 'forge') doFirst {
-        manifest.attributes('MixinConfigs': 'overhaul.mixins.json,overhaul.backend.mixins.json')
-    }
-}
+if (target.loader == 'forge') overhaulMixinConfigs.add('overhaul.backend.mixins.json')

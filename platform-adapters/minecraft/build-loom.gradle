@@ -23,7 +23,10 @@ loom {
         if (target.loader == 'forge') defaultRefmapName = 'overhaul.refmap.json'
     }
     if (target.loader == 'forge') forge {
-        mixinConfig 'overhaul.mixins.json'
-        if (providers.gradleProperty('blazeBackend').isPresent()) mixinConfig 'overhaul.blaze.mixins.json'
+        overhaulMixinConfigs.unique().each { mixinConfig it }
     }
+}
+
+if (target.loader == 'forge' && target.minecraft in ['1.20.1', '1.21.1']) {
+    apply from: 'gradle/mixin-extras-forge.gradle'
 }
