@@ -11,7 +11,7 @@ import java.util.Set;
 
 /** Reads surviving SPIR-V interface variables after optimization, retaining compiler-assigned binding numbers. */
 public final class SpirvInterface {
-    private final Set<Integer> descriptors=new HashSet<>(),inputs=new HashSet<>();
+    private final Set<Integer> descriptors=new HashSet<>(),inputs=new HashSet<>(),outputs=new HashSet<>();
     private SpirvInterface(SpirvBinary binary,Set<Integer> importedSets){
         ByteBuffer words=ByteBuffer.wrap(binary.bytes()).order(ByteOrder.LITTLE_ENDIAN);
         if(words.remaining()<20||words.remaining()%4!=0)throw invalid();
@@ -35,8 +35,11 @@ public final class SpirvInterface {
                 if(set==0)descriptors.add(bindings.get(id));
             }
             if(storage==1&&locations.containsKey(id))inputs.add(locations.get(id));
+            if(storage==3&&locations.containsKey(id))outputs.add(locations.get(id));
         }
     }
+    public static Set<Integer> inputLocations(SpirvBinary binary){return Set.copyOf(new SpirvInterface(binary,Set.of()).inputs);}
+    public static Set<Integer> outputLocations(SpirvBinary binary){return Set.copyOf(new SpirvInterface(binary,Set.of()).outputs);}
     public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary fragment){
         return active(declared,vertex,fragment,Set.of());
     }

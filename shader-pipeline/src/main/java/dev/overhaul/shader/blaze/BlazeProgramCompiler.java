@@ -28,26 +28,48 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         String fs = preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, includes);
         var vertexStage=BlazeSourceLowering.lower(vs,true);
         var fragmentStage=BlazeSourceLowering.lower(fs,false);
-        if(!vertexStage.flatVaryings().equals(fragmentStage.flatVaryings()))throw new UnsupportedShaderException("Blaze3D interpolation qualifiers do not match");
-        for(var entry:fragmentStage.varyings().entrySet())if(!entry.getValue().equals(vertexStage.varyings().get(entry.getKey())))throw new UnsupportedShaderException("Blaze3D varying type mismatch: "+entry.getKey());
-        var lowered = translator.translate(vertexStage.source(),fragmentStage.source(), CoordinateConvention.OPENGL_RENDER_TARGET);
-        String vertexText=declarations(lowered.vertex(),lowered.bindings().attributes(),vertexStage.attributes(),"in",java.util.Set.of());
-        vertexText=declarations(vertexText,lowered.bindings().varyings(),vertexStage.varyings(),"out",vertexStage.flatVaryings());
-        String fragmentText=declarations(lowered.fragment(),lowered.bindings().varyings(),fragmentStage.varyings(),"in",fragmentStage.flatVaryings());
+        // Translation assigns one stable location schema; linking uses the optimized interfaces below.
+        // Temporary declarations are removed before compilation, never given invented vertex values.
+        String vertexSchema=varyingSchema(vertexStage),fragmentSchema=varyingSchema(fragmentStage);
+        for(String name:fragmentStage.varyings().keySet())if(!vertexStage.varyings().containsKey(name))vertexSchema+="\nvarying vec4 "+name+";\n";
+        var lowered = translator.translate(vertexSchema,fragmentSchema, CoordinateConvention.OPENGL_RENDER_TARGET);
+        String vertexText=declarations(lowered.vertex(),lowered.bindings().attributes(),vertexStage.attributes(),"in",java.util.Set.of(),false);
+        vertexText=declarations(vertexText,lowered.bindings().varyings(),vertexStage.varyings(),"out",vertexStage.flatVaryings(),true);
+        for(String name:fragmentStage.varyings().keySet())if(!vertexStage.varyings().containsKey(name))
+            vertexText=vertexText.replace("layout(location="+lowered.bindings().varyings().get(name)+") out vec4 "+name+";","");
+        String fragmentText=declarations(lowered.fragment(),lowered.bindings().varyings(),fragmentStage.varyings(),"in",fragmentStage.flatVaryings(),true);
         var declared=lowered.bindings();
         var bindings=new ProgramBindings(declared.uniforms(),declared.uniformBytes(),declared.samplers(),declared.attributes(),
                 declared.varyings(),vertexStage.attributes(),declared.samplerTypes());
         SpirvBinary vertexCode=compiler.compile(vertexName, vertexText, ShaderStage.VERTEX);
         SpirvBinary fragmentCode=compiler.compile(fragmentName, fragmentText, ShaderStage.FRAGMENT);
+        validateVaryings(vertexStage,fragmentStage,lowered.bindings().varyings(),vertexCode,fragmentCode);
         return new Program(vertexCode, fragmentCode, SpirvInterface.active(bindings,vertexCode,fragmentCode));
     }
 
-    private static String declarations(String source,Map<String,Integer> locations,Map<String,String> types,String direction,java.util.Set<String> flat){
+    private static String varyingSchema(BlazeSourceLowering.Stage stage){
+        String source=stage.source();
+        for(var entry:stage.varyings().entrySet())source=source.replace("varying "+BlazeSourceLowering.surrogate(entry.getValue())+" "+entry.getKey()+";","varying vec4 "+entry.getKey()+";");
+        return source;
+    }
+
+    private static void validateVaryings(BlazeSourceLowering.Stage vertex,BlazeSourceLowering.Stage fragment,Map<String,Integer> locations,SpirvBinary vertexCode,SpirvBinary fragmentCode){
+        var inputs=SpirvInterface.inputLocations(fragmentCode);var outputs=SpirvInterface.outputLocations(vertexCode);
+        for(var entry:fragment.varyings().entrySet()){
+            String name=entry.getKey();int location=locations.get(name);if(!inputs.contains(location))continue;
+            if(!entry.getValue().equals(vertex.varyings().get(name))||!outputs.contains(location))
+                throw new UnsupportedShaderException("Blaze3D active fragment input has no matching vertex output: "+name);
+            if(vertex.flatVaryings().contains(name)!=fragment.flatVaryings().contains(name))
+                throw new UnsupportedShaderException("Blaze3D active interpolation qualifiers do not match: "+name);
+        }
+    }
+
+    private static String declarations(String source,Map<String,Integer> locations,Map<String,String> types,String direction,java.util.Set<String> flat,boolean varying){
         for(var entry:types.entrySet()){
             String name=entry.getKey(),type=entry.getValue();
             Integer location=locations.get(name);
             if(location==null)throw new UnsupportedShaderException("Missing stage declaration: "+name);
-            String declaration="layout(location="+location+") "+direction+" "+BlazeSourceLowering.surrogate(type)+" "+name+";";
+            String declaration="layout(location="+location+") "+direction+" "+(varying?"vec4":BlazeSourceLowering.surrogate(type))+" "+name+";";
             if(!source.contains(declaration))throw new UnsupportedShaderException("Unrecognized translated varying declaration");
             source=source.replace(declaration,"layout(location="+location+") "+(flat.contains(name)?"flat ":"")+direction+" "+type+" "+name+";");
         }
