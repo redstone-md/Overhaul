@@ -6,6 +6,7 @@ import java.nio.LongBuffer;
 import java.util.List;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFWVulkan.*;
+import static org.lwjgl.system.MemoryUtil.memAddress;
 import static dev.overhaul.vulkan.VulkanException.check;
 
 /** Borrows an initialized GLFW no-API window without changing or destroying it. */
@@ -26,7 +27,9 @@ public final class GlfwSurfaceProvider implements SurfaceProvider {
     @Override public long createSurface(VkInstance instance) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer handle = stack.mallocLong(1);
-            check(glfwCreateWindowSurface(instance, window, null, handle), "glfwCreateWindowSurface");
+            // GLFW may live in the loader's parent layer, which cannot resolve VkInstance.
+            check(nglfwCreateWindowSurface(instance.address(), window, 0L, memAddress(handle)),
+                    "glfwCreateWindowSurface");
             return handle.get(0);
         }
     }
