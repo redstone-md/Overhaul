@@ -41,19 +41,25 @@ public final class ShaderPackSource implements AutoCloseable {
     }
 
     public synchronized String read(String shaderPath) throws IOException {
+        return new String(readBytes(shaderPath,MAX_SOURCE_BYTES),StandardCharsets.UTF_8);
+    }
+
+    /** Bounded assets share exactly the source path and archive-containment rules. */
+    public synchronized byte[] readBytes(String shaderPath,int maximumBytes) throws IOException {
         if (closed) throw new IOException("Shader pack is closed");
+        if(maximumBytes<1||maximumBytes>33_554_432)throw new IllegalArgumentException("Asset read bound exceeds [1,32MiB]");
         String normalized = normalize(shaderPath);
         if (archive != null) {
             ZipEntry entry = archive.getEntry("shaders/" + normalized);
             if (entry == null || entry.isDirectory()) throw new IOException("Missing shader: " + normalized);
-            if (entry.getSize() > MAX_SOURCE_BYTES) throw new IOException("Shader source too large: " + normalized);
-            try (InputStream input = archive.getInputStream(entry)) { return readLimited(input, normalized); }
+            if (entry.getSize() > maximumBytes) throw new IOException("Shader asset too large: " + normalized);
+            try (InputStream input = archive.getInputStream(entry)) { return readLimited(input, normalized,maximumBytes); }
         }
         Path shaderRoot = directory.resolve("shaders").toRealPath();
         if (!shaderRoot.startsWith(directory)) throw new IOException("Shader root escapes pack");
         Path source = shaderRoot.resolve(normalized).toRealPath();
         if (!source.startsWith(shaderRoot)) throw new IOException("Shader escapes pack: " + shaderPath);
-        try (InputStream input = Files.newInputStream(source)) { return readLimited(input, normalized); }
+        try (InputStream input = Files.newInputStream(source)) { return readLimited(input, normalized,maximumBytes); }
     }
 
     /** Sorted paths relative to shaders/, preserving directories with a trailing slash. */
@@ -91,10 +97,10 @@ public final class ShaderPackSource implements AutoCloseable {
         return List.copyOf(paths);
     }
 
-    private static String readLimited(InputStream input, String name) throws IOException {
-        byte[] bytes = input.readNBytes(MAX_SOURCE_BYTES + 1);
-        if (bytes.length > MAX_SOURCE_BYTES) throw new IOException("Shader source too large: " + name);
-        return new String(bytes, StandardCharsets.UTF_8);
+    private static byte[] readLimited(InputStream input, String name,int maximumBytes) throws IOException {
+        byte[] bytes = input.readNBytes(maximumBytes + 1);
+        if (bytes.length > maximumBytes) throw new IOException("Shader asset too large: " + name);
+        return bytes;
     }
 
     public static String normalize(String name) throws IOException {

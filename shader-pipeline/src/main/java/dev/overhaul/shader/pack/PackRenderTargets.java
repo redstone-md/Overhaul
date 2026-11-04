@@ -41,6 +41,11 @@ public final class PackRenderTargets {
         for(int index=0;index<ALIASES.length;index++)if(ALIASES[index].equals(sampler))return index;
         return -1;
     }
+    /** Canonical name precedes its legacy alias when assigning one sampler unit. */
+    public static java.util.List<String> colorNames(int index){
+        if(index<0||index>15)throw new IllegalArgumentException("Invalid color target index");
+        return index<ALIASES.length?java.util.List.of("colortex"+index,ALIASES[index]):java.util.List.of("colortex"+index);
+    }
     public static int depthIndex(String sampler){return sampler.equals("gdepthtex")?0:sampler.matches("depthtex[0-2]")?sampler.charAt(8)-'0':-1;}
     private static int dimension(String value,int viewport){
         if(viewport<1)throw new IllegalArgumentException("Positive viewport required");

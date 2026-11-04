@@ -64,7 +64,7 @@ public final class PackPreprocessor {
         var comments = COMMENT.matcher(source); StringBuffer result = new StringBuffer();
         while (comments.find()) {
             String comment = comments.group();
-            if (comment.contains("DRAWBUFFERS") || comment.contains("RENDERTARGETS") || PackRenderTargets.hasDirective(comment) || PackShadowSettings.hasDirective(comment)) {
+            if (comment.contains("DRAWBUFFERS") || comment.contains("RENDERTARGETS") || PackRenderTargets.hasDirective(comment) || PackShadowSettings.hasDirective(comment) || PackTextures.hasDirective(comment)) {
                 String token = "OVERHAUL_PACK_METADATA_"+metadata.size()+"_END";
                 metadata.put(token,comment);
                 comments.appendReplacement(result,"\n"+token+"\n");
