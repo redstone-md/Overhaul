@@ -26,15 +26,17 @@ public final class OwnedReceiverShaders {
     private static final String RECEIVER="/assets/overhaul/shaderpacks/csm/cascade_receiver.glsl";
     private static final String CORE="shaders/core/",INCLUDES="shaders/include/",NAMESPACE="minecraft:",OWNED_NAMESPACE="overhaul:";
     private static final List<String> OWNED_INCLUDES=List.of("model_quad_inputs.glsl","packed_vertex.glsl");
+    // Occluding the sun leaves the open sky: dimmed sky light, not the unlit darkness of a sealed cave.
+    private static final String SHADOWED_UV="ivec2(UV2.x, UV2.y * 5 / 8)";
     private static final String FIRST_OUTPUT="layout(location = 0) out float sphericalVertexDistance;";
     // After every vanilla varying, including the foil coordinates the entity program places at location 7.
     private static final Edit OUTPUTS=new Edit(FIRST_OUTPUT,"layout(location = 8) out vec4 overhaulShadowedColor;\nlayout(location = 9) out vec3 overhaulPosition;\nlayout(location = 10) out float overhaulViewDepth;\n"+FIRST_OUTPUT);
     private static final Edit LIT_VERTEX=new Edit("vertexColor = Color * sample_lightmap(Sampler2, UV2);",
-            "vertexColor = Color * sample_lightmap(Sampler2, UV2);\n    overhaulShadowedColor = Color * sample_lightmap(Sampler2, ivec2(UV2.x, 0));\n    overhaulPosition = pos;\n    overhaulViewDepth = -(ModelViewMat * vec4(pos, 1.0)).z;");
+            "vertexColor = Color * sample_lightmap(Sampler2, UV2);\n    overhaulShadowedColor = Color * sample_lightmap(Sampler2, "+SHADOWED_UV+");\n    overhaulPosition = pos;\n    overhaulViewDepth = -(ModelViewMat * vec4(pos, 1.0)).z;");
     private static final String ENTITY_CLIP="gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);";
     private static final Edit ENTITY_POSITION=new Edit(ENTITY_CLIP,ENTITY_CLIP+"\n    overhaulPosition = Position;\n    overhaulViewDepth = -(ModelViewMat * vec4(Position, 1.0)).z;");
     private static final String ENTITY_LIGHT="lightMapColor = sample_lightmap(Sampler2, UV2);";
-    private static final Edit ENTITY_SHADOWED=new Edit(ENTITY_LIGHT,ENTITY_LIGHT+"\n    overhaulShadowedColor = sample_lightmap(Sampler2, ivec2(UV2.x, 0));");
+    private static final Edit ENTITY_SHADOWED=new Edit(ENTITY_LIGHT,ENTITY_LIGHT+"\n    overhaulShadowedColor = sample_lightmap(Sampler2, "+SHADOWED_UV+");");
     private static final Pattern MAIN=Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*\\)");
     // The entity program lights its colour inside this helper, which main follows.
     private static final Pattern ENTITY_HELPER=Pattern.compile("\\bvec4\\s+calculateFinalColor\\s*\\(");
