@@ -20,6 +20,8 @@ public final class CompiledShaderPack {
         public boolean scene(){return stage==Stage.GBUFFER||stage==Stage.SHADOW;}
     }
     public record Sources(String vertex,String fragment){}
+    public static final int MAX_PROGRAMS=512;
+    public static final long MAX_SOURCE_CHARACTERS=67_108_864;
     private final List<Program> programs;
     private final Map<String,Sources> sources;
     private final PackRenderTargets targets;
@@ -44,7 +46,7 @@ public final class CompiledShaderPack {
                                               Map<String,String> macros,ShadercCompiler compiler)throws IOException{
         ShaderPackCatalog catalog=ShaderPackCatalog.discoverForDimension(source,dimension,options,macros);
         List<PackDiagnostic> warnings=new ArrayList<>(catalog.warnings());
-        if(catalog.programs().size()>512)throw new UnsupportedShaderException("Shader pack exceeds the 512-program generation bound");
+        if(catalog.programs().size()>MAX_PROGRAMS)throw new UnsupportedShaderException("Shader pack exceeds the 512-program generation bound");
         if(!catalog.diagnostics().isEmpty())throw new UnsupportedShaderException(String.join("\n",catalog.diagnostics()));
         List<Program> programs=new ArrayList<>();PackRenderTargets.Builder targets=new PackRenderTargets.Builder(catalog.properties());
         PackShadowSettings.Builder shadow=new PackShadowSettings.Builder(catalog.properties());
@@ -55,28 +57,40 @@ public final class CompiledShaderPack {
             if(!discovered.state().enabled())continue;
             String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
             if(name.startsWith("dh_")){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Distant Horizons programs are not compiled; there is no Distant Horizons integration"));continue;}
-            Stage stage=stage(name);
-            String vertex=preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX);
-            String fragment=preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT);
-            sourceCharacters+=(long)vertex.length()+fragment.length();if(sourceCharacters>67_108_864)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
-            sources.put(discovered.name(),new Sources(vertex,fragment));
-            targets.scan(fragment);
-            shadow.scan(vertex);shadow.scan(fragment);
-            textures.scan(vertex);textures.scan(fragment);
-            ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
-                    discovered.state().alphaTest().orElse(null));
-            boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
-            for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)
-                throw new UnsupportedShaderException("Buffer flip uses the wrong output namespace: "+discovered.name()+"."+target);
-            for(String target:discovered.state().blends().keySet())if(!target.equals("*")&&(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0))
-                throw new UnsupportedShaderException("Blend uses the wrong output namespace: "+discovered.name()+"."+target);
-            targets.use(code,!shadowOutputs);shadow.use(code,shadowOutputs);
-            Program program=new Program(discovered.name(),stage,ordinal(name),code,discovered.state(),PackRenderTargets.mipmapTargets(fragment));
-            programs.add(program);textures.use(program);
+            Sources expanded=preprocess(discovered,preprocessor);
+            sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length();if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
+            sources.put(discovered.name(),expanded);
+            programs.add(compileProgram(discovered,expanded,compiler,targets,shadow,textures));
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
         return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings);
+    }
+    /** An unknown stage fails before any source is read. */
+    public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
+        stage(discovered.name().substring(discovered.name().lastIndexOf('/')+1));
+        return new Sources(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX),preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT));
+    }
+    /** One program of a generation, recorded into the builders that aggregate pack-wide requirements. */
+    public static Program compileProgram(ShaderPackCatalog.Program discovered,Sources sources,ShadercCompiler compiler,
+                                         PackRenderTargets.Builder targets,PackShadowSettings.Builder shadow,PackTextures.Builder textures){
+        String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
+        Stage stage=stage(name);
+        String vertex=sources.vertex(),fragment=sources.fragment();
+        targets.scan(fragment);
+        shadow.scan(vertex);shadow.scan(fragment);
+        textures.scan(vertex);textures.scan(fragment);
+        ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
+                discovered.state().alphaTest().orElse(null));
+        boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
+        for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)
+            throw new UnsupportedShaderException("Buffer flip uses the wrong output namespace: "+discovered.name()+"."+target);
+        for(String target:discovered.state().blends().keySet())if(!target.equals("*")&&(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0))
+            throw new UnsupportedShaderException("Blend uses the wrong output namespace: "+discovered.name()+"."+target);
+        targets.use(code,!shadowOutputs);shadow.use(code,shadowOutputs);
+        Program program=new Program(discovered.name(),stage,ordinal(name),code,discovered.state(),PackRenderTargets.mipmapTargets(fragment));
+        textures.use(program);
+        return program;
     }
     /** Stage of a bare program name; an unknown name fails. */
     public static Stage stage(String name){

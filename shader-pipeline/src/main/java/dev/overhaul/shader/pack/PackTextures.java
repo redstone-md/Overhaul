@@ -77,6 +77,15 @@ public final class PackTextures {
         return java.util.List.of(name);
     }
     public static boolean property(String key){return key.equals("texture.noise")||key.matches("texture\\.[A-Za-z0-9_]+\\.[A-Za-z_]\\w*")||key.matches("customTexture\\.[A-Za-z_]\\w*");}
+    /** Samplers the pack's properties supply to a program of this stage, ignoring deactivation by flips. */
+    public static Set<String> customSamplers(ShaderPackProperties properties,CompiledShaderPack.Stage stage){
+        Set<String> names=new java.util.TreeSet<>();String scoped="texture."+stage(stage)+".";
+        for(String key:properties.values().keySet())if(property(key)){
+            if(key.startsWith("customTexture."))names.add(key.substring(14));
+            else if(key.startsWith(scoped))names.add(key.substring(scoped.length()));
+        }
+        return Set.copyOf(names);
+    }
     static boolean hasDirective(String source){return NOISE.matcher(source).find();}
     private static String stage(CompiledShaderPack.Stage stage){return switch(stage){
         case GBUFFER,SHADOW->"gbuffers";case FINAL,COMPOSITE->"composite";case SHADOWCOMPOSITE->"shadowcomp";
