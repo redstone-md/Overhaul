@@ -152,7 +152,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){
         requireOpen();if(mesh.state().indexCount()==0)return;BlazeTarget target=currentTarget();
-        try{queue.add(new BlazePass(this,target,mesh,shader,state.snapshot()),0);}
+        try{long start=BlazeStats.start();BlazePass pass=new BlazePass(this,target,mesh,shader,state.snapshot());BlazeStats.capture(start);queue.add(pass,0);}
         catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");}
     }
 
@@ -192,7 +192,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 supported.contains(SwapchainPresentMode.MAILBOX)?SwapchainPresentMode.MAILBOX:SwapchainPresentMode.FIFO;
         queue.flush();presenter.configure(width,height,mode);
     }
-    public void present(){requireOpen();queue.flush();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}}
+    public void present(){requireOpen();queue.flush();long start=BlazeStats.start();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}BlazeStats.present(start);}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Blaze3D device is closed");}
     @Override public void close(){
         if(closed)return;

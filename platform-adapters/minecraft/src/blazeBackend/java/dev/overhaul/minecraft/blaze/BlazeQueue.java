@@ -50,6 +50,7 @@ final class BlazeQueue implements AutoCloseable {
         requireUsable();
         frames.poll();
         if(pending.operations.isEmpty())return latest;
+        long start=BlazeStats.start();
         Batch batch=pending;pending=new Batch();stagingBytes=0;
         FrameRing.Submission receipt=null;
         try{
@@ -65,6 +66,7 @@ final class BlazeQueue implements AutoCloseable {
                 try{operation.submitted(receipt);}catch(RuntimeException|Error error){acceptanceFailure=Batch.collect(acceptanceFailure,error);}
             }
             if(acceptanceFailure instanceof RuntimeException error)throw error;if(acceptanceFailure instanceof Error error)throw error;
+            BlazeStats.flush(start);
             return receipt;
         }catch(RuntimeException|Error failure){
             failedSubmission=failure;
