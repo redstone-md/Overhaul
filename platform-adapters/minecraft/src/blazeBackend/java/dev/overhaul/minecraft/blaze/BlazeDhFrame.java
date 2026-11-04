@@ -4,6 +4,9 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import com.seibel.distanthorizons.api.enums.rendering.EDhApiHeightFogMixMode;
 import com.seibel.distanthorizons.api.methods.events.sharedParameterObjects.DhApiFogRenderParam;
 import com.seibel.distanthorizons.api.objects.math.DhApiMat4f;
+import com.seibel.distanthorizons.api.objects.math.DhApiVec3d;
+import com.seibel.distanthorizons.api.objects.render.DhApiRenderableBoxGroupShading;
+import com.seibel.distanthorizons.common.render.openGl.generic.GlGenericObjectVertexContainer;
 import com.seibel.distanthorizons.common.render.openGl.glObject.buffer.GLVertexBuffer;
 import com.seibel.distanthorizons.common.render.openGl.glObject.buffer.GlQuadIndexBuffer;
 import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Debugging;
@@ -12,10 +15,16 @@ import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Graphics.No
 import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Graphics.Quality;
 import com.seibel.distanthorizons.core.dataObjects.render.bufferBuilding.LodBufferContainer;
 import com.seibel.distanthorizons.core.render.RenderParams;
+import com.seibel.distanthorizons.core.render.renderer.RenderableBoxGroup;
 import com.seibel.distanthorizons.core.util.RenderUtil;
 import com.seibel.distanthorizons.core.util.objects.SortedArraySet;
+import com.seibel.distanthorizons.core.util.math.DhVec3d;
+import com.seibel.distanthorizons.core.wrapperInterfaces.render.objects.IDhGenericObjectVertexBufferContainer.EState;
 import com.seibel.distanthorizons.core.wrapperInterfaces.render.objects.IVertexBufferWrapper;
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 
 /** Reads one Distant Horizons frame out of the mod's own objects, the only class besides the mixins that links against them. */
@@ -87,6 +96,41 @@ public final class BlazeDhFrame {
                 fog.getFarFogEndPercent() - fog.getFarFogStartPercent(), fog.getFarFogMinThickness(), fog.getFarFogMaxThickness() - fog.getFarFogMinThickness(),
                 fog.getFarFogDensity(), fog.getHeightFogStartPercent(), fog.getHeightFogEndPercent() - fog.getHeightFogStartPercent(),
                 fog.getHeightFogFalloff().value, mode.value, fog.getHeightFogBaseHeight(), (float) params.exactCameraPosition.y, flags));
+    }
+
+    /** What DH's generic pass does around its draws. A group runs in the pass matching its SSAO flag, so each is seen once a frame. */
+    public static void drawBoxes(BlazeRenderer renderer, RenderParams params, Collection<RenderableBoxGroup> groups, boolean ssao, int vertices, int indices) {
+        GlStateManager._enableCull();
+        GlStateManager._enableBlend();
+        GlStateManager._blendEquation(32774);
+        GlStateManager._blendFuncSeparate(770, 771, 1, 771);
+        List<BlazeDh.BoxGroup> draws = new ArrayList<>();
+        for (RenderableBoxGroup group : groups) {
+            if (group == null || group.ssaoEnabled != ssao) continue;
+            group.preRender(params);
+            if (!group.active) continue;
+            group.tryUpdateInstancedDataAsync();
+            if (group.vertexBufferContainer.getState() != EState.RENDER) continue;
+            GlGenericObjectVertexContainer boxes = (GlGenericObjectVertexContainer) group.vertexBufferContainer;
+            if (boxes.uploadedBoxCount > 0) draws.add(boxGroup(group, boxes, params.exactCameraPosition));
+            group.postRender(params);
+        }
+        renderer.dh().drawBoxes(columns(params.dhMvmProjMatrix), vertices, indices, draws);
+    }
+
+    private static BlazeDh.BoxGroup boxGroup(RenderableBoxGroup group, GlGenericObjectVertexContainer boxes, DhVec3d camera) {
+        DhApiVec3d origin = group.getOriginBlockPos();
+        double[] from = {origin.x, origin.y, origin.z}, to = {camera.x, camera.y, camera.z};
+        int[] chunk = new int[3];
+        float[] sub = new float[3];
+        for (int axis = 0; axis < 3; axis++) {
+            double fromChunk = Math.floor(from[axis] / 16), toChunk = Math.floor(to[axis] / 16);
+            chunk[axis] = (int) (fromChunk - toChunk);
+            sub[axis] = (float) ((from[axis] - fromChunk * 16) - (to[axis] - toChunk * 16));
+        }
+        DhApiRenderableBoxGroupShading shading = group.shading != null ? group.shading : DhApiRenderableBoxGroupShading.getUnshaded();
+        return new BlazeDh.BoxGroup(boxes.color, boxes.scale, boxes.chunkPos, boxes.subChunkPos, boxes.uploadedBoxCount, chunk, sub, group.getSkyLight(), group.getBlockLight(),
+                new float[]{shading.north, shading.south, shading.east, shading.west, shading.top, shading.bottom});
     }
 
     /** The original copy leaves the frame's framebuffer bound, and everything after it draws there. */

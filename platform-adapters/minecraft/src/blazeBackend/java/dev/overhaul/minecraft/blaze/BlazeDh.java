@@ -11,17 +11,35 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import static org.lwjgl.vulkan.VK10.*;
 
 /** Draws Distant Horizons' LOD buffers on Vulkan and puts the result on the frame; the mod keeps its section lists, uploads and targets. */
 public final class BlazeDh implements AutoCloseable {
-    private static final int TERRAIN_BYTES = 96, COMPOSITE_BYTES = 160, PUSH_BYTES = 16, VERTEX_BYTES = 16;
+    private static final int TERRAIN_BYTES = 96, COMPOSITE_BYTES = 160, BOX_BYTES = 64, PUSH_BYTES = 16, BOX_PUSH_BYTES = 56, VERTEX_BYTES = 16, BOX_INDICES = 36;
     private static final int WRITE_RGBA = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     private static final List<NativeGraphicsPipeline.Attribute> ATTRIBUTES = List.of(
             new NativeGraphicsPipeline.Attribute(0, 0, VK_FORMAT_R16G16B16A16_UINT, 0),
             new NativeGraphicsPipeline.Attribute(1, 0, VK_FORMAT_R8G8B8A8_UNORM, 8),
             new NativeGraphicsPipeline.Attribute(2, 0, VK_FORMAT_R8G8B8A8_UINT, 12));
+
+    private static final List<NativeGraphicsPipeline.Binding> BOX_BINDINGS = List.of(
+            new NativeGraphicsPipeline.Binding(0, 12, 0), new NativeGraphicsPipeline.Binding(1, 16, 1), new NativeGraphicsPipeline.Binding(2, 12, 1),
+            new NativeGraphicsPipeline.Binding(3, 12, 1), new NativeGraphicsPipeline.Binding(4, 12, 1));
+    private static final List<NativeGraphicsPipeline.Attribute> BOX_ATTRIBUTES = List.of(
+            new NativeGraphicsPipeline.Attribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
+            new NativeGraphicsPipeline.Attribute(1, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0),
+            new NativeGraphicsPipeline.Attribute(2, 2, VK_FORMAT_R32G32B32_SFLOAT, 0),
+            new NativeGraphicsPipeline.Attribute(3, 3, VK_FORMAT_R32G32B32_SINT, 0),
+            new NativeGraphicsPipeline.Attribute(4, 4, VK_FORMAT_R32G32B32_SFLOAT, 0));
+
+    /**
+     * One group of instanced boxes, by the GL names DH uploaded them to.
+     * @param chunkOffset the group's chunk relative to the camera's; with {@code subOffset} it stays exact far from the origin
+     * @param shading north, south, east, west, top, bottom
+     */
+    public record BoxGroup(int colors, int scales, int chunks, int subChunks, int count, int[] chunkOffset, float[] subOffset, int skyLight, int blockLight, float[] shading) {}
 
     public record TerrainSettings(float[] combined, float microOffset, float earthRadius, float worldYOffset, float clipDistance,
             int noiseSteps, float noiseIntensity, int noiseDropoff, int flags) {}
@@ -39,8 +57,26 @@ public final class BlazeDh implements AutoCloseable {
         }
     }
 
+    private record BoxDraw(GpuBuffer vertices, GpuBuffer indices, GpuBuffer colors, GpuBuffer scales, GpuBuffer chunks, GpuBuffer subChunks, BoxGroup group) implements BlazeTerrainPass.Draw {
+        @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                ByteBuffer push = stack.malloc(BOX_PUSH_BYTES);
+                int[] chunk = group.chunkOffset();
+                float[] sub = group.subOffset();
+                push.putInt(chunk[0]).putInt(chunk[1]).putInt(chunk[2]).putInt(group.skyLight());
+                push.putFloat(sub[0]).putFloat(sub[1]).putFloat(sub[2]).putInt(group.blockLight());
+                for (float shade : group.shading()) push.putFloat(shade);
+                push.flip();
+                vkCmdPushConstants(command, pipelineLayout, BlazeTerrainPass.PUSH_STAGES, 0, push);
+                vkCmdBindVertexBuffers(command, 0, stack.longs(vertices.handle(), colors.handle(), scales.handle(), chunks.handle(), subChunks.handle()), stack.longs(0, 0, 0, 0, 0));
+                vkCmdBindIndexBuffer(command, indices.handle(), 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command, BOX_INDICES, group.count(), 0, 0, 0);
+            }
+        }
+    }
+
     private final BlazeRenderer owner;
-    private final BlazeProgramCompiler.Program terrain, composite;
+    private final BlazeProgramCompiler.Program terrain, boxes, composite;
     private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
     private BlazeTerrainPass pending;
     private TerrainSettings settings;
@@ -52,6 +88,9 @@ public final class BlazeDh implements AutoCloseable {
             terrain = new BlazeProgramCompiler.Program(compiler.compile("dh_terrain.vsh", BlazeDhShaders.TERRAIN_VERTEX, ShaderStage.VERTEX),
                     compiler.compile("dh_terrain.fsh", BlazeDhShaders.TERRAIN_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), TERRAIN_BYTES, Map.of("uLightMap", 1, "uBlockAtlas", 2), Map.of(), Map.of(), Map.of()));
+            boxes = new BlazeProgramCompiler.Program(compiler.compile("dh_boxes.vsh", BlazeDhShaders.BOX_VERTEX, ShaderStage.VERTEX),
+                    compiler.compile("dh_boxes.fsh", BlazeDhShaders.BOX_FRAGMENT, ShaderStage.FRAGMENT),
+                    new ProgramBindings(Map.of(), BOX_BYTES, Map.of("uLightMap", 1), Map.of(), Map.of(), Map.of()));
             composite = new BlazeProgramCompiler.Program(compiler.compile("dh_composite.vsh", BlazeDhShaders.COMPOSITE_VERTEX, ShaderStage.VERTEX),
                     compiler.compile("dh_composite.fsh", BlazeDhShaders.COMPOSITE_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2), Map.of(), Map.of(), Map.of()));
@@ -80,6 +119,24 @@ public final class BlazeDh implements AutoCloseable {
         BlazeTerrainPass pass = pending;
         pending = null;
         owner.enqueue(pass);
+    }
+
+    /** Instanced boxes in the bound framebuffer. DH's setup leaves the lightmap on unit 0. */
+    public void drawBoxes(float[] combined, int vertices, int indices, List<BoxGroup> groups) {
+        if (groups.isEmpty() || owner.drawingNowhere()) return;
+        var buffers = BlazeGlBoundary.buffers();
+        GpuBuffer vertexBuffer = buffers.device(owner, vertices), indexBuffer = buffers.device(owner, indices);
+        if (vertexBuffer == null || indexBuffer == null) return;
+        BlazeTerrainPass pass = null;
+        for (BoxGroup group : groups) {
+            GpuBuffer colors = buffers.device(owner, group.colors()), scales = buffers.device(owner, group.scales());
+            GpuBuffer chunks = buffers.device(owner, group.chunks()), subChunks = buffers.device(owner, group.subChunks());
+            if (colors == null || scales == null || chunks == null || subChunks == null) continue;
+            if (pass == null) pass = new BlazeTerrainPass(owner, owner.currentTarget(), owner.drawState().snapshot(), (bytes, width, height) -> { for (float value : combined) bytes.putFloat(value); },
+                    boxes, this::pipeline, name -> owner.textures().resolveBound(0), "uLightMap");
+            pass.add(new BoxDraw(vertexBuffer, indexBuffer, colors, scales, chunks, subChunks, group));
+        }
+        if (pass != null) owner.enqueue(pass);
     }
 
     /** Fog is optional per frame in DH, so its absence is what the composite reads when the fog pass never ran. */
@@ -129,11 +186,11 @@ public final class BlazeDh implements AutoCloseable {
         var key = new PipelineKey(program, draw.depth(), draw.color(), draw.logic(), draw.cull(), draw.polygonMode(), target.renderPass());
         var existing = pipelines.get(key);
         if (existing != null) return existing;
-        boolean lod = program == terrain;
         var description = new NativeGraphicsPipeline.Description(List.of(
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT, "main", program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT, "main", program.fragment().directBuffer())),
-                lod ? List.of(new NativeGraphicsPipeline.Binding(0, VERTEX_BYTES, 0)) : List.of(), lod ? ATTRIBUTES : List.of(), new long[]{descriptorLayout}, PUSH_BYTES,
+                program == terrain ? List.of(new NativeGraphicsPipeline.Binding(0, VERTEX_BYTES, 0)) : program == boxes ? BOX_BINDINGS : List.of(),
+                program == terrain ? ATTRIBUTES : program == boxes ? BOX_ATTRIBUTES : List.of(), new long[]{descriptorLayout}, program == boxes ? BOX_PUSH_BYTES : PUSH_BYTES,
                 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE, draw.depth(),
                 List.of(draw.color()), true, 0, 0, draw.logic());
         var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description);

@@ -10,6 +10,44 @@ final class BlazeDhShaders {
             };
             """;
 
+    static final String BOX_VERTEX = """
+            #version 450
+            layout(set=0,binding=0,std140) uniform Boxes { mat4 uProjectionMvm; };
+            layout(push_constant) uniform Group {
+                ivec3 uOffsetChunk; int uSkyLight;
+                vec3 uOffsetSubChunk; int uBlockLight;
+                float uNorthShading, uSouthShading, uEastShading, uWestShading, uTopShading, uBottomShading;
+            };
+            layout(set=0,binding=1) uniform sampler2D uLightMap;
+            layout(location=0) in vec3 vPosition;
+            layout(location=1) in vec4 aColor;
+            layout(location=2) in vec3 aScale;
+            layout(location=3) in ivec3 aTranslateChunk;
+            layout(location=4) in vec3 aTranslateSubChunk;
+            layout(location=0) out vec4 fColor;
+            void main() {
+                vec3 trans = vec3(aTranslateChunk + uOffsetChunk) * 16.0 + aTranslateSubChunk + uOffsetSubChunk;
+                gl_Position = uProjectionMvm * vec4(vPosition * aScale + trans, 1.0);
+                gl_Position.z = 0.5 * (gl_Position.w + gl_Position.z);
+                float blockLight = (float(uBlockLight) + 0.5) / 16.0;
+                float skyLight = (float(uSkyLight) + 0.5) / 16.0;
+                fColor = vec4(texture(uLightMap, vec2(blockLight, skyLight)).xyz, 1.0) * aColor;
+                if (gl_VertexIndex < 4) fColor.rgb *= uNorthShading;
+                else if (gl_VertexIndex < 8) fColor.rgb *= uSouthShading;
+                else if (gl_VertexIndex < 12) fColor.rgb *= uWestShading;
+                else if (gl_VertexIndex < 16) fColor.rgb *= uEastShading;
+                else if (gl_VertexIndex < 20) fColor.rgb *= uBottomShading;
+                else fColor.rgb *= uTopShading;
+            }
+            """;
+
+    static final String BOX_FRAGMENT = """
+            #version 450
+            layout(location=0) in vec4 fColor;
+            layout(location=0) out vec4 fragColor;
+            void main() { fragColor = fColor; }
+            """;
+
     static final String TERRAIN_VERTEX = "#version 450\n" + TERRAIN_BLOCK + """
             layout(location=0) in uvec4 vPosition;
             layout(location=1) in vec4 color;

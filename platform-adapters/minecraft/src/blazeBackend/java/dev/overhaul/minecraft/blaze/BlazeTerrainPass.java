@@ -15,7 +15,8 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** One native draw list: a single render pass, one pipeline and one descriptor set, whose draws each add their own geometry. */
 final class BlazeTerrainPass implements BlazeQueue.Operation {
-    private static final int COMMAND_BYTES = 20, PUSH_STAGES = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    static final int PUSH_STAGES = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    private static final int COMMAND_BYTES = 20;
 
     /** A recorded draw inside the pass; it owns whatever it allocated for the frame. */
     interface Draw {
