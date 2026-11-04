@@ -22,5 +22,8 @@ loom {
         useLegacyMixinAp = target.loader == 'forge'
         if (target.loader == 'forge') defaultRefmapName = 'overhaul.refmap.json'
     }
-    if (target.loader == 'forge') forge { mixinConfig 'overhaul.mixins.json' }
+    if (target.loader == 'forge') forge {
+        mixinConfig 'overhaul.mixins.json'
+        if (providers.gradleProperty('blazeBackend').isPresent()) mixinConfig 'overhaul.blaze.mixins.json'
+    }
 }

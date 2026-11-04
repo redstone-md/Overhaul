@@ -2,7 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "dev.overhaul.minecraft.blaze.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "${compatibility}",
   "refmap": "overhaul.refmap.json",
   "client": [
     "MinecraftBlazeOwnerMixin",
@@ -11,6 +11,7 @@
     "RenderSystemBlazeBootstrapMixin",
     "GlStateManagerBlazeCapabilitiesMixin",
     "VertexBufferBlazeMixin",
+    "VertexFormatBlazeMixin",
     "ShaderInstanceBlazeMixin",
     "ProgramConstructorAccess",
     "EffectProgramConstructorAccess",

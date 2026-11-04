@@ -1,7 +1,5 @@
 package dev.overhaul.minecraft.blaze;
 
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.*;
 import java.util.ArrayList;
@@ -111,17 +109,17 @@ public final class BlazeRenderer implements AutoCloseable {
         queue.add(new BlazePass(this,target,mesh,shader,state.snapshot()),0);
     }
 
-    NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program,MeshData.DrawState mesh,
+    NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program,BlazeMeshState mesh,
             BlazeDrawState.Snapshot draw,BlazeTarget target,long descriptorLayout){
-        int topology=topology(mesh.mode());
+        int topology=mesh.topology();
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
-        PipelineKey key=new PipelineKey(program,mesh.format(),mesh.mode(),draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.depth()!=null);
+        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.depth()!=null);
         NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return existing;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
         var description=new NativeGraphicsPipeline.Description(List.of(
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",program.fragment().directBuffer())),
-                List.of(new NativeGraphicsPipeline.Binding(0,mesh.format().getVertexSize(),0)),new BlazeVertexLayout(mesh.format()).attributes(program.bindings()),
+                List.of(new NativeGraphicsPipeline.Binding(0,mesh.layout().stride(),0)),new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
                 List.of(draw.color()),true,0,0,draw.logic());
         NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description);
@@ -131,11 +129,7 @@ public final class BlazeRenderer implements AutoCloseable {
         requireOpen();var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
         if(descriptors!=null)descriptors.forget(program);
     }
-    private static int topology(VertexFormat.Mode mode){return switch(mode){
-        case QUADS,LINES,TRIANGLES->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;case TRIANGLE_STRIP->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-        case TRIANGLE_FAN->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;case LINE_STRIP->VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-        case DEBUG_LINE_STRIP->VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;case DEBUG_LINES->VK_PRIMITIVE_TOPOLOGY_LINE_LIST;};}
-    private record PipelineKey(BlazeProgramCompiler.Program program,VertexFormat format,VertexFormat.Mode mode,
+    private record PipelineKey(BlazeProgramCompiler.Program program,BlazeMeshState.Layout layout,int topology,
             NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,boolean depthAttachment){}
 
     public void resize(int width,int height){

@@ -1,11 +1,27 @@
-// Production-only 1.21.1 frontend. Window selection is registered only after API closure review.
-if (target.minecraft != '1.21.1' || !['fabric','forge','neoforge'].contains(target.loader)) {
-    throw new GradleException('The Blaze3D frontend requires a pinned 1.21.1 target')
+// Keep the renderer shared; only the game's mesh/upload boundary varies by tier.
+def tiers = [
+        '1.20.1': [source: 'blaze120', lwjgl: '3.3.1', java: 17,
+                   loaders: ['fabric', 'forge'], uploadMixin: 'VertexBufferUpload120Mixin'],
+        '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
+                   loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin']
+]
+ext.blazeTarget = tiers[target.minecraft]
+if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
+    throw new GradleException('The Blaze3D frontend requires a pinned Fabric/Forge 1.20.1 or Fabric/Forge/NeoForge 1.21.1 target')
 }
+if ((target.java as int) != blazeTarget.java) throw new GradleException('Blaze3D target Java version does not match its game tier')
 sourceSets.main.java.srcDir 'src/blazeBackend/java'
+sourceSets.main.java.srcDir "src/${blazeTarget.source}/java"
 sourceSets.main.resources.srcDir 'src/blazeBackend/resources'
+tasks.named('processResources') {
+    inputs.properties(blazeMinecraft: target.minecraft, blazeJava: target.java,
+            blazeUploadMixin: blazeTarget.uploadMixin)
+    filesMatching('overhaul.blaze.mixins.json') {
+        expand(compatibility: "JAVA_${target.java}")
+    }
+}
 apply from: 'gradle/blaze-runtime.gradle'
-dependencies { implementation blazeRuntimeJars; implementation configurations.blazeBindings }
+dependencies { implementation blazeRuntimeJars }
 tasks.withType(JavaExec).configureEach {
     systemProperty 'overhaul.blaze.enabled', 'true'
     systemProperty 'org.lwjgl.system.stackSize', '1024'

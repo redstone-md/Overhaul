@@ -1,5 +1,5 @@
 // Keep original LWJGL Java/native module descriptors and their resource opens intact.
-def lwjgl = '3.3.3'
+def lwjgl = blazeTarget.lwjgl
 def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
 def platform = os.contains('win') ? 'windows' : os.contains('mac') ? 'macos' : os.contains('linux') ? 'linux' : null
@@ -15,6 +15,8 @@ configurations {
     blazeBindings { canBeConsumed = false; transitive = false }
     blazeNativeAddons { canBeConsumed = false; transitive = false }
 }
+configurations.implementation.extendsFrom(configurations.blazeBindings)
+configurations.runtimeOnly.extendsFrom(configurations.blazeNativeAddons)
 def libraries = []
 ['vulkan','vma','shaderc'].each { name ->
     libraries += [key: name, artifact: "lwjgl-${name}", classifier: null, module: "org.lwjgl.${name}", configuration: configurations.blazeBindings]
@@ -31,9 +33,11 @@ libraries.each { library ->
         if (matches.size() != 1) throw new GradleException("Expected one matching LWJGL module: ${library.originalName}")
         matches.first()
     }
-    dependencies.add(library.configuration.name, "org.lwjgl:${library.artifact}:${lwjgl}${library.classifier ? ':' + library.classifier : ''}")
+    dependencies.add(library.configuration.name, "org.lwjgl:${library.artifact}:${lwjgl}${library.classifier ? ':' + library.classifier : ''}") {
+        // Child configurations do not inherit the parent's transitive flag.
+        transitive = false
+    }
 }
-dependencies { runtimeOnly configurations.blazeNativeAddons }
 
 def engineAssembly = tasks.register('assembleBlazeRuntimeInputs', GradleBuild) {
     description = 'Compiles/packages current portable engine inputs without verification tasks.'
@@ -48,7 +52,8 @@ tasks.named('compileJava') { dependsOn engineAssembly }
 
 def generated = layout.buildDirectory.dir('generated/blaze-runtime-metadata')
 def metadataTask = tasks.register('prepareBlazeRuntimeMetadata') {
-    inputs.properties(version: project.version.toString(), nativeClassifier: nativeClassifier)
+    inputs.properties(version: project.version.toString(), nativeClassifier: nativeClassifier,
+            minecraft: target.minecraft, java: target.java, lwjgl: lwjgl)
     inputs.files configurations.blazeBindings, configurations.blazeNativeAddons
     outputs.dir generated
     doLast {
@@ -58,7 +63,7 @@ def metadataTask = tasks.register('prepareBlazeRuntimeMetadata') {
             descriptor.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
                     schemaVersion: 1, id: "overhaul_blaze_${key}", version: version,
                     name: "Overhaul Blaze3D ${key}", environment: 'client',
-                    depends: [minecraft: '1.21.1', java: '>=21']
+                    depends: [minecraft: target.minecraft, java: ">=${target.java}"]
             ]))
         }
         metadata('runtime', project.version.toString())
@@ -116,15 +121,15 @@ tasks.named('processResources') {
             [item: item, path: "${nestedDirectory}/${library.name}"]
         }
         def mixins = new File(destinationDir, 'overhaul.blaze.mixins.json')
-        if (target.loader != 'forge') {
-            def config = new groovy.json.JsonSlurper().parse(mixins)
-            config.remove('refmap')
-            mixins.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config))
-        }
+        def blazeMixins = new groovy.json.JsonSlurper().parse(mixins)
+        if (target.loader != 'forge') blazeMixins.remove('refmap')
+        blazeMixins.client = ((blazeMixins.client ?: []) + blazeTarget.uploadMixin).unique()
+        mixins.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(blazeMixins))
         if (target.loader == 'fabric') {
             def metadata = new File(destinationDir, 'fabric.mod.json')
             def config = new groovy.json.JsonSlurper().parse(metadata)
             config.environment = 'client'
+            config.depends.java = ">=${target.java}"
             config.mixins = ((config.mixins ?: []) + 'overhaul.blaze.mixins.json').unique()
             config.jars = ((config.jars ?: []) + entries.collect { [file: it.path] }).unique()
             metadata.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config))
