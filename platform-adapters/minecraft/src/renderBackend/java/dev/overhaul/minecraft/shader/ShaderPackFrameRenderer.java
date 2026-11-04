@@ -48,7 +48,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+path,failure);}
         }
-        uniforms.capture(minecraft,state,target.width,target.height,projection,activePack.shadow());var fog=state.cameraRenderState.fogData.color;
+        uniforms.capture(minecraft,state,target.width,target.height,projection,activePack);var fog=state.cameraRenderState.fogData.color;
         scenes.begin(target.getColorTextureView(),target.getDepthTextureView(),new PackRenderTargets.Color(fog.x(),fog.y(),fog.z(),1),uniforms);captured=true;prepared=false;
     }
     public void render(RenderTarget target,LevelRenderState state){

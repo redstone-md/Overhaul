@@ -13,6 +13,7 @@ import dev.overhaul.shader.compile.SpirvBinary;
 import dev.overhaul.shader.compile.SpirvInterface;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackShadowSettings;
+import dev.overhaul.shader.pack.PackVertexDefaults;
 import dev.overhaul.shader.pack.ShaderPackProperties;
 import java.util.Set;
 
@@ -33,12 +34,12 @@ final class ScenePackProgram {
         var decoder=inputs.decode(declared,storageBinding,activeNormal);if(shadow)decoder=ShadowSceneInputs.decode(inputs,decoder,declared);
         normals=decoder.quadNormals();String text=translated.vertex();
         for(var attribute:declared.attributes().entrySet()){
-            String type=LegacyShaderContract.ATTRIBUTE_TYPES.get(attribute.getKey());if(type==null)throw new UnsupportedShaderException("Unbound scene pack attribute: "+attribute.getKey());
+            String type=PackVertexDefaults.known(attribute.getKey())?declared.attributeTypes().get(attribute.getKey()):LegacyShaderContract.ATTRIBUTE_TYPES.get(attribute.getKey());if(type==null)throw new UnsupportedShaderException("Unbound scene pack attribute: "+attribute.getKey());
             text=text.replace("layout(location="+attribute.getValue()+") in "+type+" "+attribute.getKey()+";",type+" "+attribute.getKey()+";");
         }
         text=PackProgramTranslator.insertBodyPreamble(text,decoder.vertexPreamble());
         if(normals)text=text.replaceFirst("#version 450","#version 450\n#extension GL_ARB_shader_draw_parameters : require");
-        text=ShaderMainWrapper.wrap(text,"overhaulSceneVertexEntry",decoder.initialize(),"");
+        text=ShaderMainWrapper.wrap(text,"overhaulSceneVertexEntry",decoder.initialize()+PackVertexDefaults.assign(declared.attributes(),declared.attributeTypes()),"");
         String fs=PackProgramTranslator.insertBodyPreamble(translated.fragment(),decoder.fragmentPreamble());
         fs=FragmentAlphaTest.lower(inputs.fragment(fs),alpha);
         vertex=compiler.compile(program.name()+"-scene.vsh",text,ShaderStage.VERTEX);fragment=compiler.compile(program.name()+"-scene.fsh",fs,ShaderStage.FRAGMENT);

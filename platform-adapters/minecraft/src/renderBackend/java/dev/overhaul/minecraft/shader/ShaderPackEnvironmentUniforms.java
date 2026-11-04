@@ -52,6 +52,27 @@ final class ShaderPackEnvironmentUniforms {
         return true;
     }
 
+    float rain(){return rain;}
+    int blockLight(){return blockLight;}
+    int skyLight(){return skyLight;}
+    /** Reads a value {@link #fill} owns for custom uniform expressions; NaN marks any other name. */
+    double read(String name,int component){
+        return switch(name){
+            case "worldTime"->worldTime;
+            case "worldDay"->worldDay;
+            case "moonPhase"->moonPhase;
+            case "skyColor"->component==0?red:component==1?green:blue;
+            case "rainStrength"->rain;
+            case "thunderStrength"->thunder;
+            case "isEyeInWater"->submersion;
+            case "eyeAltitude"->altitude;
+            case "eyeBrightness"->component==0?blockLight:skyLight;
+            case "screenBrightness"->brightness;
+            case "pi"->Math.PI;
+            default->Double.NaN;
+        };
+    }
+
     private static float clampWeather(float value){
         if(!Float.isFinite(value))throw new IllegalStateException("Shader-pack weather snapshot must be finite");
         return Math.max(0,Math.min(1,value));

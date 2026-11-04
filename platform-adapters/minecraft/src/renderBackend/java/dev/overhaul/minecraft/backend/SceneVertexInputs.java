@@ -63,6 +63,7 @@ abstract class SceneVertexInputs {
     static int slot(OverhaulPipeline pipeline,String name){for(int slot=0;slot<pipeline.uniforms().size();slot++)if(pipeline.uniforms().get(slot).name().equals(name))return slot;throw new UnsupportedShaderException("Scene uniform binding is absent: "+name);}
     static String assign(ProgramBindings bindings,Map<String,String> values){
         StringBuilder result=new StringBuilder();for(String attribute:bindings.attributes().keySet()){
+            if(dev.overhaul.shader.pack.PackVertexDefaults.known(attribute))continue;
             String value=values.get(attribute);if(value==null)throw new UnsupportedShaderException("Unsupported scene vertex attribute: "+attribute);
             result.append(attribute).append('=').append(value).append(";\n");
         }return result.toString();

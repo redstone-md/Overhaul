@@ -59,6 +59,18 @@ final class ShaderPackShadowUniforms {
             default->{return false;}
         }return true;
     }
+    /** Reads a non-matrix value {@link #fill} owns for custom uniform expressions; NaN marks any other name. */
+    double read(String name,int component){
+        return switch(name){
+            case "sunAngle"->sunAngle;
+            case "shadowAngle"->shadowAngle;
+            case "sunPosition"->sun.get(component);
+            case "moonPosition"->moon.get(component);
+            case "shadowLightPosition"->(day?sun:moon).get(component);
+            case "upPosition"->up.get(component);
+            default->Double.NaN;
+        };
+    }
     private void celestial(Matrix4fc camera,float path,float degrees,Vector3f result){matrix.set(camera).rotateY(radians(-90)).rotateZ(radians(path)).rotateX(radians(degrees)).transformPosition(0,100,0,result);}
     private static void vector(UniformBlock values,String name,Vector3f vector){values.setVector(name,vector.x,vector.y,vector.z);}
     private static float angle(float degrees){
