@@ -33,6 +33,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     private final int width,height;
     private PackGraphImages images;
     private PackShadowImages shadows;
+    private PackTextureImages customTextures;
     private GpuSampler sampler,depthSampler,mipSampler;
     private final PackMipmaps mipmaps;
     private PackFullscreenPass depthPass;
@@ -55,10 +56,11 @@ public final class PackGraphRuntime implements AutoCloseable {
         boolean hasShadows=pack.programs().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.SHADOW);
         for(var program:pack.programs())if(program.scene()&&!boundScenePrograms.contains(program.name().substring(program.name().lastIndexOf('/')+1)))
             throw new UnsupportedShaderException("Game scene geometry is not bound to shader-pack stage: "+program.name());
-        for(var program:pack.programs())if(!hasShadows&&(program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE||program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackShadowSettings.depthIndex(name)>=0||PackShadowSettings.colorIndex(name)>=0)))
+        for(var program:pack.programs())if(!hasShadows&&(program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE||program.code().descriptors().samplers().keySet().stream().anyMatch(name->pack.textures().image(program,name)==null&&(PackShadowSettings.depthIndex(name)>=0||PackShadowSettings.colorIndex(name)>=0))))
             throw new UnsupportedShaderException("Shadow sampling requires bound light-camera geometry: "+program.name());
         try{
             images=new PackGraphImages(allocator,pack.targets(),width,height);
+            customTextures=new PackTextureImages(context,allocator,pack.textures());
             if(hasShadows)shadows=new PackShadowImages(context,allocator,pack.shadow(),compiler);
             sampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
                     SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,0,1,SamplerSettings.Compare.NONE));
@@ -68,7 +70,7 @@ public final class PackGraphRuntime implements AutoCloseable {
                         SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,31,1,SamplerSettings.Compare.NONE));
             for(var program:pack.programs()){
                 if(program.scene())continue;
-                var outputs=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE?shadows.targets(program):outputs(swaps.route(program));int passWidth=0,passHeight=0;List<Integer> formats=new ArrayList<>();
+                var outputs=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE?shadows.targets(program):outputs(route(program));int passWidth=0,passHeight=0;List<Integer> formats=new ArrayList<>();
                 for(GpuImageView output:outputs){
                     formats.add(output==null?VK_FORMAT_UNDEFINED:output.image().format().vkFormat());if(output==null)continue;
                     int x=output.image().width(0),y=output.image().height(0);
@@ -77,13 +79,14 @@ public final class PackGraphRuntime implements AutoCloseable {
                 if(passWidth==0)throw new UnsupportedShaderException("Fullscreen pass has no active color attachment: "+program.name());
                 passes.put(program,new PackFullscreenPass(context,allocator,program,formats,passWidth,passHeight));
             }
-            boolean needsDepth=pack.programs().stream().anyMatch(program->program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackRenderTargets.depthIndex(name)>=0));
+            boolean needsDepth=pack.programs().stream().anyMatch(program->program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackRenderTargets.depthIndex(name)>=0&&pack.textures().image(program,name)==null));
             if(needsDepth)depthPass=new PackFullscreenPass(context,allocator,depthProgram(compiler),List.of(VK_FORMAT_R32_SFLOAT),width,height);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     /** Runs only before world capture; temporal buffers retain their contents unless their clear directive requests it. */
     public void beginFrame(ImmediateCommands lane,Frame frame,Uniforms uniforms){
         requireOpen();validateFrame(frame);if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
+        customTextures.initialize(lane);
         int[] prior=swaps.snapshot();PackFrameGraph plan=new PackFrameGraph();
         clearTargets(plan,frame.fog());
         if(!initialized){clear(plan,images.depth,new PackRenderTargets.Color(1,1,1,1));clear(plan,images.opaqueDepth,new PackRenderTargets.Color(1,1,1,1));}
@@ -138,17 +141,24 @@ public final class PackGraphRuntime implements AutoCloseable {
         for(var entry:passes.entrySet()){
             var program=entry.getKey();if(!stages.contains(program.stage()))continue;
             uniforms.fill(program,entry.getValue().values);entry.getValue().upload();boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE;
-            var routing=shadow?null:swaps.route(program);
-            for(int index:new java.util.TreeSet<>(program.mipmaps()))mipmaps.generate(plan,images.levels.get(swaps.current(index)));
+            var routing=shadow?null:route(program);
+            for(int index:new java.util.TreeSet<>(program.mipmaps()))if(program.code().descriptors().samplers().keySet().stream()
+                    .anyMatch(name->PackRenderTargets.colorIndex(name)==index&&!customTextures.overrides(program,name)))
+                mipmaps.generate(plan,images.levels.get(swaps.current(index)));
             // Shadow composite can overwrite/flip a color between readers. Rebuild the selected side,
             // without persistent dirty state that could survive a failed graph transaction.
             var sampledShadowColors=new java.util.TreeSet<Integer>();
             for(String name:program.code().descriptors().samplers().keySet()){
-                int index=PackShadowSettings.colorIndex(name);if(index>=0)sampledShadowColors.add(index);
+                int index=PackShadowSettings.colorIndex(name);if(index>=0&&!customTextures.overrides(program,name))sampledShadowColors.add(index);
             }
             for(int index:sampledShadowColors)shadows.generateColor(plan,index,mipmaps);
             Map<String,VulkanRenderGraph.Usage> uses=new LinkedHashMap<>();Map<String,String> samples=new LinkedHashMap<>();Map<String,Long> sampleModes=new LinkedHashMap<>();
             for(String samplerName:program.code().descriptors().samplers().keySet()){
+                GpuImageView custom=customTexture(program,samplerName);
+                if(custom!=null){
+                    String name=plan.read(custom);samples.put(samplerName,name);uses.put(name,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE);
+                    sampleModes.put(samplerName,customSamplerHandle(program,samplerName));continue;
+                }
                 int colorIndex=PackRenderTargets.colorIndex(samplerName);var color=colorIndex<0?null:swaps.current(colorIndex);int depth=PackRenderTargets.depthIndex(samplerName);
                 int shadowDepth=PackShadowSettings.depthIndex(samplerName,program.code().descriptors().samplers().keySet()),shadowColor=PackShadowSettings.colorIndex(samplerName);
                 boolean comparison=program.code().descriptors().comparisonSampler(samplerName);
@@ -173,6 +183,8 @@ public final class PackGraphRuntime implements AutoCloseable {
     public boolean hasSceneProgram(){return scene;}
     public long samplerHandle(){requireOpen();return sampler.handle();}
     public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}
+    public GpuImageView customTexture(CompiledShaderPack.Program program,String name){requireOpen();return customTextures.view(program,name);}
+    public long customSamplerHandle(CompiledShaderPack.Program program,String name){requireOpen();return customTextures.sampler(program,name);}
     public GpuImageView shadowDepth(int index){requireShadows();return shadows.depth(index);}
     public GpuImageView shadowDepthSample(int index,boolean comparison){requireShadows();return shadows.depthSample(index,comparison);}
     public GpuImageView shadowColor(int index){requireShadows();return shadows.color(index);}
@@ -216,7 +228,8 @@ public final class PackGraphRuntime implements AutoCloseable {
         try(VulkanRenderGraph graph=plan.create(context,frameLane)){graph.record(command,changes);}
     }
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
-    public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(program.stage()!=CompiledShaderPack.Stage.GBUFFER)throw new IllegalArgumentException("Not a world gbuffer program");return outputs(swaps.route(program));}
+    public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(program.stage()!=CompiledShaderPack.Stage.GBUFFER)throw new IllegalArgumentException("Not a world gbuffer program");return outputs(route(program));}
+    private PackTargetSwaps.Routing route(CompiledShaderPack.Program program){return swaps.route(program,name->!customTextures.overrides(program,name));}
     /** Clears pack-owned attachments before actual world geometry is captured; temporal buffers retain their content. */
     public void beginScene(ImmediateCommands lane,PackRenderTargets.Color fog){
         requireOpen();if(!scene)throw new IllegalStateException("Pack has no scene programs");PackFrameGraph plan=new PackFrameGraph();
@@ -224,7 +237,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
         if(passes.keySet().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.BEGIN||program.stage()==CompiledShaderPack.Stage.PREPARE))
             throw new IllegalStateException("Use beginFrame to bind uniforms for pre-scene pack programs");
-        clearTargets(plan,fog);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
+        customTextures.initialize(lane);clearTargets(plan,fog);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
     }
     public static NativeGraphicsPipeline.Color colorState(ShaderPackProperties.ProgramState state,int target){return PackPipelineState.color(state,target);}
     public static NativeGraphicsPipeline.Color shadowColorState(ShaderPackProperties.ProgramState state,int target){return PackPipelineState.color(state,target,"shadowcolor");}
@@ -282,6 +295,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         for(var pass:reverse)pass.close();passes.clear();if(depthPass!=null){depthPass.close();depthPass=null;}
         if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(mipSampler!=null){mipSampler.close();mipSampler=null;}
         if(shadows!=null){shadows.close();shadows=null;}
+        if(customTextures!=null){customTextures.close();customTextures=null;}
         if(sampler!=null){sampler.close();sampler=null;}if(images!=null){images.close();images=null;}frameLane=null;closed=true;
     }
 }

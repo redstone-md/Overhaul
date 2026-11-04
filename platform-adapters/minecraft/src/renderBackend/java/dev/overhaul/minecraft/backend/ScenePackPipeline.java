@@ -51,7 +51,12 @@ final class ScenePackPipeline implements AutoCloseable {
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     void update(){generation.fill(program,values);if(uniforms!=null){upload.clear();values.copyTo(upload);upload.flip();uniforms.write(upload);}}
-    boolean needsDepthRefresh(){return program.stage()!=CompiledShaderPack.Stage.SHADOW&&code.bindings.samplers().keySet().stream().anyMatch(name->{int index=dev.overhaul.shader.pack.PackRenderTargets.depthIndex(name);return index==0||index==2;});}
+    boolean needsDepthRefresh(){
+        return program.stage()!=CompiledShaderPack.Stage.SHADOW&&code.bindings.samplers().keySet().stream().anyMatch(name->{
+            if(generation.pack().textures().image(program,name)!=null)return false;
+            int index=dev.overhaul.shader.pack.PackRenderTargets.depthIndex(name);return index==0||index==2;
+        });
+    }
     NativeGraphicsPipeline variant(PassAttachments attachments){
         Formats key=new Formats(attachments.colorFormats(),attachments.depthFormat());NativeGraphicsPipeline result=variants.get(key);if(result!=null)return result;
         var stages=List.of(new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",code.vertex.directBuffer()),new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",code.fragment.directBuffer()));

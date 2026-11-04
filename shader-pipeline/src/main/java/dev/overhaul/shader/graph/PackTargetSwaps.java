@@ -18,10 +18,14 @@ public final class PackTargetSwaps {
     private final int[] current=new int[16];
     public Target current(int index){return new Target(index,current[index]);}
     public Routing route(CompiledShaderPack.Program program){
+        return route(program,name->true);
+    }
+    public Routing route(CompiledShaderPack.Program program,java.util.function.Predicate<String> activeSampler){
         boolean finalOutput=program.stage()==CompiledShaderPack.Stage.FINAL;
         List<Target> outputs=new ArrayList<>();Map<String,Target> samplers=new LinkedHashMap<>();
         if(!finalOutput)for(int color:program.code().framebuffer().colorTargets())outputs.add(color<0?null:new Target(color,current[color]^(program.scene()?0:1)));
         for(String name:program.code().descriptors().samplers().keySet()){
+            if(!activeSampler.test(name))continue;
             int index=PackRenderTargets.colorIndex(name);if(index>=0)samplers.put(name,current(index));
         }
         if(program.scene())for(Target sampled:samplers.values())if(outputs.contains(sampled))

@@ -77,6 +77,8 @@ final class ShaderPackSceneGeneration extends BackendResource {
         int resolution=pack.shadow().resolution();return new PassAttachments(owner(),runtime.shadowTargets(program),runtime.shadowDepth(0),sources,resolution,resolution);
     }
     Sample sample(ScenePackPipeline pipeline,String name,PassBindings state){
+        GpuImageView custom=runtime.customTexture(pipeline.program,name);
+        if(custom!=null)return new Sample(custom,runtime.customSamplerHandle(pipeline.program,name));
         int shadowDepth=PackShadowSettings.depthIndex(name,pipeline.code.bindings.samplers().keySet());
         if(shadowDepth>=0){boolean comparison=pipeline.code.bindings.comparisonSampler(name);return new Sample(runtime.shadowDepthSample(shadowDepth,comparison),runtime.shadowSamplerHandle(shadowDepth,comparison));}
         int shadowColor=PackShadowSettings.colorIndex(name);if(shadowColor>=0)return new Sample(runtime.shadowColor(shadowColor),runtime.shadowColorSamplerHandle(shadowColor));
