@@ -21,11 +21,12 @@ public abstract class RenderSystemBlazeBootstrapMixin {
     private static void overhaul$initializeVulkan(int debugVerbosity,boolean synchronousDebug,CallbackInfo callback){
         var renderer=BlazeFrontend.current();if(renderer==null)return;
         RenderSystem.assertOnRenderThreadOrInit();apiDescription="Vulkan / "+renderer.context().deviceName();
+        MAX_SUPPORTED_TEXTURE_SIZE=renderer.context().capabilities().maxImageDimension2D();
     }
+    /** Mods stitch atlases on worker threads, where the Vulkan context cannot be touched; the limit is read once at startup. */
     @Inject(method="maxSupportedTextureSize",at=@At("HEAD"),cancellable=true)
     private static void overhaul$nativeTextureLimit(CallbackInfoReturnable<Integer> callback){
-        var renderer=BlazeFrontend.current();if(renderer==null)return;
-        MAX_SUPPORTED_TEXTURE_SIZE=renderer.context().capabilities().maxImageDimension2D();callback.setReturnValue(MAX_SUPPORTED_TEXTURE_SIZE);
+        if(BlazeFrontend.current()!=null)callback.setReturnValue(MAX_SUPPORTED_TEXTURE_SIZE);
     }
     @Inject(method="getCapsString",at=@At("HEAD"),cancellable=true)
     private static void overhaul$nativeDescription(CallbackInfoReturnable<String> callback){
