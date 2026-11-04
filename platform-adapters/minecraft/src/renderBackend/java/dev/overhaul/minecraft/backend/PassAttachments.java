@@ -41,7 +41,7 @@ final class PassAttachments implements AutoCloseable {
             sources.add((OverhaulTextureView)attachment.textureView());
             if(view.layerCount()!=1)throw new UnsupportedOperationException("Layered color attachments require an explicit layer view");
             float[] clear=attachment.clearValue().map(value->new float[]{value.x(),value.y(),value.z(),value.w()}).orElse(null);
-            if(generation instanceof ShaderPackSceneGeneration scene&&view.image()==scene.color().image())clear=null;
+            if(generation instanceof ShaderPackSceneGeneration scene&&scene.ownsColor(view))clear=null;
             colorReferences[slot]=entries.size();entries.add(new Entry(view,false,clear,null));colorFormats.add(view.image().format().vkFormat());
             int w=view.image().width(view.baseMip()),h=view.image().height(view.baseMip());
             if(width!=0&&(width!=w||height!=h))throw new IllegalArgumentException("Mismatched render attachment extents");width=w;height=h;

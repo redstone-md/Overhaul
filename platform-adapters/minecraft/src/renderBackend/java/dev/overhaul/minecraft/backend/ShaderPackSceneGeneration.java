@@ -6,6 +6,7 @@ import com.mojang.renderpearl.util.TextureViewAndSampler;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShadercCompiler;
+import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.PackShadowSettings;
@@ -31,27 +32,35 @@ final class ShaderPackSceneGeneration extends BackendResource {
     private PackGraphRuntime runtime;
     private PackGraphRuntime.Uniforms uniforms;
     private SceneFallbackTexture identityTexture,normalTexture,specularTexture;
-    ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler){
+    private final PackShadowSettings shadowSettings;
+    /** A null policy keeps the external pack route; owned cascades have no pack graph or colortex targets. */
+    ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,CascadeShadowSettings cascadePolicy){
         super(owner);this.pack=pack;selection=new SceneProgramSelection(pack);shadows=new ShadowProgramSelection(pack);
+        shadowSettings=cascadePolicy==null?pack.shadow():pack.shadow().withCamera(cascadePolicy.resolution(),cascadePolicy.distance());
         try{
-            var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(SceneProgramSelection.VANILLA_DRAWN);bound.addAll(ShadowProgramSelection.SUPPORTED);
-            runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
+            if(cascadePolicy==null){
+                var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(SceneProgramSelection.VANILLA_DRAWN);bound.addAll(ShadowProgramSelection.SUPPORTED);
+                runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
+            }
             if(scene()||hasShadows()){identityTexture=SceneFallbackTexture.identity(owner);normalTexture=SceneFallbackTexture.flatNormal(owner);specularTexture=SceneFallbackTexture.noSpecular(owner);}
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     CompiledShaderPack pack(){return pack;}
     boolean scene(){return selection.hasScene();}
     boolean hasShadows(){return shadows.present();}
+    PackShadowSettings shadowSettings(){return shadowSettings;}
+    boolean ownsWorldPasses(){return runtime!=null;}
+    boolean ownsColor(GpuImageView view){return runtime!=null&&view.image()==color().image();}
     GpuImageView color(){requireNativeAlive();return runtime.color(0);}
     void begin(ImmediateCommands lane,PackGraphRuntime.Frame frame,PackGraphRuntime.Uniforms uniforms){
         requireOpen();this.uniforms=uniforms;if(identityTexture!=null){identityTexture.initialize(lane);normalTexture.initialize(lane);specularTexture.initialize(lane);}
-        runtime.beginFrame(lane,frame,uniforms);for(var pipeline:pipelines.values())pipeline.update();for(var pipeline:shadowPipelines.values())pipeline.update();
+        if(runtime!=null)runtime.beginFrame(lane,frame,uniforms);for(var pipeline:pipelines.values())pipeline.update();for(var pipeline:shadowPipelines.values())pipeline.update();
     }
     void afterOpaque(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.afterOpaque(lane,frame,uniforms);}
     void prepareShadows(ImmediateCommands lane){requireOpen();runtime.prepareShadows(lane);}
     void snapshotOpaqueShadow(ImmediateCommands lane){requireOpen();runtime.snapshotOpaqueShadow(lane);}
     void finishShadows(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.finishShadows(lane,frame,uniforms);}
-    void finish(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.render(lane,frame,uniforms);}
+    void finish(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();if(runtime!=null)runtime.render(lane,frame,uniforms);}
     void fill(CompiledShaderPack.Program program,UniformBlock block){uniforms.fill(program,block);}
     CompiledShaderPack.Program select(OverhaulPipeline original){return selection.select(original);}
     ScenePackPipeline pipeline(OverhaulPipeline original,CompiledShaderPack.Program program){
@@ -79,14 +88,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
         int resolution=pack.shadow().resolution();return new PassAttachments(owner(),runtime.shadowTargets(program),runtime.shadowDepth(0),sources,resolution,resolution);
     }
     Sample sample(ScenePackPipeline pipeline,String name,PassBindings state){
-        GpuImageView custom=runtime.customTexture(pipeline.program,name);
-        if(custom!=null)return new Sample(custom,runtime.customSamplerHandle(pipeline.program,name));
-        int shadowDepth=PackShadowSettings.depthIndex(name,pipeline.code.bindings.samplers().keySet());
-        if(shadowDepth>=0){boolean comparison=pipeline.code.bindings.comparisonSampler(name);return new Sample(runtime.shadowDepthSample(shadowDepth,comparison),runtime.shadowSamplerHandle(shadowDepth,comparison));}
-        int shadowColor=PackShadowSettings.colorIndex(name);if(shadowColor>=0)return new Sample(runtime.shadowColor(shadowColor),runtime.shadowColorSamplerHandle(shadowColor));
-        if(pipeline.code.bindings.comparisonSampler(name))throw new UnsupportedShaderException("Depth comparison requires a bound shadow depth texture: "+name);
-        int color=PackRenderTargets.colorIndex(name);if(color>=0)return new Sample(runtime.color(color),runtime.samplerHandle());
-        int depth=PackRenderTargets.depthIndex(name);if(depth>=0)return new Sample(runtime.sampledDepth(depth),runtime.depthSamplerHandle());
+        Sample routed=runtime==null?null:runtimeSample(pipeline,name);if(routed!=null)return routed;
         if(name.equals("normals"))return normalTexture.sample();
         if(name.equals("specular"))return specularTexture.sample();
         var metadata=state.pipeline().compileMetadata();
@@ -102,6 +104,17 @@ final class ShaderPackSceneGeneration extends BackendResource {
         // The game binds the block atlas with LINEAR and sharpens it in terrain.fsh; packs read it with plain texture().
         var sampler=semantic.equals("Sampler0")&&metadata.family()==PipelineCompileMetadata.Family.TERRAIN?RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST,true):pair.sampler();
         return new Sample(owner().texture(pair.view()),owner().sampler(sampler).handle());
+    }
+    private Sample runtimeSample(ScenePackPipeline pipeline,String name){
+        GpuImageView custom=runtime.customTexture(pipeline.program,name);
+        if(custom!=null)return new Sample(custom,runtime.customSamplerHandle(pipeline.program,name));
+        int shadowDepth=PackShadowSettings.depthIndex(name,pipeline.code.bindings.samplers().keySet());
+        if(shadowDepth>=0){boolean comparison=pipeline.code.bindings.comparisonSampler(name);return new Sample(runtime.shadowDepthSample(shadowDepth,comparison),runtime.shadowSamplerHandle(shadowDepth,comparison));}
+        int shadowColor=PackShadowSettings.colorIndex(name);if(shadowColor>=0)return new Sample(runtime.shadowColor(shadowColor),runtime.shadowColorSamplerHandle(shadowColor));
+        if(pipeline.code.bindings.comparisonSampler(name))throw new UnsupportedShaderException("Depth comparison requires a bound shadow depth texture: "+name);
+        int color=PackRenderTargets.colorIndex(name);if(color>=0)return new Sample(runtime.color(color),runtime.samplerHandle());
+        int depth=PackRenderTargets.depthIndex(name);if(depth>=0)return new Sample(runtime.sampledDepth(depth),runtime.depthSamplerHandle());
+        return null;
     }
     void sampleTransitions(VkCommandBuffer command,ScenePackPipeline pipeline,PassBindings state,PassAttachments targets,List<GpuImage.LayoutChange> changes){
         if(pipeline.needsDepthRefresh()){

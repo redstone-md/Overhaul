@@ -25,6 +25,15 @@ public final class PackShadowSettings {
         mipmappedDepth=builder.mipmappedDepth.clone();mipmappedColor=builder.mipmappedColor.clone();
         colors=builder.colors.build();
     }
+    private PackShadowSettings(PackShadowSettings source,int resolution,float distance){
+        this.resolution=resolution;this.distance=distance;renderMultiplier=1;interval=source.interval;near=source.near;far=source.far;sunPathRotation=source.sunPathRotation;fov=source.fov;
+        nearestDepth=source.nearestDepth;nearestColor=source.nearestColor;mipmappedDepth=source.mipmappedDepth;mipmappedColor=source.mipmappedColor;colors=source.colors;
+    }
+    /** An owned policy replaces only the camera extent, so caster bounds honour its distance exactly. */
+    public PackShadowSettings withCamera(int resolution,float distance){
+        if(resolution<1||!Float.isFinite(distance)||distance<=0)throw invalid("Invalid owned shadow camera extent");
+        return new PackShadowSettings(this,resolution,distance);
+    }
     public int resolution(){return resolution;}
     public float distance(){return distance;}
     public float renderMultiplier(){return renderMultiplier;}

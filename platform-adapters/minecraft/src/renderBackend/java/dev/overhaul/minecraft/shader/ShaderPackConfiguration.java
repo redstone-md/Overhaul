@@ -16,6 +16,8 @@ public record ShaderPackConfiguration(Object world,Object dimension,String reque
                 System.getProperty("overhaul.shaderPackDefines",""),cascades);
     }
     public boolean configured(){return !requested.isEmpty();}
+    /** Per-frame gate covering both routes; an explicit pack path still wins inside capture. */
+    public static boolean requestedAny(){return !System.getProperty("overhaul.shaderPack","").isBlank()||CascadeShadowSettings.configured()!=null;}
     @Override public boolean equals(Object other){
         return other instanceof ShaderPackConfiguration key&&world==key.world&&Objects.equals(dimension,key.dimension)
                 &&requested.equals(key.requested)&&options.equals(key.options)&&defines.equals(key.defines)&&Objects.equals(cascades,key.cascades);

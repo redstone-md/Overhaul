@@ -13,7 +13,7 @@ import org.joml.Vector3f;
 /** One player-relative light camera and celestial snapshot shared by actual shadow draws and their consumers. */
 final class ShaderPackShadowUniforms {
     private final Matrix4f matrix=new Matrix4f();
-    private final float[] projection=new float[16],projectionInverse=new float[16],view=new float[16],viewInverse=new float[16];
+    private final float[] projection=new float[16],projectionInverse=new float[16],view=new float[16],viewInverse=new float[16],lightRotation=new float[16];
     private final Vector3f sun=new Vector3f(),moon=new Vector3f(),up=new Vector3f();
     private float sunAngle,shadowAngle;
     private boolean day;
@@ -24,7 +24,7 @@ final class ShaderPackShadowUniforms {
         sunAngle=angle(sunDegrees);day=sunAngle<0.5f;shadowAngle=day?sunAngle:angle(moonDegrees);
         var camera=state.cameraRenderState;
         float skyAngle=shadowAngle<0.25f?shadowAngle+0.75f:shadowAngle-0.25f;
-        matrix.rotationX(radians(90)).rotateZ(radians(-360*skyAngle)).rotateX(radians(settings.sunPathRotation()));
+        matrix.rotationX(radians(90)).rotateZ(radians(-360*skyAngle)).rotateX(radians(settings.sunPathRotation()));matrix.get(lightRotation);
         float interval=settings.interval();
         if(interval!=0){float half=interval/2;matrix.translate((float)camera.pos.x%interval-half,(float)camera.pos.y%interval-half,(float)camera.pos.z%interval-half);}
         matrix.get(view);matrix.invert().get(viewInverse);
@@ -44,6 +44,7 @@ final class ShaderPackShadowUniforms {
         celestial(camera.viewRotationMatrix,settings.sunPathRotation(),moonDegrees,moon);
         matrix.set(camera.viewRotationMatrix).rotateY(radians(-90)).transformDirection(0,100,0,up);
     }
+    float[] lightRotation(){return lightRotation;}
     boolean fill(String name,UniformBlock values){
         switch(name){
             case "shadowProjection"->values.setMatrix(name,4,projection);

@@ -27,7 +27,7 @@ public abstract class PackWorldPassMixin {
     @WrapOperation(method="lambda$addMainPass$0",at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/LevelRenderer;executeClassicTransparency(Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;Lcom/mojang/renderpearl/api/commands/RenderPass;)V"),require=1,allow=1)
     private void overhaul$deferredBoundary(LevelRenderer renderer,ChunkSectionsToRender sections,
             FeatureRenderDispatcher.PreparedFrame features,RenderPass opaque,Operation<Void> original){
-        if(!(RenderSystem.getDevice() instanceof OverhaulGpuDevice device)||!device.nativeFrames().shaderPacks().isWorldFrameActive()){
+        if(!(RenderSystem.getDevice() instanceof OverhaulGpuDevice device)||!device.nativeFrames().shaderPacks().ownsWorldPasses()){
             original.call(renderer,sections,features,opaque);return;
         }
         if(overhaul$finishedOpaque!=null)throw new IllegalStateException("Nested shader-pack world passes");

@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import dev.overhaul.shader.compile.ShadercCompiler;
+import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.PackShadowSettings;
@@ -24,8 +25,11 @@ public final class ShaderPackSceneState implements AutoCloseable {
         install(pack,width,height,compiler,null);
     }
     public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration){
+        install(pack,width,height,compiler,configuration,null);
+    }
+    public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration,CascadeShadowSettings cascades){
         owner.requireOpen();if(framePins!=null)throw new IllegalStateException("Cannot replace a pack during captured world rendering");
-        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler);
+        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler,cascades);
         try{clear();generation=replacement;this.configuration=configuration;}catch(RuntimeException|Error failure){replacement.close();throw failure;}
     }
     public void begin(GpuTextureView color,GpuTextureView depth,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms){
@@ -44,7 +48,9 @@ public final class ShaderPackSceneState implements AutoCloseable {
         finally{active=false;framePins.close();framePins=null;frame=null;}
     }
     public boolean isWorldFrameActive(){owner.requireOwner();return framePins!=null;}
-    public PackShadowSettings shadowSettings(){owner.requireOwner();return generation!=null&&generation.hasShadows()?generation.pack().shadow():null;}
+    public PackShadowSettings shadowSettings(){owner.requireOwner();return generation!=null&&generation.hasShadows()?generation.shadowSettings():null;}
+    /** Owned cascades shade the game's own passes; only an external pack replaces them with its deferred boundary. */
+    public boolean ownsWorldPasses(){owner.requireOwner();return framePins!=null&&generation.ownsWorldPasses();}
     public boolean matchesConfiguration(Object key){owner.requireOwner();return generation!=null&&key!=null&&key.equals(configuration);}
     /** Opaque and translucent callbacks must close their frontend passes before returning. */
     public void captureShadows(Runnable opaque,Runnable translucent){

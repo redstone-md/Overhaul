@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.backendmixin;
 
+import dev.overhaul.minecraft.shader.ShaderPackConfiguration;
 import dev.overhaul.minecraft.shader.ShaderPackFrameRenderer;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -28,7 +29,7 @@ public abstract class ShaderPackFrameMixin {
     @Unique private ShaderPackFrameRenderer overhaul$shaderPack;
     @ModifyArg(method="renderLevel",at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/ProjectionMatrixBuffer;getBuffer(Lorg/joml/Matrix4f;)Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;"),index=0)
     private Matrix4f overhaul$capturePackProjection(Matrix4f matrix){
-        if(!System.getProperty("overhaul.shaderPack","").isBlank()){
+        if(ShaderPackConfiguration.requestedAny()){
             if(overhaul$shaderPack==null)overhaul$shaderPack=new ShaderPackFrameRenderer(minecraft);overhaul$shaderPack.projection(matrix);
         }return matrix;
     }
@@ -45,7 +46,7 @@ public abstract class ShaderPackFrameMixin {
         }
     }
     @Inject(method="useImprovedTransparency",at=@At("RETURN"),cancellable=true)
-    private void overhaul$packOwnsWorldTransparency(CallbackInfoReturnable<Boolean> callback){if(overhaul$shaderPack!=null&&overhaul$shaderPack.worldActive())callback.setReturnValue(false);}
+    private void overhaul$packOwnsWorldTransparency(CallbackInfoReturnable<Boolean> callback){if(overhaul$shaderPack!=null&&overhaul$shaderPack.ownsWorldTransparency())callback.setReturnValue(false);}
     @Inject(method={"onResourceManagerReload","setLevel","resetData"},at=@At("HEAD"))
     private void overhaul$reloadPack(CallbackInfo callback){if(overhaul$shaderPack!=null)overhaul$shaderPack.invalidate();}
     @Inject(method="close",at=@At("HEAD"))
