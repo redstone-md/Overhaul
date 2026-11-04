@@ -17,6 +17,7 @@ def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
 def blazeBackend = providers.gradleProperty('blazeBackend').isPresent()
 if (blazeBackend && overhaulBackend) throw new GradleException('Select one owned renderer frontend')
+def hudCache = target.loader == 'neoforge' && target.minecraft == '1.21.1' && !blazeBackend && !overhaulBackend
 def querySmoke = providers.gradleProperty('querySmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
 if (querySmoke && (!worldSmoke || modelSmoke || overhaulBackend)) throw new GradleException('Query smoke requires only -PworldSmoke -PquerySmoke')
@@ -51,6 +52,12 @@ if (target.tier != 'legacy') {
     if (mappedGeneration) sourceSets.main.java.srcDir 'src/generationMapped/java'
     if (target.minecraft == '1.20.1') sourceSets.main.java.srcDir 'src/generation120/java'
     if (target.minecraft == '1.21.1') sourceSets.main.java.srcDir 'src/generation121/java'
+    if (hudCache) sourceSets.main.java.srcDir 'src/hudCache/java'
+    if (hudCache) {
+        sourceSets.main.java.srcDir 'src/packFixes/java'
+        sourceSets.create('packFixesStubs') { java.srcDirs = ['src/packFixesStubs/java'] }
+        dependencies.add('compileOnly', sourceSets.packFixesStubs.output)
+    }
     if (providers.gradleProperty('worldSmoke').isPresent()) {
         if (targetName != 'fabric-26.3') throw new GradleException('World smoke currently requires fabric-26.3')
         sourceSets.main.java.srcDir 'src/worldSmoke/java'
@@ -188,6 +195,14 @@ tasks.named('processResources') {
                 'ChunkMapGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin',
                 'NodeEvaluatorMixin']
         json.mixins = (json.mixins + queryMixins).unique()
+        config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+    }
+    if (hudCache) doLast {
+        def config = new File(destinationDir, 'overhaul.mixins.json')
+        def json = new groovy.json.JsonSlurper().parse(config)
+        json.client = (json.client + ['HudCacheGameRendererMixin', 'HudCacheGuiAccessor', 'HudCacheGuiLayerManagerAccessor',
+                'HudCacheMinecraftAccessor', 'InventoryParticlesSpawnPosMixin']).unique()
+        json.mixins = (json.mixins + ['KubeJsWebServerMixin']).unique()
         config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
     }
     if (modelSmoke) doLast {
