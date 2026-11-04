@@ -78,7 +78,8 @@ public final class CompiledShaderPack {
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
         return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings);
     }
-    private static Stage stage(String name){
+    /** Stage of a bare program name; an unknown name fails. */
+    public static Stage stage(String name){
         if(name.startsWith("gbuffers_"))return Stage.GBUFFER;
         if(name.equals("shadow")||name.startsWith("shadow_"))return Stage.SHADOW;
         if(name.matches("shadowcomp[0-9]*"))return Stage.SHADOWCOMPOSITE;
@@ -86,7 +87,8 @@ public final class CompiledShaderPack {
                 &&name.matches(stage.name().toLowerCase(java.util.Locale.ROOT)+"[0-9]*"))return stage;
         throw new UnsupportedShaderException("Unknown shader pack program stage: "+name);
     }
-    private static int ordinal(String name){
+    /** Position within a stage: a bare name runs first, then its numeric suffixes in order. */
+    public static int ordinal(String name){
         int index=name.length();while(index>0&&Character.isDigit(name.charAt(index-1)))index--;
         try{return index==name.length()?0:Math.addExact(1,Integer.parseInt(name.substring(index)));}
         catch(ArithmeticException|NumberFormatException invalid){throw new UnsupportedShaderException("Program suffix exceeds supported range: "+name);}

@@ -34,10 +34,15 @@ public final class PackTargetSwaps {
     }
     public void complete(CompiledShaderPack.Program program){
         if(program.scene()||program.stage()==CompiledShaderPack.Stage.FINAL)return;
-        boolean[] flip=new boolean[16];
-        for(int color:program.code().framebuffer().colorTargets())if(color>=0)flip[color]=program.state().flips().getOrDefault("colortex"+color,true);
-        for(var entry:program.state().flips().entrySet())if(entry.getValue())flip[PackRenderTargets.colorIndex(entry.getKey())]=true;
+        boolean[] flip=flipsAfter(program.code().framebuffer().colorTargets(),program.state().flips());
         for(int index=0;index<16;index++)if(flip[index])current[index]^=1;
+    }
+    /** A composite-style pass flips what it writes unless told otherwise, plus anything it names; shadow keys are not color targets. */
+    public static boolean[] flipsAfter(List<Integer> outputs,Map<String,Boolean> flips){
+        boolean[] flip=new boolean[16];
+        for(int color:outputs)if(color>=0)flip[color]=flips.getOrDefault("colortex"+color,true);
+        for(var entry:flips.entrySet()){int index=PackRenderTargets.colorIndex(entry.getKey());if(index>=0&&entry.getValue())flip[index]=true;}
+        return flip;
     }
     public int[] snapshot(){return current.clone();}
     public void restore(int[] snapshot){if(snapshot.length!=16)throw new IllegalArgumentException("Invalid target swap snapshot");System.arraycopy(snapshot,0,current,0,16);}
