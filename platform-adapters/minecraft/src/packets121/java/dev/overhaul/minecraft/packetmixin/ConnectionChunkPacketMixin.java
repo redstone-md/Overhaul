@@ -13,6 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ConnectionChunkPacketMixin implements ChunkPacketMemoryAccess {
     @Unique private final ChunkPacketMemory overhaul$chunkPackets=new ChunkPacketMemory();
     @Override public ChunkPacketMemory overhaul$chunkPacketMemory(){return overhaul$chunkPackets;}
-    @Inject(method={"disconnect(Lnet/minecraft/network/chat/Component;)V","disconnect(Lnet/minecraft/network/DisconnectionDetails;)V","channelInactive"},at=@At("HEAD"))
+    @Inject(method={"disconnect(Lnet/minecraft/network/chat/Component;)V","disconnect(Lnet/minecraft/network/DisconnectionDetails;)V"},at=@At("HEAD"))
     private void overhaul$stopPacketAdmission(CallbackInfo callback){overhaul$chunkPackets.close();}
+    @Inject(method="channelInactive(Lio/netty/channel/ChannelHandlerContext;)V",at=@At("HEAD"),remap=false)
+    private void overhaul$channelInactive(CallbackInfo callback){overhaul$chunkPackets.close();}
 }

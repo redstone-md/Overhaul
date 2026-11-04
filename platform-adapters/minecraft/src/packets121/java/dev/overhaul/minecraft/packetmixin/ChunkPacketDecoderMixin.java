@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(PacketDecoder.class)
 public abstract class ChunkPacketDecoderMixin {
     @Shadow @Final private ProtocolInfo<?> protocolInfo;
-    @WrapMethod(method="decode(Lio/netty/channel/ChannelHandlerContext;Lio/netty/buffer/ByteBuf;Ljava/util/List;)V")
+    @WrapMethod(method="decode(Lio/netty/channel/ChannelHandlerContext;Lio/netty/buffer/ByteBuf;Ljava/util/List;)V",remap=false)
     private void overhaul$scope(ChannelHandlerContext context,ByteBuf input,List<Object> output,Operation<Void> original) throws Exception {
         if(protocolInfo.flow()!=PacketFlow.CLIENTBOUND||input.readableBytes()<ChunkPacketMemory.MIN_FRAME_BYTES){original.call(context,input,output);return;}
         Connection connection=context.pipeline().get(Connection.class);
@@ -30,7 +30,8 @@ public abstract class ChunkPacketDecoderMixin {
             original.call(context,scope.buffer(),output);
         }
     }
-    @WrapOperation(method="decode(Lio/netty/channel/ChannelHandlerContext;Lio/netty/buffer/ByteBuf;Ljava/util/List;)V",at=@At(value="INVOKE",target="Ljava/util/List;add(Ljava/lang/Object;)Z"),require=1,allow=1)
+    @WrapOperation(method="decode(Lio/netty/channel/ChannelHandlerContext;Lio/netty/buffer/ByteBuf;Ljava/util/List;)V",remap=false,
+            at=@At(value="INVOKE",target="Ljava/util/List;add(Ljava/lang/Object;)Z",remap=false),require=1,allow=1)
     private boolean overhaul$published(List<Object> output,Object packet,Operation<Boolean> original,
             ChannelHandlerContext context,ByteBuf input,List<Object> enclosingOutput){
         boolean added=original.call(output,packet);
