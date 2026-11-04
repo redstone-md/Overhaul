@@ -52,6 +52,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
                 catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}
                 scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades(),nextConfiguration.cascades()==null?null:OwnedTerrainShaders.load(minecraft.getResourceManager()));activePack=pack;installed=true;
                 var policy=nextConfiguration.cascades();cameras=policy==null?null:new CascadeShadowCameras(policy.count(),policy.resolution(),policy.splitLambda(),policy.blendFraction());
+                LoggerFactory.getLogger(ShaderPackFrameRenderer.class).info("Shader pack installed: {} ({}x{}){}",nextConfiguration.requested(),target.width,target.height,policy==null?"":" with "+policy.count()+" shadow cascades at "+policy.resolution());
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+nextConfiguration.requested(),failure);}
         }
