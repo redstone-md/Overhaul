@@ -94,7 +94,7 @@ if (target.minecraft == '26.3') {
 }
 if (overhaulBackend) apply from: 'gradle/render-backend.gradle'
 if (blazeBackend) apply from: 'gradle/blaze-backend.gradle'
-if (target.minecraft in ['1.20.1', '1.21.1']) apply from: 'gradle/chunk-packets.gradle'
+if (target.minecraft in ['1.20.1', '1.21.1', '26.3']) apply from: 'gradle/chunk-packets.gradle'
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     systemProperty 'overhaul.loader', target.loader

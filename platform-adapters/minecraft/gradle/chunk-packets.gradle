@@ -1,6 +1,7 @@
 // Only the receive codec and synchronous application hooks vary between pinned tiers.
 def packetTiers = ['1.20.1': [source: 'packets120', suffix: '120'],
-                   '1.21.1': [source: 'packets121', suffix: '']]
+                   '1.21.1': [source: 'packets121', suffix: ''],
+                   '26.3': [source: 'packets263', suffix: '263']]
 def packetTier = packetTiers[target.minecraft]
 if (packetTier == null) throw new GradleException('No packet codec adapter for selected game version')
 sourceSets.main.java.srcDirs += ['src/chunkPackets/java', "src/${packetTier.source}/java"]
