@@ -21,7 +21,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
     private long previousTime=started;
     private final float[] projection=new float[16],projectionInverse=new float[16],view=new float[16],viewInverse=new float[16];
     private final float[] previousProjection=new float[16],previousView=new float[16];
-    private final float[] originalProjection=new float[16];
+    private final float[] originalProjection=new float[16],stableProjection=IDENTITY.clone();
     private final float[] modelViewProjection=new float[16],normal=new float[9];
     private final Matrix4f matrix=new Matrix4f();
     private final ShaderPackEnvironmentUniforms environment=new ShaderPackEnvironmentUniforms();
@@ -44,13 +44,15 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
         for(int column=0;column<4;column++){
             projection[column*4+2]=nativeProjection[column*4+3]-2*nativeProjection[column*4+2];
         }
-        matrix.set(projection).invert().get(projectionInverse);state.cameraRenderState.viewRotationMatrix.get(view);
+        matrix.set(projection).invert().get(projectionInverse);
+        if(finite(projectionInverse))System.arraycopy(projection,0,stableProjection,0,16);
+        else{System.arraycopy(stableProjection,0,projection,0,16);matrix.set(projection).invert().get(projectionInverse);} // The camera has no field of view on its first frames; nothing rasterizes with that matrix.
+        state.cameraRenderState.viewRotationMatrix.get(view);
         matrix.set(view).invert().get(viewInverse);
         matrix.set(projection).mul(state.cameraRenderState.viewRotationMatrix).get(modelViewProjection);
         for(int column=0;column<3;column++)for(int row=0;row<3;row++)normal[column*3+row]=viewInverse[row*4+column];
         state.cameraRenderState.projectionMatrix.get(originalProjection);
         near=originalProjection[14]/(1+originalProjection[10]);
-        for(float value:projectionInverse)if(!Float.isFinite(value))throw new UnsupportedShaderException("Singular shader-pack camera projection: "+java.util.Arrays.toString(nativeProjection));
         if(!Float.isFinite(near)||near<=0)throw new UnsupportedShaderException("Unsupported shader-pack camera near plane");
         if(!initialized){System.arraycopy(projection,0,previousProjection,0,16);System.arraycopy(view,0,previousView,0,16);
             var position=state.cameraRenderState.pos;previousX=position.x;previousY=position.y;previousZ=position.z;}
@@ -119,6 +121,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             default->{if(!shadow.fill(name,values)&&!environment.fill(name,values)&&!presence.fill(name,values)&&!player.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
         }
     }
+    private static boolean finite(float[] values){for(float value:values)if(!Float.isFinite(value))return false;return true;}
     private static void whole(String name,UniformBlock values,double x,double y,double z){values.setIntVector(name,(int)Math.floor(x),(int)Math.floor(y),(int)Math.floor(z));}
     private static void fraction(String name,UniformBlock values,double x,double y,double z){values.setVector(name,(float)(x-Math.floor(x)),(float)(y-Math.floor(y)),(float)(z-Math.floor(z)));}
     void complete(){
