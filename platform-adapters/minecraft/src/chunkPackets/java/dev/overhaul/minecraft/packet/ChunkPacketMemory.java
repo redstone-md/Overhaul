@@ -1,28 +1,26 @@
 package dev.overhaul.minecraft.packet;
 
 import dev.overhaul.core.memory.DirectSlabPool;
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.lang.ref.Cleaner;
-import java.nio.ByteBuffer;
 
 /** One connection's bounded admission. Existing payloads survive connection closure until unreachable. */
 public final class ChunkPacketMemory implements AutoCloseable {
-    public static final int MIN_FRAME_BYTES=4096;
+    public static final int MIN_FRAME_BYTES=512;
+    public static final int MIN_PAYLOAD_BYTES=4096;
     private static final int SLAB_BYTES=256*1024;
     private static final int SLAB_COUNT=8;
     private DirectSlabPool pool;
     private Cleaner cleaner;
     private boolean closed;
 
-    OwnedChunkPayload tryRead(ByteBuf input,int bytes,ByteBufAllocator allocator){
-        if(bytes<MIN_FRAME_BYTES||bytes>SLAB_BYTES)return null;
-        if(bytes>input.readableBytes())throw new IndexOutOfBoundsException("Truncated chunk section payload");
+    public static boolean eligiblePayloadSize(int bytes){return bytes>=MIN_PAYLOAD_BYTES&&bytes<=SLAB_BYTES;}
+    OwnedChunkPayload tryAllocate(int bytes,ByteBufAllocator allocator){
+        if(!eligiblePayloadSize(bytes))return null;
         DirectSlabPool selected=pool(allocator);if(selected==null)return null;
         DirectSlabPool.Lease lease;
         try{lease=selected.acquire(bytes);}catch(IllegalStateException unavailable){return null;}
         try{
-            ByteBuffer destination=lease.buffer();input.readBytes(destination);
             return new OwnedChunkPayload(cleaner,lease,bytes);
         }catch(RuntimeException|Error failure){try{lease.close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
     }

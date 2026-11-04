@@ -9,6 +9,7 @@ import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.function.Predicate;
 
 /** Packet/reader reachability owns section bytes. Public readers materialize exactly one ordinary heap array. */
 public final class OwnedChunkPayload {
@@ -27,6 +28,14 @@ public final class OwnedChunkPayload {
     }
     public int length(){return length;}
     private ByteBuffer storage(){return retirement.lease.buffer().order(ByteOrder.BIG_ENDIAN);}
+    /** Decoder-only initialization before the payload or any reader is published. The view must not escape. */
+    boolean initialize(Predicate<ByteBuffer> writer){
+        try{
+            ByteBuffer output=storage();boolean accepted=writer.test(output);
+            if(accepted&&(output.position()!=length||output.limit()!=length))throw new IllegalStateException("Payload initializer did not fill its complete byte range");
+            return accepted;
+        }finally{Reference.reachabilityFence(this);}
+    }
     private byte[] compatibility(){
         byte[] current=compatibility;if(current!=null)return current;
         synchronized(this){

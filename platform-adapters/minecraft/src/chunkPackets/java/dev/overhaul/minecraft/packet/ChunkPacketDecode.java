@@ -5,6 +5,8 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.DuplicatedByteBuf;
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.ByteBuffer;
+import java.util.function.Predicate;
 
 /** Call-local decode journal; no thread-local routing, protocol mutation, or retained network frame slices. */
 public final class ChunkPacketDecode implements AutoCloseable {
@@ -29,8 +31,17 @@ public final class ChunkPacketDecode implements AutoCloseable {
         return null;
     }
     public OwnedChunkPayload read(ByteBuf source,int bytes){
-        OwnedChunkPayload payload=owner.tryRead(source,bytes,allocator);if(payload==null)return null;
-        try{unpublished.add(payload);return payload;}
+        if(!ChunkPacketMemory.eligiblePayloadSize(bytes))return null;
+        if(bytes>source.readableBytes())throw new IndexOutOfBoundsException("Truncated chunk section payload");
+        return tryCreate(bytes,buffer->{source.readBytes(buffer);return true;});
+    }
+    /** False or unavailable leaves no owned payload; the caller restores any input it consumed. */
+    public OwnedChunkPayload tryCreate(int bytes,Predicate<ByteBuffer> writer){
+        OwnedChunkPayload payload=owner.tryAllocate(bytes,allocator);if(payload==null)return null;
+        try{
+            if(!payload.initialize(writer)){payload.discardUnpublished();return null;}
+            unpublished.add(payload);return payload;
+        }
         catch(RuntimeException|Error failure){try{payload.discardUnpublished();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
     }
     /** Called only after the decoder has added its packet to Netty's output list successfully. */
