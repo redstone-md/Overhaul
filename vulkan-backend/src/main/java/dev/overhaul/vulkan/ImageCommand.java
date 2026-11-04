@@ -112,23 +112,38 @@ public final class ImageCommand implements AutoCloseable {
     }
 
     public static ImageCommand clearColor(VulkanContext context,GpuImage image,int mip,int layer,float r,float g,float b,float a) {
-        return clear(context,image,mip,layer,r,g,b,a,false,0);
+        return clear(context,image,mip,layer,r,g,b,a,VK_IMAGE_ASPECT_COLOR_BIT,0);
     }
+    /** Preserves the existing full-format depth/stencil clear contract. */
     public static ImageCommand clearDepth(VulkanContext context,GpuImage image,int mip,int layer,float depth,int stencil) {
-        return clear(context,image,mip,layer,depth,0,0,0,true,stencil);
+        return clearDepthStencil(context,image,mip,layer,depth,stencil,image.format().aspectMask());
     }
-    private static ImageCommand clear(VulkanContext context,GpuImage image,int mip,int layer,float r,float g,float b,float a,boolean depth,int stencil) {
+    /** Clears depth without modifying a combined format's stencil component. */
+    public static ImageCommand clearDepth(VulkanContext context,GpuImage image,int mip,int layer,float depth) {
+        return clearDepthStencil(context,image,mip,layer,depth,0,VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+    /** Clears stencil without modifying a combined format's depth component. */
+    public static ImageCommand clearStencil(VulkanContext context,GpuImage image,int mip,int layer,int stencil) {
+        return clearDepthStencil(context,image,mip,layer,0,stencil,VK_IMAGE_ASPECT_STENCIL_BIT);
+    }
+    public static ImageCommand clearDepthStencil(VulkanContext context,GpuImage image,int mip,int layer,float depth,int stencil,int aspects) {
+        if(aspects==0||(aspects&~(VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT))!=0)
+            throw new IllegalArgumentException("A depth/stencil clear requires depth and/or stencil aspects");
+        return clear(context,image,mip,layer,depth,0,0,0,aspects,stencil);
+    }
+    private static ImageCommand clear(VulkanContext context,GpuImage image,int mip,int layer,float r,float g,float b,float a,int aspects,int stencil) {
         ImageRegion region=ImageRegion.whole(image,mip,layer);
         requireContext(context,image); image.checkSubresource(mip,layer); image.requireUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        if (depth!=(image.format().aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT)) throw new IllegalArgumentException("Clear type differs from format");
-        if (!Float.isFinite(r)||!Float.isFinite(g)||!Float.isFinite(b)||!Float.isFinite(a)||depth&&(r<0||r>1)) throw new IllegalArgumentException("Invalid clear value");
+        if ((image.format().aspectMask()&aspects)!=aspects) throw new IllegalArgumentException("Clear aspects differ from image format");
+        if (!Float.isFinite(r)||!Float.isFinite(g)||!Float.isFinite(b)||!Float.isFinite(a)
+                ||(aspects&VK_IMAGE_ASPECT_DEPTH_BIT)!=0&&(r<0||r>1)) throw new IllegalArgumentException("Invalid clear value");
         return new ImageCommand(context,(operation,command)-> {
             int before=image.layout(mip,layer);
             operation.transition(image,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             try (MemoryStack stack=MemoryStack.stackPush()) {
-                VkImageSubresourceRange.Buffer range=VkImageSubresourceRange.calloc(1,stack).aspectMask(image.format().aspectMask())
+                VkImageSubresourceRange.Buffer range=VkImageSubresourceRange.calloc(1,stack).aspectMask(aspects)
                         .baseMipLevel(mip).levelCount(1).baseArrayLayer(layer).layerCount(1);
-                if (depth) vkCmdClearDepthStencilImage(command,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                if (aspects!=VK_IMAGE_ASPECT_COLOR_BIT) vkCmdClearDepthStencilImage(command,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VkClearDepthStencilValue.calloc(stack).depth(r).stencil(stencil),range);
                 else {
                     VkClearColorValue color=VkClearColorValue.calloc(stack);

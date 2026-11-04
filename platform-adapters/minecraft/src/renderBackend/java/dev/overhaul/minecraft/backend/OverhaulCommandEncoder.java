@@ -70,6 +70,10 @@ public final class OverhaulCommandEncoder implements CommandEncoderBackend,AutoC
     @Override public void clearDepthTexture(GpuTexture texture,double depth) {
         requireNoPass(); images.clearDepth(texture,depth);
     }
+    /** NeoForge adds this backend method; it remains callable on the unpatched frontend too. */
+    public void clearStencilTexture(GpuTexture texture,int value) {
+        requireNoPass(); images.clearStencil(texture,value);
+    }
     @Override public void clearColorAndDepthTextures(GpuTexture colorTexture,Vector4fc color,GpuTexture depthTexture,double depth) {
         requireNoPass(); images.clearColor(colorTexture,color); images.clearDepth(depthTexture,depth);
     }

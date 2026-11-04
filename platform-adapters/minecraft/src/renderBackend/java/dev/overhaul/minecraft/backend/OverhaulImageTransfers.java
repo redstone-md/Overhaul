@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 
 /** RenderPearl region/stride semantics translated into ordered native image commands. */
 final class OverhaulImageTransfers {
+    @FunctionalInterface private interface ClearCommand { ImageCommand create(GpuImage image,int mip,int layer); }
     private final OverhaulDeviceBackend owner;
     OverhaulImageTransfers(OverhaulDeviceBackend owner) { this.owner=owner; }
 
@@ -33,18 +34,19 @@ final class OverhaulImageTransfers {
 
     void clearColor(GpuTexture texture,Vector4fc color) {
         if(owner.shaderPacks().suppressesColorClear(texture))return;
-        enqueue(null,operation->{
-            GpuImage image=image(texture);
-            for (int layer=0;layer<image.layers();layer++) for (int mip=0;mip<image.mipLevels();mip++) {
-                operation.add(ImageCommand.clearColor(owner.context(),image,mip,layer,color.x(),color.y(),color.z(),color.w()));
-            }
-        },texture);
+        clear(texture,(image,mip,layer)->ImageCommand.clearColor(owner.context(),image,mip,layer,color.x(),color.y(),color.z(),color.w()));
     }
     void clearDepth(GpuTexture texture,double depth) {
+        clear(texture,(image,mip,layer)->ImageCommand.clearDepth(owner.context(),image,mip,layer,(float)depth));
+    }
+    void clearStencil(GpuTexture texture,int stencil) {
+        clear(texture,(image,mip,layer)->ImageCommand.clearStencil(owner.context(),image,mip,layer,stencil));
+    }
+    private void clear(GpuTexture texture,ClearCommand factory) {
         enqueue(null,operation->{
             GpuImage image=image(texture);
             for (int layer=0;layer<image.layers();layer++) for (int mip=0;mip<image.mipLevels();mip++) {
-                operation.add(ImageCommand.clearDepth(owner.context(),image,mip,layer,(float)depth,0));
+                operation.add(factory.create(image,mip,layer));
             }
         },texture);
     }
