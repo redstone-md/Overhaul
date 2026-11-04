@@ -21,7 +21,8 @@ tasks.named('processResources') {
     }
 }
 apply from: 'gradle/blaze-runtime.gradle'
-if (target.loader in ['forge', 'neoforge']) apply from: 'gradle/blaze-client-profile.gradle'
+// A pack profile owns its game directory and must already disable the FML early window.
+if (target.loader in ['forge', 'neoforge'] && !providers.gradleProperty('packProfile').isPresent()) apply from: 'gradle/blaze-client-profile.gradle'
 dependencies { implementation blazeRuntimeJars }
 tasks.withType(JavaExec).configureEach {
     systemProperty 'overhaul.blaze.enabled', 'true'
