@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.backend;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
+import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -26,11 +27,11 @@ public final class ShaderPackSceneState implements AutoCloseable {
         install(pack,width,height,compiler,null);
     }
     public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration){
-        install(pack,width,height,compiler,configuration,null);
+        install(pack,width,height,compiler,configuration,null,null);
     }
-    public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration,CascadeShadowSettings cascades){
+    public void install(CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Object configuration,CascadeShadowSettings cascades,OwnedTerrainShaders terrain){
         owner.requireOpen();if(framePins!=null)throw new IllegalStateException("Cannot replace a pack during captured world rendering");
-        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler,cascades);
+        ShaderPackSceneGeneration replacement=new ShaderPackSceneGeneration(owner,pack,width,height,compiler,cascades,terrain);
         try{clear();generation=replacement;this.configuration=configuration;}catch(RuntimeException|Error failure){replacement.close();throw failure;}
     }
     public void begin(GpuTextureView color,GpuTextureView depth,PackRenderTargets.Color fog,PackGraphRuntime.Uniforms uniforms){
@@ -74,6 +75,8 @@ public final class ShaderPackSceneState implements AutoCloseable {
     boolean isShadowCapture(){owner.requireOwner();return shadowCapture;}
     /** The cascades published for the frame in progress; null outside it and on the external pack route. */
     CascadeShadowGeneration cascades(){owner.requireOwner();return framePins!=null?generation.cascades():null;}
+    /** The generation whose cascades this frame's main passes may sample; null until they have been written. */
+    ShaderPackSceneGeneration receivingGeneration(){var ready=cascades();return ready!=null&&ready.samplingReady()?generation:null;}
     public void afterOpaque(){
         owner.requireOpen();if(framePins==null)throw new IllegalStateException("Opaque boundary outside a captured shader-pack world frame");
         generation.afterOpaque(owner.commands(),frame);

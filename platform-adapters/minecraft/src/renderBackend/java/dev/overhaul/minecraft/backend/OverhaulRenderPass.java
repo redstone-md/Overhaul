@@ -40,6 +40,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     private final boolean shadow;
     private final ScenePackDescriptors sceneDescriptors;
     private final CascadePassCameras cameras;
+    private final CascadeReceiverBinding receiver;
     private final Map<CompiledShaderPack.Program,PassAttachments> sceneAttachments=new LinkedHashMap<>();
     private PassAttachments ordinaryLoading;
     private final BackendDrawStatistics.Recording drawMetrics=new BackendDrawStatistics.Recording();
@@ -67,7 +68,9 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     public OverhaulRenderPass(OverhaulDeviceBackend owner,RenderPassDescriptor descriptor){
         this.owner=owner;owner.requireOpen();shadow=owner.shaderPacks().isShadowCapture();descriptors=new PassDescriptors(owner);scene=owner.shaderPacks().capture();sceneDescriptors=scene==null?null:new ScenePackDescriptors(owner);
         cameras=shadow&&scene!=null&&scene.cascades()!=null?new CascadePassCameras(scene.cascades()):null;
-        try{if(scene!=null)retain(scene);attachments=new PassAttachments(owner,descriptor,this::retain,scene);}
+        var receiving=shadow?null:owner.shaderPacks().receivingGeneration();
+        receiver=receiving==null?null:new CascadeReceiverBinding(owner,receiving.cascades());
+        try{if(scene!=null)retain(scene);retain(receiving);attachments=new PassAttachments(owner,descriptor,this::retain,scene);}
         catch(RuntimeException|Error failure){releasePins();throw failure;}
     }
     private void requireCapture(){owner.requireOpen();if(closed||sealed)throw new IllegalStateException("Render pass no longer accepts commands");}
@@ -124,6 +127,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
             var source=state.vertices().get(expected.slot());if(source==null)throw new IllegalStateException("Missing scene vertex buffer slot "+expected.slot());PassDescriptors.checkRange(source,owner.buffer(source.buffer()).size());
         }
         if(selected!=null&&cameras!=null)cameras.capture(replacement(state,selected));
+        if(receiver!=null&&receiver.accepts(state))sampled.add(receiver.prepare(state));
         return state;
     }
     @Override public void drawIndexed(int indexCount,int instanceCount,int firstIndex,int vertexOffset,int firstInstance){
@@ -182,6 +186,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
     void retainAttachmentsUntil(dev.overhaul.vulkan.FrameRing.Submission completion) {
         submission=completion;
         descriptors.submitted(completion); attachments.retainUntil(completion);
+        if(receiver!=null)receiver.submitted(completion);
         if(sceneDescriptors!=null)sceneDescriptors.submitted(completion);
         if(ordinaryLoading!=null)ordinaryLoading.retainUntil(completion);for(var targets:sceneAttachments.values())targets.retainUntil(completion);
     }
@@ -227,10 +232,14 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         for(var view:sampled)transitions.add(view.image().recordTransition(command,view.baseMip(),view.mipCount(),view.baseLayer(),view.layerCount(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
         if(scene==null){
             attachments.begin(command,transitions);
-            try{for(Command entry:commands){if(entry.bindings()!=null)entry.bindings().bind(command,owner,attachments,descriptors);entry.draw().accept(command);}}
+            try{for(Command entry:commands){bindOrdinary(command,entry.bindings());entry.draw().accept(command);}}
             finally{vkCmdEndRenderPass(command);}
         }else if(shadow)recordShadows(command);else recordScene(command);
         recordingSucceeded=true;
+    }
+    private void bindOrdinary(VkCommandBuffer command,PassBindings state){
+        if(state==null)return;
+        if(receiver!=null&&receiver.accepts(state))receiver.bind(command,state,attachments,descriptors);else state.bind(command,owner,attachments,descriptors);
     }
     private void recordScene(VkCommandBuffer command){
         // Apply frontend clear semantics once; every resumed draw run uses LOAD attachments.
@@ -287,7 +296,7 @@ public final class OverhaulRenderPass implements RenderPassBackend,AutoCloseable
         if(closed)return;owner.requireOwner();
         if(submission!=null){submission.await();if(closed)return;}
         closed=true;
-        try{descriptors.close();if(sceneDescriptors!=null)sceneDescriptors.close();if(cameras!=null)cameras.close();for(var targets:sceneAttachments.values())targets.close();sceneAttachments.clear();if(ordinaryLoading!=null)ordinaryLoading.close();attachments.close();}
+        try{descriptors.close();if(sceneDescriptors!=null)sceneDescriptors.close();if(cameras!=null)cameras.close();if(receiver!=null)receiver.close();for(var targets:sceneAttachments.values())targets.close();sceneAttachments.clear();if(ordinaryLoading!=null)ordinaryLoading.close();attachments.close();}
         finally{try{for(int index=transitions.size()-1;index>=0;index--)transitions.get(index).close();transitions.clear();}finally{commands.clear();timestampResets.clear();timestampKeys.clear();sampled.clear();bufferReads.clear();releasePins();}}
     }
 }

@@ -30,6 +30,8 @@ public final class CascadeShadowMaps implements AutoCloseable {
     public GpuImageView depth(int cascade,boolean opaque){
         if(cascade<0||cascade>=count())throw new IllegalArgumentException("Invalid shadow cascade");return views[opaque?1:0][cascade];
     }
+    /** Every cascade of one role as a single array view, owned and closed with its image. */
+    public GpuImageView arrayView(boolean opaque){return images[opaque?1:0].view(0,1,0,count());}
     public long sampler(){return sampler.handle();}
     public void clear(ImmediateCommands lane){
         PackFrameGraph graph=new PackFrameGraph();

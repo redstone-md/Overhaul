@@ -21,7 +21,6 @@ import java.util.Map;
 
 /** Owns installation and frame boundaries; the device pins captured scene generations through native retirement. */
 public final class ShaderPackFrameRenderer implements AutoCloseable {
-    private static final String TERRAIN_MANIFEST="/overhaul-terrain-shaders.properties";
     private final Thread owner=Thread.currentThread();
     private final Minecraft minecraft;
     private final float[] projection=new float[16];
@@ -51,7 +50,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
                 String dimension=key.identifier().toString();CompiledShaderPack pack;
                 try{pack=CompiledShaderPack.compileForDimension(source,dimension,selected,definitions,compiler);}
                 catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}
-                scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades());activePack=pack;installed=true;
+                scenes.install(pack,target.width,target.height,compiler,nextConfiguration,nextConfiguration.cascades(),nextConfiguration.cascades()==null?null:OwnedTerrainShaders.load(minecraft.getResourceManager()));activePack=pack;installed=true;
                 var policy=nextConfiguration.cascades();cameras=policy==null?null:new CascadeShadowCameras(policy.count(),policy.resolution(),policy.splitLambda(),policy.blendFraction());
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+nextConfiguration.requested(),failure);}
@@ -73,7 +72,7 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
     /** Owned receivers rewrite exact vanilla terrain text: any other shader bytes keep vanilla terrain, loudly. */
     private boolean receiversCertified(ShaderPackConfiguration requested){
         if(requested.cascades()==null||requested.equals(configuration))return true;
-        var gate=new ShaderResourceGate(TERRAIN_MANIFEST);if(gate.eligible(minecraft.getResourceManager()))return true;
+        var gate=new ShaderResourceGate(OwnedTerrainShaders.MANIFEST);if(gate.eligible(minecraft.getResourceManager()))return true;
         LoggerFactory.getLogger(ShaderPackFrameRenderer.class).warn("Owned cascaded shadows disabled: {}",gate.reason());
         invalidate();blocked=requested;return false;
     }

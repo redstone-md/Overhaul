@@ -1,23 +1,31 @@
 package dev.overhaul.minecraft.backend;
 
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
+import dev.overhaul.minecraft.shader.OwnedTerrainShaders;
 import dev.overhaul.shader.pack.CascadeShadowSettings;
 import dev.overhaul.vulkan.CascadeShadowMaps;
 import dev.overhaul.vulkan.GpuImageView;
 import java.util.Objects;
 
-/** Layered depth and per-frame cascade emission for one owned generation. */
+/** Layered depth, per-frame cascade emission and terrain receivers for one owned generation. */
 final class CascadeShadowGeneration implements AutoCloseable {
     private final OverhaulDeviceBackend owner;
     private final CascadeShadowSettings settings;
     private final CascadeUniformPool uniforms;
+    private CascadeTerrainPipelines terrain;
     private CascadeShadowMaps maps;
+    private GpuImageView sampledDepth;
     private CascadeShadowFrame frame;
     private int selected=-1;
     private boolean samplingReady;
-    CascadeShadowGeneration(OverhaulDeviceBackend owner,CascadeShadowSettings settings){
+    CascadeShadowGeneration(OverhaulDeviceBackend owner,CascadeShadowSettings settings,OwnedTerrainShaders shaders){
         this.owner=owner;this.settings=settings;uniforms=new CascadeUniformPool(owner);
-        maps=new CascadeShadowMaps(owner.context(),owner.allocator(),settings);
+        try{
+            terrain=new CascadeTerrainPipelines(owner,shaders);
+            maps=new CascadeShadowMaps(owner.context(),owner.allocator(),settings);
+            // The opaque role: translucent casters must not shadow the water that casts them.
+            sampledDepth=maps.arrayView(true);
+        }catch(RuntimeException|Error failure){close();throw failure;}
     }
     void beginFrame(CascadeShadowFrame next){
         frame=Objects.requireNonNull(next,"Owned cascades require a captured camera frame");selected=-1;samplingReady=false;
@@ -38,9 +46,16 @@ final class CascadeShadowGeneration implements AutoCloseable {
     boolean samplingReady(){return samplingReady;}
     CascadeShadowFrame frame(){return frame;}
     CascadeUniformPool uniforms(){return uniforms;}
+    CascadeTerrainPipelines terrain(){return terrain;}
     int resolution(){return settings.resolution();}
     GpuImageView depth(int cascade){return maps.depth(cascade,false);}
+    GpuImageView sampledDepth(){return sampledDepth;}
+    long depthSampler(){return maps.sampler();}
     @Override public void close(){
-        try{uniforms.close();}finally{if(maps!=null){maps.close();maps=null;}}
+        try{uniforms.close();}
+        finally{
+            try{if(terrain!=null){terrain.close();terrain=null;}}
+            finally{if(maps!=null){maps.close();maps=null;}}
+        }
     }
 }
