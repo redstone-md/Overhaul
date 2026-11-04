@@ -38,12 +38,11 @@ final class BlazeTexture implements AutoCloseable {
     }
     void allocate(int internal,int width,int height,int levels,ImmediateCommands commands,boolean defineAll){
         if(borrowed())throw new UnsupportedOperationException("Cannot redefine a render-target texture alias");
-        int count=switch(internal){case GL_RGBA,GL_RGBA8,35907->4;case GL_RGB,GL_RGB8->3;case 33319,33323->2;case GL_RED,33321->1;default->throw new UnsupportedOperationException("Unsupported internal texture format: "+internal);};
-        ImageFormat format=internal==35907?ImageFormat.RGBA8_SRGB:count==1?ImageFormat.R8_UNORM:count==2?ImageFormat.RG8_UNORM:ImageFormat.RGBA8_UNORM;
+        var storage=BlazeTextureFormats.storage(internal);int count=storage.channels();ImageFormat format=storage.format();
         GpuImage next=allocator.createImage(format,width,height,levels,1,
                 VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         try{
-            for(int level=0;level<levels;level++){
+            if(!format.isDepth())for(int level=0;level<levels;level++){
                 if(transfers!=null)transfers.clearColor(next,level,0,0,0,0,count==4?0:1);
                 else commands.clearColor(next,level,0,0,0,0,count==4?0:1);
             }
@@ -65,8 +64,7 @@ final class BlazeTexture implements AutoCloseable {
             case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(max==selected)return;max=selected;}
             case GL_TEXTURE_MIN_LOD->{if(minLod==value)return;minLod=value;}
             case GL_TEXTURE_MAX_LOD->{if(maxLod==value)return;maxLod=value;}
-            case GL_TEXTURE_LOD_BIAS->{if(value!=0)throw unsupported(name);return;}
-            default->throw unsupported(name);
+            default->{BlazeGlBoundary.reportOnce("parameter "+name,"Texture parameter has no Vulkan sampler state and was ignored: "+name);return;}
         }
         releaseSampling();
     }
@@ -90,7 +88,7 @@ final class BlazeTexture implements AutoCloseable {
         }
         return sampler;
     }
-    private static SamplerSettings.Address address(int mode){return switch(mode){case GL_REPEAT->SamplerSettings.Address.REPEAT;case GL_CLAMP_TO_EDGE->SamplerSettings.Address.CLAMP;case GL_MIRRORED_REPEAT->SamplerSettings.Address.MIRROR;default->throw unsupported(mode);};}
+    private static SamplerSettings.Address address(int mode){return switch(mode){case GL_REPEAT->SamplerSettings.Address.REPEAT;case GL_CLAMP_TO_EDGE->SamplerSettings.Address.CLAMP;case GL_MIRRORED_REPEAT,34627->SamplerSettings.Address.MIRROR;case 33069,10496->SamplerSettings.Address.CLAMP;default->throw unsupported(mode);};}
     private static int integer(float value){if(value!=(int)value)throw new IllegalArgumentException("Expected integral texture parameter");return (int)value;}
     private static UnsupportedOperationException unsupported(int name){return new UnsupportedOperationException("Unsupported owned texture parameter: "+name);}
     private void retire(AutoCloseable resource){if(queue==null)BlazeQueue.closeResource(resource);else queue.retire(resource);}

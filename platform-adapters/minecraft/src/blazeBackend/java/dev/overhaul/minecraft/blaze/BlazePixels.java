@@ -10,15 +10,24 @@ import static org.lwjgl.opengl.GL12.*;
 final class BlazePixels {
     private BlazePixels(){}
     static int components(int format){return switch(format){
-        case GL_RED,GL_DEPTH_COMPONENT->1;case 33319->2;case GL_RGB,GL_BGR->3;case GL_RGBA,GL_BGRA->4;
+        case GL_RED,GL_DEPTH_COMPONENT,GL_STENCIL_INDEX,36244->1;case 33319,33320,34041->2;case GL_RGB,GL_BGR,36248,36250->3;case GL_RGBA,GL_BGRA,36249,36251->4;
         default->throw new UnsupportedOperationException("Unsupported pixel format: "+format);
     };}
     static int bytes(int format,int type){
         int components=components(format);
-        if(type==GL_UNSIGNED_BYTE)return components;
-        if(type==GL_FLOAT)return Math.multiplyExact(components,4);
-        if((type==GL_UNSIGNED_INT_8_8_8_8||type==GL_UNSIGNED_INT_8_8_8_8_REV)&&components==4)return 4;
-        throw new UnsupportedOperationException("Unsupported pixel component type: "+type);
+        return switch(type){
+            case GL_BYTE,GL_UNSIGNED_BYTE->components;
+            case GL_SHORT,GL_UNSIGNED_SHORT,5131->Math.multiplyExact(components,2);
+            case GL_INT,GL_UNSIGNED_INT,GL_FLOAT->Math.multiplyExact(components,4);
+            case GL_UNSIGNED_SHORT_5_6_5,GL_UNSIGNED_SHORT_5_6_5_REV,GL_UNSIGNED_SHORT_4_4_4_4,GL_UNSIGNED_SHORT_4_4_4_4_REV,GL_UNSIGNED_SHORT_5_5_5_1,GL_UNSIGNED_SHORT_1_5_5_5_REV->2;
+            case GL_UNSIGNED_INT_8_8_8_8,GL_UNSIGNED_INT_8_8_8_8_REV,GL_UNSIGNED_INT_10_10_10_2,GL_UNSIGNED_INT_2_10_10_10_REV,34042,35899,35902->4;
+            default->throw new UnsupportedOperationException("Unsupported pixel component type: "+type);
+        };
+    }
+    /** Source layouts the CPU converter reads; anything else needs matching storage for a direct copy. */
+    static boolean convertible(int format,int type){
+        if(format==GL_DEPTH_COMPONENT||format==GL_STENCIL_INDEX||format==34041||format==36244||format==33320||format>=36248&&format<=36251)return false;
+        return type==GL_UNSIGNED_BYTE||type==GL_FLOAT||(type==GL_UNSIGNED_INT_8_8_8_8||type==GL_UNSIGNED_INT_8_8_8_8_REV)&&components(format)==4;
     }
     static ByteBuffer unpack(ByteBuffer input,BlazePixelStore.Layout layout,int width,int height,int format,int type,int channels,int storageBytes){
         if(input.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel source is truncated");

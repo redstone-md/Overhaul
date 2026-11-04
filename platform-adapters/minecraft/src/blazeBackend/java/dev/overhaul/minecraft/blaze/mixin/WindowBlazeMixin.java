@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.platform.Window;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeGlBoundary;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.MinecraftBlazeAccess;
 import net.minecraft.client.Minecraft;
@@ -61,8 +62,8 @@ public abstract class WindowBlazeMixin {
         }catch(RuntimeException|Error failure){
             try{overhaul$releaseFailedWindow();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;
         }
-        // The original constructor discards the return value; no OpenGL capability object exists in this mode.
-        return null;
+        // No OpenGL context exists in this mode; mods that query capabilities or call GL directly get the owned boundary.
+        return BlazeGlBoundary.install();
     }
     @Inject(method="<init>",at=@At("RETURN"))
     private void overhaul$applyFinalWindowMode(CallbackInfo callback){

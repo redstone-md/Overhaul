@@ -70,7 +70,7 @@ public final class BlazeTextures implements AutoCloseable {
     public void image(int target,int level,int internal,int width,int height,int border,int format,int type,IntBuffer input){
         requireOpen();if(target==GL_PROXY_TEXTURE_2D){proxy(level,internal,width,height,border,format,type,input);return;}
         target(target);if(border!=0||level<0)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
-        BlazePixels.bytes(format,type);if(format==GL_DEPTH_COMPONENT)throw new UnsupportedOperationException("Depth texture allocation is owned by framebuffer targets");
+        BlazePixels.bytes(format,type);
         var texture=current();
         if(level==0){
             int physical=32-Integer.numberOfLeadingZeros(Math.max(width,height));
@@ -78,7 +78,7 @@ public final class BlazeTextures implements AutoCloseable {
         }else{
             var image=texture.image();if(texture.mip(level)>=image.mipLevels()||image.width(texture.mip(level))!=width||image.height(texture.mip(level))!=height||texture.internal!=internal)
                 throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
-            clearColor(image,texture.mip(level),texture.layer(),0,0,0,texture.channels==4?0:1);
+            if(!image.format().isDepth())clearColor(image,texture.mip(level),texture.layer(),0,0,0,texture.channels==4?0:1);
             texture.define(level);
         }
         if(input!=null)upload(target,level,0,0,width,height,format,type,MemoryUtil.memByteBuffer(input));
@@ -92,10 +92,15 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void upload(int target,int level,int x,int y,int width,int height,int format,int type,ByteBuffer source){
         target(target);if(width==0||height==0)return;var texture=current();
-        if(texture.image().format().isDepth())throw new UnsupportedOperationException("Depth texture uploads require a depth conversion profile");
         var area=region(texture,level,x,y,width,height);var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         if(source.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel source is truncated");
         int storage=texture.image().format().bytesPerPixel();
+        if(!BlazeTextureFormats.storage(texture.internal).convertible()||!BlazePixels.convertible(format,type)){
+            if(texture.image().format().isDepth()||BlazePixels.bytes(format,type)!=storage){
+                BlazeGlBoundary.reportOnce("upload "+texture.internal+" "+format+" "+type,"Texture upload with no conversion was skipped: internal "+texture.internal+", format "+format+", type "+type);return;
+            }
+            var exact=source.slice();exact.position(layout.offset());exact.limit(layout.bytes());uploadImage(texture.image(),area,exact.slice(),layout.stride());return;
+        }
         if(type==GL_UNSIGNED_BYTE&&texture.channels==storage&&BlazePixels.components(format)==storage&&format!=GL_BGRA&&format!=GL_BGR&&layout.stride()>=(long)width*storage){
             var direct=source.slice();direct.position(layout.offset());direct.limit(layout.bytes());uploadImage(texture.image(),area,direct.slice(),layout.stride());return;
         }

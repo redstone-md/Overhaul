@@ -16,10 +16,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class RenderSystemBlazeBootstrapMixin {
     @Shadow private static String apiDescription;
     @Shadow private static int MAX_SUPPORTED_TEXTURE_SIZE;
-    @Inject(method="initRenderer",at=@At("HEAD"),cancellable=true)
+    /** The original body runs against the GL boundary so other mods' hooks on this method still fire. */
+    @Inject(method="initRenderer",at=@At("RETURN"))
     private static void overhaul$initializeVulkan(int debugVerbosity,boolean synchronousDebug,CallbackInfo callback){
         var renderer=BlazeFrontend.current();if(renderer==null)return;
-        RenderSystem.assertOnRenderThreadOrInit();apiDescription="Vulkan / "+renderer.context().deviceName();callback.cancel();
+        RenderSystem.assertOnRenderThreadOrInit();apiDescription="Vulkan / "+renderer.context().deviceName();
     }
     @Inject(method="maxSupportedTextureSize",at=@At("HEAD"),cancellable=true)
     private static void overhaul$nativeTextureLimit(CallbackInfoReturnable<Integer> callback){
