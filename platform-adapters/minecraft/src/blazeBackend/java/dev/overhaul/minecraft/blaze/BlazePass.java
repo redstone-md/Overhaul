@@ -38,10 +38,8 @@ final class BlazePass implements BlazeQueue.Operation {
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     @Override public void record(VkCommandBuffer command){
-        int x=state.scissor()?Math.max(0,state.sx()):0,y=state.scissor()?Math.max(0,state.sy()):0;
-        long right=state.scissor()?Math.min(target.width(),(long)state.sx()+state.sw()):target.width();
-        long top=state.scissor()?Math.min(target.height(),(long)state.sy()+state.sh()):target.height();
-        if(state.width()==0||state.height()==0||right<=x||top<=y||mesh.state().indexCount()==0)return;
+        int[] clip=clip(state,target);
+        if(clip==null||mesh.state().indexCount()==0)return;
         for(BlazeTextures.Sampled sample:samples){
             GpuImageView view=sample.view();
             images.transition(command,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -51,10 +49,20 @@ final class BlazePass implements BlazeQueue.Operation {
             target.begin(command,stack);
             vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
             vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(descriptors.set()),null);
-            vkCmdSetViewport(command,0,VkViewport.calloc(1,stack).x(state.x()).y(state.y()).width(state.width()).height(state.height()).minDepth(0).maxDepth(1));
-            var clip=VkRect2D.calloc(1,stack);clip.offset().set(x,y);clip.extent().set((int)(right-x),(int)(top-y));vkCmdSetScissor(command,0,clip);
+            dynamicState(command,stack,state,clip);
             mesh.record(command);vkCmdEndRenderPass(command);
         }
+    }
+    /** The scissor rectangle as x, y, width, height clipped to the target; null when nothing can be drawn. */
+    static int[] clip(BlazeDrawState.Snapshot state,BlazeTarget target){
+        int x=state.scissor()?Math.max(0,state.sx()):0,y=state.scissor()?Math.max(0,state.sy()):0;
+        long right=state.scissor()?Math.min(target.width(),(long)state.sx()+state.sw()):target.width();
+        long top=state.scissor()?Math.min(target.height(),(long)state.sy()+state.sh()):target.height();
+        return state.width()==0||state.height()==0||right<=x||top<=y?null:new int[]{x,y,(int)(right-x),(int)(top-y)};
+    }
+    static void dynamicState(VkCommandBuffer command,MemoryStack stack,BlazeDrawState.Snapshot state,int[] clip){
+        vkCmdSetViewport(command,0,VkViewport.calloc(1,stack).x(state.x()).y(state.y()).width(state.width()).height(state.height()).minDepth(0).maxDepth(1));
+        var scissor=VkRect2D.calloc(1,stack);scissor.offset().set(clip[0],clip[1]);scissor.extent().set(clip[2],clip[3]);vkCmdSetScissor(command,0,scissor);
     }
     @Override public void submitted(FrameRing.Submission submission){
         images.submitted(submission);

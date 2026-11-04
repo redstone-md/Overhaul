@@ -60,6 +60,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
     }
 
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
+    private static volatile BlazeGlBuffers active;
     private final AtomicInteger objectNames = new AtomicInteger(1);
     private final AtomicInteger framebufferNames = new AtomicInteger(BlazeRenderer.FOREIGN_FRAMEBUFFERS);
     private final Map<Integer, Long> strings = new ConcurrentHashMap<>();
@@ -73,7 +74,11 @@ public final class BlazeGlBoundary implements FunctionProvider {
         BlazeGlBuffers buffers = new BlazeGlBuffers();
         BlazeGlRoutes.install(answers, buffers);
         buffers.install(answers);
+        active = buffers;
     }
+
+    /** The buffer objects mods created through the installed table; native renderer paths read them by name. */
+    static BlazeGlBuffers buffers() { return active; }
 
     /** Reports a mod request the frontend cannot honour, once per kind, without failing the mod. */
     public static void reportOnce(String key, String message) {

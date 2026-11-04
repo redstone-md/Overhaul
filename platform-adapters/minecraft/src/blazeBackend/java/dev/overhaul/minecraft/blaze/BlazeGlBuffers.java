@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import dev.overhaul.minecraft.blaze.BlazeGlBoundary.Answer;
 import dev.overhaul.minecraft.blaze.BlazeGlBoundary.Arguments;
+import dev.overhaul.vulkan.GpuBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import org.lwjgl.system.MemoryUtil;
@@ -19,6 +20,8 @@ final class BlazeGlBuffers {
         long address;
         long size;
         boolean mapped;
+        GpuBuffer device;
+        BlazeRenderer owner;
     }
 
     private final Map<Integer, Store> stores = new HashMap<>();
@@ -52,13 +55,16 @@ final class BlazeGlBuffers {
         table.put("gl" + buffer + "SubData", locked(arguments -> {
             Store store = store(selector.name(arguments));
             long offset = arguments.pointer(1), size = arguments.pointer(2);
-            if (inside(store, offset, size) && arguments.pointer(3) != 0) MemoryUtil.memCopy(arguments.pointer(3), store.address + offset, size);
+            if (inside(store, offset, size) && arguments.pointer(3) != 0) {
+                if (store.device != null) store.owner.writeGlDeviceBuffer(store.device, offset, arguments.pointer(3), size);
+                else MemoryUtil.memCopy(arguments.pointer(3), store.address + offset, size);
+            }
             return 0;
         }));
         table.put("glGet" + buffer + "SubData", locked(arguments -> {
             Store store = store(selector.name(arguments));
             long offset = arguments.pointer(1), size = arguments.pointer(2);
-            if (inside(store, offset, size)) MemoryUtil.memCopy(store.address + offset, arguments.pointer(3), size);
+            if (store.address != 0 && inside(store, offset, size)) MemoryUtil.memCopy(store.address + offset, arguments.pointer(3), size);
             return 0;
         }));
         table.put("glMap" + buffer, locked(arguments -> map(store(selector.name(arguments)), 0)));
@@ -102,8 +108,35 @@ final class BlazeGlBuffers {
 
     private Store store(int name) { return stores.computeIfAbsent(name, ignored -> new Store()); }
 
+    /**
+     * Moves a buffer drawn by a native renderer path to device memory and releases its host copy, so geometry is held once.
+     * Later writes are staged in order with draws. Null when the name has no storage.
+     */
+    synchronized GpuBuffer device(BlazeRenderer renderer, int name) {
+        Store store = stores.get(name);
+        if (store == null || (store.address == 0 && store.device == null)) return null;
+        if (store.device == null) adopt(renderer, store);
+        return store.device;
+    }
+
+    private static void adopt(BlazeRenderer renderer, Store store) {
+        store.device = renderer.newGlDeviceBuffer(store.size);
+        store.owner = renderer;
+        if (store.size > 0) renderer.writeGlDeviceBuffer(store.device, 0, store.address, store.size);
+        MemoryUtil.nmemFree(store.address);
+        store.address = 0;
+    }
+
+    private static void releaseDevice(Store store) {
+        if (store.device == null) return;
+        store.owner.retireGlDeviceBuffer(store.device);
+        store.device = null;
+        store.owner = null;
+    }
+
     private long define(int name, long size, long source) {
         Store store = store(name);
+        releaseDevice(store);
         long bytes = Math.max(size, 1);
         long address = MemoryUtil.nmemCalloc(1, bytes);
         if (address == 0) throw new OutOfMemoryError("Buffer host storage of " + bytes + " bytes");
@@ -123,16 +156,27 @@ final class BlazeGlBuffers {
 
     private long copy(int from, int to, long fromOffset, long toOffset, long size) {
         Store source = store(from), target = store(to);
-        if (inside(source, fromOffset, size) && inside(target, toOffset, size)) MemoryUtil.memCopy(source.address + fromOffset, target.address + toOffset, size);
+        if (!inside(source, fromOffset, size) || !inside(target, toOffset, size)) return 0;
+        if (source.device != null) {
+            // A device-held source can only be copied on the device, which pulls the destination there too.
+            if (target.device == null) adopt(source.owner, target);
+            source.owner.copyGlDeviceBuffer(source.device, fromOffset, target.device, toOffset, size);
+        } else if (target.device != null) {
+            target.owner.writeGlDeviceBuffer(target.device, toOffset, source.address + fromOffset, size);
+        } else {
+            MemoryUtil.memCopy(source.address + fromOffset, target.address + toOffset, size);
+        }
         return 0;
     }
 
     private static boolean inside(Store store, long offset, long size) {
-        return store.address != 0 && offset >= 0 && size >= 0 && offset <= store.size - size;
+        return (store.address != 0 || store.device != null) && offset >= 0 && size >= 0 && offset <= store.size - size;
     }
 
     private void delete(int name) {
         Store store = stores.remove(name);
-        if (store != null && store.address != 0) MemoryUtil.nmemFree(store.address);
+        if (store == null) return;
+        releaseDevice(store);
+        if (store.address != 0) MemoryUtil.nmemFree(store.address);
     }
 }

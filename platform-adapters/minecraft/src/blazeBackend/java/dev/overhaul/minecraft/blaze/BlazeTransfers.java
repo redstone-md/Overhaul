@@ -36,6 +36,22 @@ final class BlazeTransfers {
             return destination;
         }catch(RuntimeException|Error failure){queue.retire(destination);throw failure;}
     }
+    /** Stages host bytes in order with draws, so bytes that earlier queued draws read stay intact until those draws ran. */
+    void write(GpuBuffer target,long targetOffset,long source,long bytes){
+        for(long done=0;done<bytes;){
+            int length=(int)Math.min(MAX_CHUNK,bytes-done);
+            BlazeBufferPool.Slice staging=host.acquire(length);
+            try{
+                staging.write(org.lwjgl.system.MemoryUtil.memByteBuffer(source+done,length));
+                BlazeBufferPool.Slice owned=staging;staging=null;
+                queue.add(new DeviceCopy(owned.buffer(),owned.offset(),target,targetOffset+done,length,owned),length);
+            }finally{if(staging!=null)staging.close();}
+            done+=length;
+        }
+    }
+    void copy(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes){
+        if(bytes>0)queue.add(new DeviceCopy(source,sourceOffset,target,targetOffset,bytes,null),0);
+    }
     void upload(GpuImage target,ImageRegion region,ByteBuffer source,int pitch){
         int tight=Math.multiplyExact(region.width(),target.format().bytesPerPixel());
         int stride=pitch==0?tight:pitch;
@@ -76,6 +92,28 @@ final class BlazeTransfers {
         @Override public void record(VkCommandBuffer nativeCommand){command.record(nativeCommand);}
         @Override public void submitted(FrameRing.Submission submission){command.complete();for(GpuImage image:images)image.retainUntil(submission);}
         @Override public void close(){if(!closed){closed=true;try{command.close();}finally{if(staging!=null)staging.close();}}}
+    }
+    /** A copy into a long-lived buffer, which earlier draws may still read and later draws or copies will read. */
+    private static final class DeviceCopy implements BlazeQueue.Operation {
+        private static final int READERS=VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_INDEX_READ_BIT;
+        private static final int COPIES=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
+        private static final int STAGES=VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT;
+        private final GpuBuffer source,target;
+        private final long sourceOffset,targetOffset,bytes;
+        private final BlazeBufferPool.Slice staging;
+        private DeviceCopy(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes,BlazeBufferPool.Slice staging){
+            this.source=source;this.sourceOffset=sourceOffset;this.target=target;this.targetOffset=targetOffset;this.bytes=bytes;this.staging=staging;
+        }
+        @Override public void record(VkCommandBuffer command){
+            try(MemoryStack stack=MemoryStack.stackPush()){
+                var before=VkMemoryBarrier.calloc(1,stack).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(COPIES);
+                vkCmdPipelineBarrier(command,STAGES,VK_PIPELINE_STAGE_TRANSFER_BIT,0,before,null,null);
+                vkCmdCopyBuffer(command,source.handle(),target.handle(),VkBufferCopy.calloc(1,stack).srcOffset(sourceOffset).dstOffset(targetOffset).size(bytes));
+                var after=VkMemoryBarrier.calloc(1,stack).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(READERS|COPIES);
+                vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,STAGES,0,after,null,null);
+            }
+        }
+        @Override public void close(){if(staging!=null)staging.close();}
     }
     private static final class BufferCopy implements BlazeQueue.Operation {
         private final BlazeBufferPool.Slice source,target;
