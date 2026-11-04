@@ -21,6 +21,7 @@ final class PassAttachments implements AutoCloseable {
     private final int[] colorReferences;
     private int depthReference=VK_ATTACHMENT_UNUSED;
     private int depthFormat=VK_FORMAT_UNDEFINED;
+    private PassBindings.Viewport boundViewport;
     final int width,height,x,y,areaWidth,areaHeight;
     long renderPass,framebuffer;
 
@@ -117,7 +118,15 @@ final class PassAttachments implements AutoCloseable {
             begin.renderArea().offset().set(x,y);begin.renderArea().extent().set(areaWidth,areaHeight);
             vkCmdBeginRenderPass(command,begin,VK_SUBPASS_CONTENTS_INLINE);
             vkCmdSetViewport(command,0,VkViewport.calloc(1,stack).width(width).height(height).minDepth(0).maxDepth(1));
+            boundViewport=null;
         }
+    }
+    void viewport(VkCommandBuffer command,PassBindings.Viewport requested,MemoryStack stack){
+        if(java.util.Objects.equals(boundViewport,requested))return;
+        var view=VkViewport.calloc(1,stack).minDepth(0).maxDepth(1);
+        if(requested==null)view.width(width).height(height);
+        else view.x(requested.x()).y(requested.y()).width(Math.max(1,requested.width())).height(Math.max(1,requested.height()));
+        vkCmdSetViewport(command,0,view);boundViewport=requested;
     }
     private void create(){
         lease.create();renderPass=lease.renderPass();framebuffer=lease.framebuffer();

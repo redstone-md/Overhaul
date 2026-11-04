@@ -33,11 +33,7 @@ record PassBindings(OverhaulPipeline pipeline,Object[] uniforms,Map<Integer,GpuB
     }
     void geometry(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments,java.util.List<dev.overhaul.vulkan.NativeGraphicsPipeline.Binding> expectedBindings){
         try(MemoryStack stack=MemoryStack.stackPush()){
-            // Restore every draw's state, including the full-target default after a custom viewport.
-            var view=VkViewport.calloc(1,stack).minDepth(0).maxDepth(1);
-            if(viewport==null)view.width(attachments.width).height(attachments.height);
-            else view.x(viewport.x()).y(viewport.y()).width(Math.max(1,viewport.width())).height(Math.max(1,viewport.height()));
-            vkCmdSetViewport(command,0,view);
+            attachments.viewport(command,viewport,stack);
             for(var expected:expectedBindings){
                 GpuBufferSlice slice=vertices.get(expected.slot());
                 if(slice==null)throw new IllegalStateException("Missing vertex buffer slot "+expected.slot());
