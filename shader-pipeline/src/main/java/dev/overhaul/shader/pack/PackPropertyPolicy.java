@@ -6,8 +6,8 @@ import java.util.regex.Pattern;
 /**
  * Properties a pack can set that this pipeline does not honor but that leave its shaders valid:
  * the pack runs with default behavior for them. Keys that change what shaders read or compute
- * (uniform.*, variable.*, scale.*, bufferObject.*, image.*, indirect.*, iris.features.required)
- * stay out of this list and remain blocking, as does every unknown key.
+ * (scale.*, bufferObject.*, image.*, indirect.*, iris.features.required) stay out of this list and
+ * remain blocking, as does every unknown key. Custom uniform definitions are evaluated, not ignored.
  */
 final class PackPropertyPolicy {
     private static final Set<String> IGNORED = Set.of("clouds","dhClouds","oldHandLight","dynamicHandLight","oldLighting",

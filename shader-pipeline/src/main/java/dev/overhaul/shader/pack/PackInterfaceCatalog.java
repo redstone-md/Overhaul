@@ -18,7 +18,8 @@ import java.util.TreeMap;
  * see that code. Types of UNBOUND names come from Iris and OptiFine usage and are not exercised.
  */
 public final class PackInterfaceCatalog {
-    public enum Binding { BOUND, UNBOUND }
+    /** CONSTANT names run with the "unknown" value, since no id mapping from *.properties exists yet. */
+    public enum Binding { BOUND, CONSTANT, UNBOUND }
     public record UniformInfo(String type, Binding binding) {}
 
     private static final Map<String,UniformInfo> UNIFORMS = uniforms();
@@ -31,18 +32,17 @@ public final class PackInterfaceCatalog {
     private static Map<String,UniformInfo> uniforms() {
         Map<String,UniformInfo> table = new HashMap<>();
         add(table,Binding.BOUND,"float","viewWidth","viewHeight","aspectRatio","frameTime","frameTimeCounter","near","far",
-                "rainStrength","thunderStrength","eyeAltitude","screenBrightness","pi","sunAngle","shadowAngle");
-        add(table,Binding.BOUND,"int","frameCounter","worldTime","worldDay","moonPhase","isEyeInWater");
-        add(table,Binding.BOUND,"ivec2","eyeBrightness");
+                "rainStrength","thunderStrength","eyeAltitude","screenBrightness","pi","sunAngle","shadowAngle",
+                "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef");
+        add(table,Binding.BOUND,"int","frameCounter","worldTime","worldDay","moonPhase","isEyeInWater","fogMode","fogShape","heldBlockLightValue","heldBlockLightValue2","hideGUI");
+        add(table,Binding.BOUND,"ivec2","eyeBrightness","eyeBrightnessSmooth","atlasSize");
+        add(table,Binding.CONSTANT,"int","heldItemId","heldItemId2","entityId","blockEntityId");
         add(table,Binding.BOUND,"vec3","cameraPosition","previousCameraPosition","fogColor","skyColor","sunPosition","moonPosition",
                 "shadowLightPosition","upPosition");
         add(table,Binding.BOUND,"mat4","gbufferProjection","gbufferProjectionInverse","gbufferModelView","gbufferModelViewInverse",
                 "gbufferPreviousProjection","gbufferPreviousModelView","shadowProjection","shadowProjectionInverse","shadowModelView","shadowModelViewInverse");
-        add(table,Binding.UNBOUND,"int","fogMode","fogShape","heldItemId","heldBlockLightValue","heldItemId2","heldBlockLightValue2",
-                "entityId","blockEntityId","hideGUI","renderStage","bossBattle","terrainIconSize");
-        add(table,Binding.UNBOUND,"float","fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor",
-                "darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef");
-        add(table,Binding.UNBOUND,"ivec2","eyeBrightnessSmooth","atlasSize","terrainTextureSize");
+        add(table,Binding.UNBOUND,"int","renderStage","bossBattle","terrainIconSize");
+        add(table,Binding.UNBOUND,"ivec2","terrainTextureSize");
         add(table,Binding.UNBOUND,"ivec4","blendFunc");
         add(table,Binding.UNBOUND,"vec4",ENTITY_COLOR,"colorModulator","spriteBounds");
         add(table,Binding.UNBOUND,"vec3","chunkOffset");
@@ -62,8 +62,14 @@ public final class PackInterfaceCatalog {
      * samplers the pack supplies through properties.
      */
     public static List<PackDiagnostic> check(String program, ProgramBindings bindings, boolean scene, Set<String> customTextures) {
+        return check(program,bindings,scene,customTextures,Set.of());
+    }
+    /** {@code customUniforms} names values the pack defines itself, which any declared type can read. */
+    public static List<PackDiagnostic> check(String program, ProgramBindings bindings, boolean scene, Set<String> customTextures, Set<String> customUniforms) {
         List<PackDiagnostic> diagnostics = new ArrayList<>();
-        for (var entry : new TreeMap<>(bindings.uniforms()).entrySet()) checkUniform(program,entry.getKey(),entry.getValue().type(),scene,diagnostics);
+        for (var entry : new TreeMap<>(bindings.uniforms()).entrySet()) {
+            if (!customUniforms.contains(entry.getKey())) checkUniform(program,entry.getKey(),entry.getValue().type(),scene,diagnostics);
+        }
         for (String sampler : new TreeMap<>(bindings.samplers()).keySet()) {
             if (customTextures.contains(sampler) || sampler.equals("noisetex")) continue;
             if (!bound(sampler,scene)) diagnostics.add(PackDiagnostic.blocking(Category.SAMPLER,program+"."+sampler,"No image is bound to this sampler"));
@@ -72,7 +78,9 @@ public final class PackInterfaceCatalog {
             }
         }
         if (scene) for (String attribute : new TreeMap<>(bindings.attributes()).keySet()) {
-            if (!LegacyShaderContract.ATTRIBUTE_TYPES.containsKey(attribute)) {
+            if (PackVertexDefaults.known(attribute)) {
+                diagnostics.add(PackDiagnostic.degraded(Category.ATTRIBUTE,program+"."+attribute,"Runs on a default value: scene geometry does not carry this attribute"));
+            } else if (!LegacyShaderContract.ATTRIBUTE_TYPES.containsKey(attribute)) {
                 diagnostics.add(PackDiagnostic.blocking(Category.ATTRIBUTE,program+"."+attribute,"Scene geometry does not supply this vertex attribute"));
             }
         }
@@ -83,9 +91,10 @@ public final class PackInterfaceCatalog {
         if (generated(name)) return;
         String subject = program+"."+name;
         UniformInfo known = UNIFORMS.get(name);
-        if (known == null) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Unknown uniform; custom uniform.* and variable.* definitions are not evaluated"));
+        if (known == null) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Unknown uniform: neither built in nor defined by the pack's uniform.* properties"));
         else if (!known.type().equals(type)) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Declared "+type+" but this uniform is "+known.type()));
         else if (name.equals(ENTITY_COLOR) && scene) diagnostics.add(PackDiagnostic.info(Category.UNIFORM,subject,"Bound only on entity pipelines, where the adapter lowers it"));
+        else if (known.binding() == Binding.CONSTANT) diagnostics.add(PackDiagnostic.degraded(Category.UNIFORM,subject,"Reads -1: ids from *.properties are not mapped yet"));
         else if (known.binding() == Binding.UNBOUND) diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,subject,"Known uniform with no value source yet"));
     }
 

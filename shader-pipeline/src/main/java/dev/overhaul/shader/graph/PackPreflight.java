@@ -2,6 +2,7 @@ package dev.overhaul.shader.graph;
 
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackCustomUniforms;
 import dev.overhaul.shader.pack.PackDiagnostic;
 import dev.overhaul.shader.pack.PackDiagnostic.Category;
 import dev.overhaul.shader.pack.PackInterfaceCatalog;
@@ -47,8 +48,9 @@ public final class PackPreflight {
         List<CompiledShaderPack.Program> programs = new ArrayList<>();
         List<PackPassPlan.Input> inputs = new ArrayList<>();
         Builders builders = builders(source,compiler,macros,options,catalog,diagnostics);
+        Set<String> customUniforms = customUniforms(catalog,diagnostics);
         if (builders != null) {
-            compilePrograms(catalog,builders,compiler,programs,inputs,diagnostics);
+            compilePrograms(catalog,builders,compiler,programs,inputs,diagnostics,customUniforms);
             finish(source,builders,programs,diagnostics);
         }
         reportFallbacks(catalog,diagnostics);
@@ -68,8 +70,17 @@ public final class PackPreflight {
         }
     }
 
+    private static Set<String> customUniforms(ShaderPackCatalog catalog, List<PackDiagnostic> diagnostics) {
+        try {
+            return PackCustomUniforms.parse(catalog.properties().values()).uniformTypes().keySet();
+        } catch (RuntimeException failure) {
+            diagnostics.add(PackDiagnostic.blocking(Category.UNIFORM,"shaders.properties",message(failure)));
+            return Set.of();
+        }
+    }
+
     private static void compilePrograms(ShaderPackCatalog catalog, Builders builders, ShadercCompiler compiler, List<CompiledShaderPack.Program> programs,
-                                        List<PackPassPlan.Input> inputs, List<PackDiagnostic> diagnostics) {
+                                        List<PackPassPlan.Input> inputs, List<PackDiagnostic> diagnostics, Set<String> customUniforms) {
         long characters = 0;
         for (ShaderPackCatalog.Program discovered : catalog.programs()) {
             String name = discovered.name();
@@ -84,7 +95,7 @@ public final class PackPreflight {
                 CompiledShaderPack.Program program = CompiledShaderPack.compileProgram(discovered,sources,compiler,builders.targets(),builders.shadow(),builders.textures());
                 programs.add(program);
                 inputs.add(PackPassPlan.Input.of(program));
-                diagnostics.addAll(PackInterfaceCatalog.check(name,program.code().descriptors(),program.scene(),PackTextures.customSamplers(catalog.properties(),program.stage())));
+                diagnostics.addAll(PackInterfaceCatalog.check(name,program.code().descriptors(),program.scene(),PackTextures.customSamplers(catalog.properties(),program.stage()),customUniforms));
             } catch (IOException | RuntimeException failure) {
                 diagnostics.add(PackDiagnostic.blocking(Category.PROGRAM,name,message(failure)));
             }

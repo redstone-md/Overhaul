@@ -28,8 +28,14 @@ public final class CompiledShaderPack {
     private final PackShadowSettings shadow;
     private final PackTextures textures;
     private final List<PackDiagnostic> warnings;
-    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);}
+    private final PackCustomUniforms customUniforms;
+    private final PackSmoothing smoothing;
+    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;
+        List<String> texts=new ArrayList<>();for(Sources value:sources.values()){texts.add(value.vertex());texts.add(value.fragment());}smoothing=PackSmoothing.scan(texts);}
     public List<Program> programs(){return programs;}
+    public PackSmoothing smoothing(){return smoothing;}
+    /** Evaluated once per frame by whoever fills this generation's uniform blocks. */
+    public PackCustomUniforms customUniforms(){return customUniforms;}
     /** Pack features this generation runs without. */
     public List<PackDiagnostic> warnings(){return warnings;}
     public PackRenderTargets targets(){return targets;}
@@ -64,7 +70,7 @@ public final class CompiledShaderPack {
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
-        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings);
+        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings,PackCustomUniforms.parse(catalog.properties().values()));
     }
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
