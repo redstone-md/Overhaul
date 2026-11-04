@@ -13,7 +13,8 @@ final class BlazeTransfers {
     private final VulkanContext context;
     private final BlazeQueue queue;
     private final BlazeBufferPool host,geometry;
-    BlazeTransfers(VulkanContext context,BlazeQueue queue,BlazeBufferPool host,BlazeBufferPool geometry){this.context=context;this.queue=queue;this.host=host;this.geometry=geometry;}
+    private final BlazeHostArena uploads;
+    BlazeTransfers(VulkanContext context,BlazeQueue queue,BlazeBufferPool host,BlazeBufferPool geometry,BlazeHostArena uploads){this.context=context;this.queue=queue;this.host=host;this.geometry=geometry;this.uploads=uploads;}
     BlazeBufferPool.Slice geometry(ByteBuffer source){
         return geometry(source.remaining(),(target,offset)->target.put(source.slice(source.position()+offset,target.remaining())));
     }
@@ -70,6 +71,7 @@ final class BlazeTransfers {
         }
     }
     private void uploadChunk(GpuImage target,ImageRegion region,ByteBuffer source,int pitch,int bytes){
+        if(bytes<=BlazeUploadBatch.MAX_BYTES){batched(target,region,source,pitch,bytes);return;}
         BlazeBufferPool.Slice staging=host.acquire(bytes);
         try{
             staging.write(source.slice(source.position(),bytes));
@@ -77,6 +79,13 @@ final class BlazeTransfers {
             ImageOperation operation=new ImageOperation(command,staging,new GpuImage[]{target});staging=null;
             queue.add(operation,bytes);
         }finally{if(staging!=null)staging.close();}
+    }
+    /** Joins the newest queued operation when it copies into the same image, so an atlas tick costs one command. */
+    private void batched(GpuImage target,ImageRegion region,ByteBuffer source,int pitch,int bytes){
+        BlazeBufferPool.Slice chunk=uploads.reserve(bytes);
+        BlazeUploadBatch batch=queue.last() instanceof BlazeUploadBatch open&&open.accepts(target,chunk,region)?open:null;
+        if(batch==null){batch=new BlazeUploadBatch(context,target,chunk);queue.add(batch,chunk.size());batch.accepts(target,chunk,region);}
+        batch.add(uploads.write(source.slice(source.position(),bytes),bytes),pitch,region);
     }
     void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){image(ImageCommand.clearColor(context,image,mip,layer,r,g,b,a),image);}
     void copy(GpuImage source,ImageRegion from,GpuImage target,ImageRegion to){image(ImageCommand.copy(context,source,from,target,to),source,target);}

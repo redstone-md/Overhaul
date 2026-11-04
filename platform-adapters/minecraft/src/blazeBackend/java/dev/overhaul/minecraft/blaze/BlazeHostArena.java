@@ -3,17 +3,17 @@ package dev.overhaul.minecraft.blaze;
 import java.nio.ByteBuffer;
 
 /**
- * Uniform values of consecutive draws side by side in one host chunk, so a descriptor set written once serves every
- * draw through a dynamic offset. Passes pin the chunk they read until their fence; owner-thread only.
+ * Short-lived values of consecutive operations side by side in one host chunk: uniforms that one descriptor set serves
+ * through dynamic offsets, or pixels that one copy command reads. Readers pin the chunk until their fence; owner-thread only.
  */
-final class BlazeUniformArena implements AutoCloseable {
+final class BlazeHostArena implements AutoCloseable {
     private static final int CHUNK_BYTES=1024*1024;
     private final BlazeBufferPool pool;
     private final int alignment;
     private BlazeBufferPool.Slice chunk;
     private int position;
 
-    BlazeUniformArena(BlazeBufferPool pool,int alignment){this.pool=pool;this.alignment=alignment;}
+    BlazeHostArena(BlazeBufferPool pool,int alignment){this.pool=pool;this.alignment=alignment;}
 
     /** The chunk the next write of this size lands in; a full chunk is left to the passes that pinned it. */
     BlazeBufferPool.Slice reserve(int bytes){

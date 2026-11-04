@@ -46,15 +46,40 @@ public final class ImageCommand implements AutoCloseable {
             int before=target.layout(region.mipLevel(),region.arrayLayer());
             operation.transition(target,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             try (MemoryStack stack=MemoryStack.stackPush()) {
-                VkMemoryBarrier.Buffer host=VkMemoryBarrier.calloc(1,stack).sType$Default()
-                        .srcAccessMask(VK_ACCESS_HOST_WRITE_BIT|VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
-                vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT,0,host,null,null);
+                hostToTransfer(command,stack);
                 vkCmdCopyBufferToImage(command,source.handle(),target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         copyRegion(target,region,offset,pitch,stack));
             }
             operation.transition(target,region,command,finish(target,before));
         });
+    }
+
+    /** One transition per touched subresource and one barrier, however many regions the list holds. */
+    public static ImageCommand copyBufferToImage(VulkanContext context,ImageCopies copies) {
+        GpuImage target=copies.target();
+        return new ImageCommand(context,(operation,command)-> {
+            List<ImageRegion> touched=copies.subresources();
+            int[] before=new int[touched.size()];
+            for (int index=0;index<before.length;index++) {
+                ImageRegion region=touched.get(index);
+                before[index]=target.layout(region.mipLevel(),region.arrayLayer());
+                operation.transition(target,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            }
+            try (MemoryStack stack=MemoryStack.stackPush()) { hostToTransfer(command,stack); }
+            VkBufferImageCopy.Buffer list=VkBufferImageCopy.calloc(copies.size());
+            try {
+                for (int index=0;index<copies.size();index++)
+                    describe(list.get(index),target,copies.region(index),copies.offset(index),copies.pitch(index));
+                vkCmdCopyBufferToImage(command,copies.source().handle(),target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,list);
+            } finally { list.free(); }
+            for (int index=0;index<before.length;index++) operation.transition(target,touched.get(index),command,finish(target,before[index]));
+        });
+    }
+    private static void hostToTransfer(VkCommandBuffer command,MemoryStack stack) {
+        VkMemoryBarrier.Buffer host=VkMemoryBarrier.calloc(1,stack).sType$Default()
+                .srcAccessMask(VK_ACCESS_HOST_WRITE_BIT|VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,0,host,null,null);
     }
 
     public static ImageCommand copyImageToBuffer(VulkanContext context,GpuImage source,ImageRegion region,GpuBuffer target,long offset,int pitch) {
@@ -258,16 +283,19 @@ public final class ImageCommand implements AutoCloseable {
     private static void requireDefined(GpuImage image,ImageRegion region) {
         if (image.layout(region.mipLevel(),region.arrayLayer())==VK_IMAGE_LAYOUT_UNDEFINED) throw new IllegalStateException("Image subresource has not been initialized");
     }
-    private static void validateBuffer(VulkanContext context,GpuBuffer buffer,long offset,int bytes,int usage,GpuImage image) {
+    static void validateBuffer(VulkanContext context,GpuBuffer buffer,long offset,int bytes,int usage,GpuImage image) {
         if (buffer.context()!=context || (buffer.usage()&usage)!=usage) throw new IllegalArgumentException("Buffer owner/transfer usage differs");
         if (offset<0 || offset>buffer.size()-(long)bytes || offset%image.format().bytesPerPixel()!=0
                 || image.format().aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT && offset%4!=0) throw new IllegalArgumentException("Buffer image copy range/alignment is invalid");
     }
     private static VkBufferImageCopy.Buffer copyRegion(GpuImage image,ImageRegion region,long offset,int pitch,MemoryStack stack) {
-        VkBufferImageCopy.Buffer copy=VkBufferImageCopy.calloc(1,stack).bufferOffset(offset)
-                .bufferRowLength(region.rowPitch(image,pitch)/image.format().bytesPerPixel());
+        VkBufferImageCopy.Buffer copy=VkBufferImageCopy.calloc(1,stack);
+        describe(copy.get(0),image,region,offset,pitch); return copy;
+    }
+    private static void describe(VkBufferImageCopy copy,GpuImage image,ImageRegion region,long offset,int pitch) {
+        copy.bufferOffset(offset).bufferRowLength(region.rowPitch(image,pitch)/image.format().bytesPerPixel());
         copy.imageSubresource().aspectMask(image.format().aspectMask()).mipLevel(region.mipLevel()).baseArrayLayer(region.arrayLayer()).layerCount(1);
-        copy.imageOffset().set(region.x(),region.y(),0); copy.imageExtent().set(region.width(),region.height(),1); return copy;
+        copy.imageOffset().set(region.x(),region.y(),0); copy.imageExtent().set(region.width(),region.height(),1);
     }
     private void requireOpen() { context.device(); if (closed) throw new IllegalStateException("Image command is closed"); }
     @Override public void close() {

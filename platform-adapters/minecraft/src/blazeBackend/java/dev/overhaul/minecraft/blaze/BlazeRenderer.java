@@ -33,7 +33,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private ImmediateCommands commands;
     private BlazeQueue queue;
     private BlazeBufferPool hostStorage,geometryStorage;
-    private BlazeUniformArena uniformArena;
+    private BlazeHostArena uniformArena,uploadArena;
     private BlazeDescriptors descriptors;
     private BlazeTransfers transfers;
     private BlazePrograms programs;
@@ -59,9 +59,9 @@ public final class BlazeRenderer implements AutoCloseable {
                 maximumUniformRange=properties.limits().maxUniformBufferRange();
                 hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
                 geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,16);
-                uniformArena=new BlazeUniformArena(hostStorage,alignment);
+                uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
             }
-            descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage);
+            descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage,uploadArena);
             programs=new BlazePrograms(this::forgetProgram);textures=new BlazeTextures(context,allocator,commands,queue,transfers);
             rawFramebuffers=new BlazeRawFramebuffers(context,allocator,queue,textures);
             backBuffer=new BlazeTarget(context,allocator,commands,Math.max(1,width),Math.max(1,height),true);
@@ -76,7 +76,7 @@ public final class BlazeRenderer implements AutoCloseable {
     /** Explicit immediate callers are ordering boundaries; ordinary draws/uploads use the queued lane. */
     public ImmediateCommands commands(){requireOpen();queue.flush();return commands;}
     BlazeBufferPool hostStorage(){requireOpen();return hostStorage;}
-    BlazeUniformArena uniformArena(){requireOpen();return uniformArena;}
+    BlazeHostArena uniformArena(){requireOpen();return uniformArena;}
     BlazeDescriptors descriptors(){requireOpen();return descriptors;}
     int maximumUniformRange(){return maximumUniformRange;}
     public BlazePrograms programs(){requireOpen();return programs;}
@@ -216,7 +216,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
         if(backBuffer!=null)failure=release(backBuffer::close,failure);if(presenter!=null)failure=release(presenter::close,failure);
         if(descriptors!=null)failure=release(descriptors::close,failure);
-        if(uniformArena!=null)failure=release(uniformArena::close,failure);if(geometryStorage!=null)failure=release(geometryStorage::close,failure);if(hostStorage!=null)failure=release(hostStorage::close,failure);
+        if(uniformArena!=null)failure=release(uniformArena::close,failure);if(uploadArena!=null)failure=release(uploadArena::close,failure);if(geometryStorage!=null)failure=release(geometryStorage::close,failure);if(hostStorage!=null)failure=release(hostStorage::close,failure);
         if(queue!=null)failure=release(queue::close,failure);
         if(commands!=null)failure=release(commands::close,failure);if(allocator!=null)failure=release(allocator::close,failure);
         failure=release(context::close,failure);closed=true;
