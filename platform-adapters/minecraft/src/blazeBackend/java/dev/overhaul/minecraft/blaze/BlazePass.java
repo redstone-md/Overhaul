@@ -39,21 +39,38 @@ final class BlazePass implements BlazeQueue.Operation {
             pipeline=owner.pipeline(shader.program(),this.mesh.state(),state,target,descriptors.layout());
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
-    @Override public void record(VkCommandBuffer command){
+    /** Records a batch in order; consecutive draws to one target share a render pass. */
+    static void recordAll(VkCommandBuffer command,List<BlazeQueue.Operation> operations){
+        BlazePass open=null;
+        for(BlazeQueue.Operation operation:operations){
+            if(operation instanceof BlazePass pass)open=pass.record(command,open);
+            else{if(open!=null){vkCmdEndRenderPass(command);open=null;}operation.record(command);}
+        }
+        if(open!=null)vkCmdEndRenderPass(command);
+    }
+    @Override public void record(VkCommandBuffer command){if(record(command,null)!=null)vkCmdEndRenderPass(command);}
+    /** Returns the pass left open for the next draw. Barriers are illegal inside one, so a needed transition ends it first. */
+    private BlazePass record(VkCommandBuffer command,BlazePass open){
         int[] clip=clip(state,target);
-        if(clip==null||mesh.state().indexCount()==0)return;
+        if(clip==null||mesh.state().indexCount()==0)return open;
+        if(open!=null&&(open.target!=target||!samplesSettled())){vkCmdEndRenderPass(command);open=null;}
         for(BlazeTextures.Sampled sample:samples){
             GpuImageView view=sample.view();
             images.transition(command,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
         target.prepare(command,images);
         try(MemoryStack stack=MemoryStack.stackPush()){
-            target.begin(command,stack);
-            vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
+            if(open==null)target.begin(command,stack);
+            if(open==null||open.pipeline!=pipeline)vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
             vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(descriptors.set()),null);
             dynamicState(command,stack,state,clip);
-            mesh.record(command);vkCmdEndRenderPass(command);
+            mesh.record(command);
         }
+        return this;
+    }
+    private boolean samplesSettled(){
+        for(BlazeTextures.Sampled sample:samples)if(!BlazeImageUse.settled(sample.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))return false;
+        return true;
     }
     /** The scissor rectangle as x, y, width, height clipped to the target; null when nothing can be drawn. */
     static int[] clip(BlazeDrawState.Snapshot state,BlazeTarget target){

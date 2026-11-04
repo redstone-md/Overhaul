@@ -56,7 +56,7 @@ final class BlazeQueue implements AutoCloseable {
         try{
             receipt=frames.submit(frame->{
                 frame.retireAfterFence(batch);
-                for(Operation operation:batch.operations)operation.record(frame.command());
+                BlazePass.recordAll(frame.command(),batch.operations);
             });
             latest=receipt;
             batch.accepted=true;
