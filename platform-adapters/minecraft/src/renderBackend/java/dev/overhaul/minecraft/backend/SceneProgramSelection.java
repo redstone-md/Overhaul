@@ -13,6 +13,9 @@ import java.util.Set;
 final class SceneProgramSelection {
     static final Set<String> SUPPORTED=Set.of("gbuffers_basic","gbuffers_textured","gbuffers_textured_lit","gbuffers_terrain","gbuffers_terrain_solid","gbuffers_terrain_cutout",
             "gbuffers_water","gbuffers_entities","gbuffers_entities_translucent","gbuffers_spidereyes","gbuffers_block","gbuffers_block_translucent");
+    /** No pipeline routes to these yet: their geometry keeps its vanilla shader and lands in colortex0 unshaded. */
+    static final Set<String> VANILLA_DRAWN=Set.of("gbuffers_armor_glint","gbuffers_beaconbeam","gbuffers_clouds","gbuffers_damagedblock","gbuffers_entities_glowing",
+            "gbuffers_hand","gbuffers_hand_water","gbuffers_line","gbuffers_lightning","gbuffers_skybasic","gbuffers_skytextured","gbuffers_weather");
     private final Map<String,CompiledShaderPack.Program> programs=new LinkedHashMap<>();
     SceneProgramSelection(CompiledShaderPack pack){for(var program:pack.programs())if(program.stage()==CompiledShaderPack.Stage.GBUFFER)programs.put(baseName(program),program);}
     boolean hasScene(){return !programs.isEmpty();}

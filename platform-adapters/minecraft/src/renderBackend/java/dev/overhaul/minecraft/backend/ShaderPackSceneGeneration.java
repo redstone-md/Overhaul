@@ -32,7 +32,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
     ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler){
         super(owner);this.pack=pack;selection=new SceneProgramSelection(pack);shadows=new ShadowProgramSelection(pack);
         try{
-            var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(ShadowProgramSelection.SUPPORTED);
+            var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(SceneProgramSelection.VANILLA_DRAWN);bound.addAll(ShadowProgramSelection.SUPPORTED);
             runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
             if(scene()||hasShadows()){identityTexture=SceneFallbackTexture.identity(owner);normalTexture=SceneFallbackTexture.flatNormal(owner);specularTexture=SceneFallbackTexture.noSpecular(owner);}
         }catch(RuntimeException|Error failure){close();throw failure;}
