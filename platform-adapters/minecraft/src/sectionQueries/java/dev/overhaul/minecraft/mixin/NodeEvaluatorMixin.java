@@ -29,7 +29,7 @@ public abstract class NodeEvaluatorMixin {
      * @author Overhaul maintainers
      * @reason Avoid the per-lookup capturing function and callback injection allocation while preserving the authoritative map.
      */
-    @Overwrite(remap = false)
+    @Overwrite
     protected Node getNode(int x, int y, int z) {
         return overhaul$nodes.getOrCreate(x, y, z);
     }

@@ -184,7 +184,7 @@ tasks.named('processResources') {
     if (sectionQueries) doLast {
         def config = new File(destinationDir, 'overhaul.mixins.json')
         def json = new groovy.json.JsonSlurper().parse(config)
-        def queryMixins = ['EntitySectionStorageMixin', 'ChunkMapTrackingScopeMixin', 'TrackedEntityIndexMixin']
+        def queryMixins = ['EntitySectionStorageMixin', 'ChunkMapTrackingScopeMixin', 'TrackedEntityIndexMixin', 'NodeEvaluatorMixin']
         if (chunkGeneration) queryMixins += 'RandomStateGenerationMixin'
         if (mappedGeneration) queryMixins += ['ChunkMapMappedGenerationMixin', 'MinecraftServerMappedGenerationMixin',
                 'ChunkMapMappedLightingMixin']
@@ -192,8 +192,7 @@ tasks.named('processResources') {
                 'ChunkStatusGeneration120Mixin']
         if (target.minecraft == '1.21.1') queryMixins += ['ChunkBiomeGeneration121Mixin', 'NoiseTerrainGeneration121Mixin']
         if (target.minecraft == '26.3') queryMixins += ['ChunkMapParseMixin', 'MinecraftServerChunkParseMixin', 'ChunkMapLightingMixin',
-                'ChunkMapGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin',
-                'NodeEvaluatorMixin']
+                'ChunkMapGenerationMixin', 'ChunkBiomeGenerationMixin', 'NoiseTerrainGenerationMixin']
         json.mixins = (json.mixins + queryMixins).unique()
         config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
     }
