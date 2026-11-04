@@ -17,13 +17,15 @@ public final class ShaderPackDimensions {
         if (paths.contains("dimension.properties")) {
             return mappings(source.read("dimension.properties"), identifier);
         }
-        boolean legacy = paths.stream().anyMatch(path -> path.matches("world-?[0-9]+/"));
-        if (!legacy) return "";
-        return switch (identifier) {
+        String legacy = switch (identifier) {
+            case "minecraft:overworld" -> "world0/";
             case "minecraft:the_nether" -> "world-1/";
             case "minecraft:the_end" -> "world1/";
-            default -> "world0/";
+            default -> "";
         };
+        // Iris uses root programs for a dimension without its own folder. An existing folder still
+        // replaces root even when empty, so a pack can leave a dimension unshaded.
+        return paths.contains(legacy) ? legacy : "";
     }
 
     private static String mappings(String text, String dimension) throws IOException {
