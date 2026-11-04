@@ -64,20 +64,16 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
                 stages.get(index).sType$Default().stage(shader.stage()).module(modules[index]).pName(stack.UTF8(shader.entryPoint()));
             }
             VkVertexInputBindingDescription.Buffer bindings=VkVertexInputBindingDescription.calloc(description.bindings().size(),stack);
-            int divisorCount=(int)description.bindings().stream().filter(binding->binding.stepRate()>1).count();
-            VkVertexInputBindingDivisorDescriptionEXT.Buffer divisors=VkVertexInputBindingDivisorDescriptionEXT.calloc(divisorCount,stack);
-            int divisor=0;
             for(int index=0;index<description.bindings().size();index++){
                 Binding value=description.bindings().get(index);
                 bindings.get(index).binding(value.slot()).stride(value.stride()).inputRate(value.stepRate()>0?VK_VERTEX_INPUT_RATE_INSTANCE:VK_VERTEX_INPUT_RATE_VERTEX);
-                if(value.stepRate()>1)divisors.get(divisor++).binding(value.slot()).divisor(value.stepRate());
             }
             VkVertexInputAttributeDescription.Buffer attributes=VkVertexInputAttributeDescription.calloc(description.attributes().size(),stack);
             for(int index=0;index<description.attributes().size();index++){
                 Attribute value=description.attributes().get(index);attributes.get(index).location(value.location()).binding(value.slot()).format(value.format()).offset(value.offset());
             }
             VkPipelineVertexInputStateCreateInfo input=VkPipelineVertexInputStateCreateInfo.calloc(stack).sType$Default().pVertexBindingDescriptions(bindings).pVertexAttributeDescriptions(attributes);
-            if(divisorCount>0)input.pNext(VkPipelineVertexInputDivisorStateCreateInfoEXT.calloc(stack).sType$Default().pVertexBindingDivisors(divisors));
+            VertexBindingDivisors.attach(input,description.bindings(),stack);
             VkPipelineInputAssemblyStateCreateInfo assembly=VkPipelineInputAssemblyStateCreateInfo.calloc(stack).sType$Default().topology(description.topology());
             VkPipelineViewportStateCreateInfo viewport=VkPipelineViewportStateCreateInfo.calloc(stack).sType$Default().viewportCount(1).scissorCount(1);
             if(!description.dynamicViewport()){
