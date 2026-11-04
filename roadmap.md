@@ -444,11 +444,13 @@ buffer; queued draws must never depend on a later mutable camera selection.
 
 The owned terrain shader route preserves the original texture sampling, alpha
 cutout, chunk fade and fog. Cascade selection and overlap blending interpolate
-between the actual lightmap sample and a block-light/ambient sample with the same
-block-light coordinate and zero skylight. This supplies a real receiver path
-without darkening fog or replacing block light with a fabricated constant.
-Entity/block-entity receivers and arbitrary pack-authored cascade conventions
-remain separate required work after this terrain increment.
+between the actual lightmap sample and a sample with the same block-light
+coordinate and dimmed skylight, so shade under open sky is not as dark as a sealed
+cave. This supplies a real receiver path without darkening fog or replacing block
+light with a fabricated constant. Entity and block-entity programs receive the
+same way through their pinned sources. Entity/block-entity casters, OIT and
+emissive receivers and arbitrary pack-authored cascade conventions remain separate
+required work.
 
 Keep camera fitting, native depth ownership, shader adaptation and draw capture in
 orthogonal classes below 500 lines, reusing existing image, descriptor, pipeline
