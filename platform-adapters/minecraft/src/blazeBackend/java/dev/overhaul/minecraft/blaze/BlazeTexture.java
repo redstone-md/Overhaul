@@ -11,6 +11,7 @@ final class BlazeTexture implements AutoCloseable {
     private final GpuAllocator allocator;
     private final BlazeQueue queue;
     private final BlazeTransfers transfers;
+    private final BlazeSamplers samplers;
     private GpuImage image;
     private GpuImageView view,borrowed;
     private GpuSampler sampler;
@@ -20,8 +21,8 @@ final class BlazeTexture implements AutoCloseable {
     private float minLod=-1000,maxLod=1000;
     private boolean attached;
     int channels=4,internal=GL_RGBA;
-    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers){this.allocator=allocator;this.queue=queue;this.transfers=transfers;}
-    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,GpuImageView borrowed){this(allocator,queue,transfers);this.borrowed=borrowed;min=mag=GL_NEAREST;wrapS=wrapT=GL_CLAMP_TO_EDGE;max=borrowed.mipCount()-1;if(borrowed.image().format().isDepth()){internal=36012;channels=1;}}
+    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,BlazeSamplers samplers){this.allocator=allocator;this.queue=queue;this.transfers=transfers;this.samplers=samplers;}
+    BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,BlazeSamplers samplers,GpuImageView borrowed){this(allocator,queue,transfers,samplers);this.borrowed=borrowed;min=mag=GL_NEAREST;wrapS=wrapT=GL_CLAMP_TO_EDGE;max=borrowed.mipCount()-1;if(borrowed.image().format().isDepth()){internal=36012;channels=1;}}
     boolean borrowed(){return borrowed!=null;}
     GpuImage image(){return borrowed!=null?borrowed.image():java.util.Objects.requireNonNull(image,"Texture has no allocated image");}
     int mip(int relative){return Math.addExact(relative,borrowed==null?0:borrowed.baseMip());}
@@ -76,13 +77,14 @@ final class BlazeTexture implements AutoCloseable {
             case GL_TEXTURE_MAG_FILTER->{int selected=integer(value);if(selected!=GL_NEAREST&&selected!=GL_LINEAR)throw unsupported(name);if(mag==selected)return;mag=selected;}
             case GL_TEXTURE_WRAP_S->{int selected=integer(value);address(selected);if(wrapS==selected)return;wrapS=selected;}
             case GL_TEXTURE_WRAP_T->{int selected=integer(value);address(selected);if(wrapT==selected)return;wrapT=selected;}
-            case GL_TEXTURE_BASE_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(base==selected)return;base=selected;}
-            case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(max==selected)return;max=selected;}
+            case GL_TEXTURE_BASE_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(base==selected)return;base=selected;releaseSampling();return;}
+            case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(max==selected)return;max=selected;releaseSampling();return;}
             case GL_TEXTURE_MIN_LOD->{if(minLod==value)return;minLod=value;}
             case GL_TEXTURE_MAX_LOD->{if(maxLod==value)return;maxLod=value;}
             default->{BlazeGlBoundary.reportOnce("parameter "+name,"Texture parameter has no Vulkan sampler state and was ignored: "+name);return;}
         }
-        releaseSampling();
+        // Only the mip range shapes the view; everything else here is sampler state.
+        sampler=null;
     }
     GpuImageView view(){
         if(view==null){
@@ -90,6 +92,7 @@ final class BlazeTexture implements AutoCloseable {
             if(base>=available||max<base)throw new IllegalStateException("Incomplete texture mip range");
             int count=Math.min(available-1,max)-base+1;
             view=source.view(mip(base),count,layer(),1);
+            BlazeStats.viewCreated();
         }
         return view;
     }
@@ -98,7 +101,7 @@ final class BlazeTexture implements AutoCloseable {
             var filter=min==GL_LINEAR||min==GL_LINEAR_MIPMAP_NEAREST||min==GL_LINEAR_MIPMAP_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST;
             boolean mipmapped=min!=GL_NEAREST&&min!=GL_LINEAR;
             float highest=mipmapped?view().mipCount()-1:0,low=Math.max(0,Math.min(highest,minLod)),high=Math.max(low,Math.min(highest,maxLod));
-            sampler=allocator.createSampler(new SamplerSettings(filter,mag==GL_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST,
+            sampler=samplers.get(new SamplerSettings(filter,mag==GL_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST,
                     min==GL_NEAREST_MIPMAP_LINEAR||min==GL_LINEAR_MIPMAP_LINEAR?SamplerSettings.Mipmap.LINEAR:SamplerSettings.Mipmap.NEAREST,
                     address(wrapS),address(wrapT),SamplerSettings.Address.CLAMP,low,high,1,SamplerSettings.Compare.NONE));
         }
@@ -108,6 +111,6 @@ final class BlazeTexture implements AutoCloseable {
     private static int integer(float value){if(value!=(int)value)throw new IllegalArgumentException("Expected integral texture parameter");return (int)value;}
     private static UnsupportedOperationException unsupported(int name){return new UnsupportedOperationException("Unsupported owned texture parameter: "+name);}
     private void retire(AutoCloseable resource){if(queue==null)BlazeQueue.closeResource(resource);else queue.retire(resource);}
-    private void releaseSampling(){if(sampler!=null){GpuSampler old=sampler;sampler=null;retire(old);}if(view!=null){GpuImageView old=view;view=null;retire(old);}}
+    private void releaseSampling(){sampler=null;if(view!=null){GpuImageView old=view;view=null;retire(old);}}
     @Override public void close(){try{releaseSampling();}finally{if(image!=null){GpuImage old=image;image=null;retire(old);}borrowed=null;}}
 }

@@ -26,6 +26,7 @@ public final class BlazeTextures implements AutoCloseable {
     private final ImmediateCommands commands;
     private final BlazeQueue queue;
     private final BlazeTransfers transfers;
+    private final BlazeSamplers samplers;
     private final Map<Integer,BlazeTexture> textures=new HashMap<>();
     private final BlazePixelStore pixels=new BlazePixelStore();
     private final int[] bindings=new int[32];
@@ -38,14 +39,14 @@ public final class BlazeTextures implements AutoCloseable {
     }
     BlazeTextures(VulkanContext context,GpuAllocator allocator,ImmediateCommands commands,BlazeQueue queue,BlazeTransfers transfers){
         this.context=context;this.allocator=allocator;this.commands=commands;
-        this.queue=queue;this.transfers=transfers;
+        this.queue=queue;this.transfers=transfers;samplers=new BlazeSamplers(allocator,queue);
         if(allocator.context()!=context||commands.context()!=context)throw new IllegalArgumentException("Texture dependencies belong to different devices");
-        textures.put(0,new BlazeTexture(allocator,queue,transfers));
+        textures.put(0,new BlazeTexture(allocator,queue,transfers,samplers));
     }
-    public int generate(){requireOpen();int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers));return id;}
+    public int generate(){requireOpen();int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,samplers));return id;}
     public int borrow(GpuImageView view){
         requireOpen();if(view.image().context()!=context||view.layerCount()!=1)throw new IllegalArgumentException("Foreign or layered borrowed texture");
-        int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,view));return id;
+        int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,samplers,view));return id;
     }
     /** The renderable storage behind a name, or null while the name holds none at that level. */
     Attachment attachment(int id,int level){
@@ -188,7 +189,7 @@ public final class BlazeTextures implements AutoCloseable {
     private BlazeTexture current(){requireOpen();return texture(bindings[active]);}
     private BlazeTexture incomplete(){
         if(incomplete==null){
-            var created=new BlazeTexture(allocator,queue,transfers);
+            var created=new BlazeTexture(allocator,queue,transfers,samplers);
             try{created.allocate(GL_RGBA,1,1,1,commands);clearColor(created.image(),0,0,0,0,0,1);incomplete=created;}
             catch(RuntimeException|Error failure){try{created.close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
         }
@@ -222,6 +223,7 @@ public final class BlazeTextures implements AutoCloseable {
         if(closed)return;requireOpen();Throwable failure=null;
         for(var texture:textures.values())try{texture.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
         if(incomplete!=null)try{incomplete.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{incomplete=null;}
+        try{samplers.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
         textures.clear();java.util.Arrays.fill(bindings,0);closed=true;
         if(failure instanceof RuntimeException error)throw error;if(failure instanceof Error error)throw error;
     }
