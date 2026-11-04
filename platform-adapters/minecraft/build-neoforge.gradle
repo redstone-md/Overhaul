@@ -8,11 +8,12 @@ neoForge {
     mods { overhaul { sourceSet sourceSets.main } }
     // Query oracles import the real game classes; keep them outside the transformed JUnit bootstrap.
     if (target.minecraft == '26.3') addModdingDependenciesTo sourceSets.test
-    if (providers.gradleProperty('blazeBackend').isPresent()) {
+    if (['blazeBackend', 'overhaulBackend'].any { providers.gradleProperty(it).isPresent() }) {
         runs {
             client {
                 client()
-                gameDirectory = project.file("run/${targetName}")
+                def suffix = providers.gradleProperty('overhaulBackend').isPresent() ? '-backend' : ''
+                gameDirectory = project.file("run/${targetName}${suffix}")
             }
         }
     }
