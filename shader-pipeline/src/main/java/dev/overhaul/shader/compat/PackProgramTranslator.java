@@ -49,7 +49,11 @@ public final class PackProgramTranslator {
         vs=vs.replaceAll(textureExtension,"");fs=fs.replaceAll(textureExtension,"");
         if (coordinates == null) throw new NullPointerException("coordinates");
         rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
+        var declarations = PackDeclarationNormalizer.declarations(vs,fs);
+        vs = declarations.vertex(); fs = declarations.fragment();
         if (coordinates != CoordinateConvention.NATIVE_VULKAN) {
+            var varyings = PackDeclarationNormalizer.legacyVaryings(vs,fs);
+            vs = varyings.vertex(); fs = varyings.fragment();
             boolean gameFramebuffer=coordinates==CoordinateConvention.OPENGL_LEGACY;
             boolean reversed=coordinates==CoordinateConvention.OPENGL_REVERSED_DEPTH_TARGET;
             vs = LegacyShaderContract.lower(vs,true,gameFramebuffer,reversed); fs = LegacyShaderContract.lower(fs,false,gameFramebuffer,reversed);
