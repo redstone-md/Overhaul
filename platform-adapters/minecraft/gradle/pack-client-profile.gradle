@@ -4,7 +4,7 @@ def profile = providers.gradleProperty('packProfile').get()
 if (!(profile ==~ /[a-z0-9-]+/)) throw new GradleException('packProfile must be a lowercase directory suffix')
 def profileDirectory = project.file("run/${targetName}-${profile}")
 def withoutOverhaul = providers.gradleProperty('packBaseline').isPresent()
-def heap = providers.gradleProperty('packHeap').getOrElse('8G')
+def heap = providers.gradleProperty('packHeap').getOrElse('6G')
 if (withoutOverhaul) neoForge.addModdingDependenciesTo(sourceSets.create('packBaseline'))
 
 neoForge.runs {
