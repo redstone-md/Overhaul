@@ -22,7 +22,7 @@ public final class BlazeMesh implements AutoCloseable {
         BlazeBufferPool.Slice vertex = null, index = null;
         try {
             if (bytes.remaining() != Math.multiplyExact(next.vertexCount(), next.layout().stride())) {
-                throw new IllegalArgumentException("Mesh vertex bytes differ from the actual draw state");
+                throw new IllegalArgumentException("Mesh vertex bytes differ from the actual draw state: "+bytes.remaining()+" bytes for "+next.vertexCount()+" vertices of "+next.layout().stride());
             }
             if (bytes.hasRemaining()) vertex = transfers.geometry(bytes);
             int expected=Math.multiplyExact(next.indexCount(),next.indexBytes());

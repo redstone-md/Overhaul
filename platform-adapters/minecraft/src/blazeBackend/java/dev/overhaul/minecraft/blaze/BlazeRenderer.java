@@ -16,6 +16,8 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** The single owner of native resources for one selected no-API game window. */
 public final class BlazeRenderer implements AutoCloseable {
+    /** Names from this value up are raw OpenGL framebuffers that mods assembled; they have no Vulkan target. */
+    static final int FOREIGN_FRAMEBUFFERS=0x40000000;
     private final VulkanContext context;
     private final long windowHandle;
     private final BlazeDrawState state=new BlazeDrawState();
@@ -95,13 +97,22 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
     private BlazeTarget target(int id){requireOpen();BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
     public void bindFramebuffer(int kind,int id){
+        if(id>=FOREIGN_FRAMEBUFFERS){
+            BlazeGlBoundary.reportOnce("foreign framebuffer","A mod bound a raw OpenGL framebuffer; it has no Vulkan target, so the current target stays bound");
+            return;
+        }
         target(id);
         switch(kind){case 0x8D40-> {drawTarget=id;readTarget=id;}case 0x8CA9->drawTarget=id;case 0x8CA8->readTarget=id;
             default->throw new UnsupportedOperationException("Framebuffer target: 0x"+Integer.toHexString(kind));}
         state.framebufferBindings(drawTarget,readTarget);
     }
 
-    public void draw(BlazeMesh mesh){draw(mesh,programs.activeSnapshot());}
+    public void draw(BlazeMesh mesh){
+        String missing=programs.incompleteActive();
+        if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}
+        draw(mesh,programs.activeSnapshot());
+    }
+    public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
     public void clear(int mask){requireOpen();currentTarget().clear(commands,mask,state.snapshot(),state.clear());}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){

@@ -79,6 +79,17 @@ final class BlazeGlBuffers {
         }));
     }
 
+    /**
+     * Resolves a pixel pointer: with a pixel buffer bound to {@code target} it is an offset into that buffer's host
+     * memory, otherwise it already is an address.
+     */
+    synchronized long pixels(int target, long pointer) {
+        int name = bound(target);
+        if (name == 0) return pointer;
+        Store store = stores.get(name);
+        return store == null || store.address == 0 || pointer < 0 || pointer > store.size ? 0 : store.address + pointer;
+    }
+
     private Answer locked(Answer answer) {
         return arguments -> {
             synchronized (this) {

@@ -27,6 +27,7 @@ public final class BlazePrograms implements AutoCloseable {
         final Map<Integer,String> samplerLocations=new HashMap<>();
         final Map<String,Integer> samplerUnits=new HashMap<>();
         Supplier<BlazeShaderSnapshot> snapshot;
+        String name="unlinked";
     }
     private final Thread owner=Thread.currentThread();
     private final BlazeProgramCompiler compiler;
@@ -53,6 +54,7 @@ public final class BlazePrograms implements AutoCloseable {
         try{
             var vertex=stage(shader.getVertexProgram());var fragment=stage(shader.getFragmentProgram());
             if(vertex.type()!=Program.Type.VERTEX||fragment.type()!=Program.Type.FRAGMENT)throw new IllegalArgumentException("Shader stages have incompatible types");
+            entry.name=vertex.name()+" + "+fragment.name();
             entry.program=compiler.compile(vertex.name(),fragment.name(),vertex.source(),fragment.source(),(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
             Map<String,Integer> locations=new LinkedHashMap<>();var names=new TreeSet<>(entry.program.bindings().uniforms().keySet());names.addAll(entry.program.bindings().samplers().keySet());
             for(String name:names)locations.put(name,locations.size());entry.locations=Map.copyOf(locations);
@@ -76,6 +78,8 @@ public final class BlazePrograms implements AutoCloseable {
         var entry=entry(id);Map<String,Object> textures=new LinkedHashMap<>();for(var sampler:entry.samplerUnits.entrySet())textures.put(sampler.getKey(),renderer.textures().boundId(sampler.getValue()));
         return BlazeShaderSnapshot.capture(compiled(id),uniforms,textures);
     }
+    /** Names the active program when a draw cannot use it, because its shader instance never finished constructing. */
+    public String incompleteActive(){requireOpen();if(active==0)return null;var entry=entry(active);return entry.snapshot==null?entry.name:null;}
     public BlazeShaderSnapshot activeSnapshot(){requireOpen();if(active==0)throw new IllegalStateException("No active Blaze shader");var supplier=entry(active).snapshot;if(supplier==null)throw new IllegalStateException("Shader construction has not completed");return supplier.get();}
     public void release(int id){requireOwner();var entry=programs.remove(id);if(active==id)active=0;if(entry!=null&&entry.program!=null)released.accept(entry.program);}
     private Entry entry(int id){var entry=programs.get(id);if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);return entry;}

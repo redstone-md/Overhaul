@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.mojang.blaze3d.platform.GlStateManager;
 import dev.overhaul.minecraft.blaze.BlazeFramebufferBlit;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeGlBoundary;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,12 +25,9 @@ public abstract class GlFramebufferBlazeMixin {
     private static void overhaul$copy(int sx0,int sy0,int sx1,int sy1,int dx0,int dy0,int dx1,int dy1,int mask,int filter,CallbackInfo c){
         var owner=BlazeFrontend.current();if(owner!=null){BlazeFramebufferBlit.copy(owner,sx0,sy0,sx1,sy1,dx0,dy0,dx1,dy1,mask,filter);c.cancel();}
     }
-    @Inject(method="glGenFramebuffers",at=@At("HEAD"),require=1)
-    private static void overhaul$rawFramebuffer(CallbackInfoReturnable<Integer> c){if(BlazeFrontend.current()!=null)throw new UnsupportedOperationException("Use owned RenderTarget allocation instead of raw framebuffer assembly");}
-    @Inject(method="glGenRenderbuffers",at=@At("HEAD"),require=1)
-    private static void overhaul$rawRenderbuffer(CallbackInfoReturnable<Integer> c){if(BlazeFrontend.current()!=null)throw new UnsupportedOperationException("Raw renderbuffer allocation is not supported by the owned targets");}
-    @Inject(method={"_glFramebufferRenderbuffer","_glFramebufferTexture2D","_glBindRenderbuffer","_glDeleteRenderbuffers","_glRenderbufferStorage"},at=@At("HEAD"),require=1)
-    private static void overhaul$rawAttachment(CallbackInfo c){if(BlazeFrontend.current()!=null)throw new UnsupportedOperationException("Raw renderbuffer/framebuffer assembly is not routed by the Blaze3D frontend");}
-    @Inject(method="_drawElements",at=@At("HEAD"),require=1)
-    private static void overhaul$rawDraw(CallbackInfo c){if(BlazeFrontend.current()!=null)throw new UnsupportedOperationException("Raw VAO draw is not routed by the owned VertexBuffer frontend");}
+    @Inject(method="_drawElements",at=@At("HEAD"),cancellable=true,require=1)
+    private static void overhaul$rawDraw(CallbackInfo c){
+        if(BlazeFrontend.current()==null)return;
+        BlazeGlBoundary.reportOnce("_drawElements","A mod issued a raw VAO draw; it has no native Vulkan path and draws nothing");c.cancel();
+    }
 }

@@ -61,6 +61,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
 
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private final AtomicInteger objectNames = new AtomicInteger(1);
+    private final AtomicInteger framebufferNames = new AtomicInteger(BlazeRenderer.FOREIGN_FRAMEBUFFERS);
     private final Map<Integer, Long> strings = new ConcurrentHashMap<>();
     private final Map<String, Answer> answers = new HashMap<>();
     private final Map<String, Long> addresses = new ConcurrentHashMap<>();
@@ -69,12 +70,13 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private BlazeGlBoundary() {
         queries();
         names();
-        BlazeGlRoutes.install(answers);
-        new BlazeGlBuffers().install(answers);
+        BlazeGlBuffers buffers = new BlazeGlBuffers();
+        BlazeGlRoutes.install(answers, buffers);
+        buffers.install(answers);
     }
 
     /** Reports a mod request the frontend cannot honour, once per kind, without failing the mod. */
-    static void reportOnce(String key, String message) {
+    public static void reportOnce(String key, String message) {
         if (REPORTED.add(key)) LOGGER.warn(message);
     }
 
@@ -107,7 +109,14 @@ public final class BlazeGlBoundary implements FunctionProvider {
         answers.put("glGetString", arguments -> strings.computeIfAbsent(arguments.integer(0),
                 name -> MemoryUtil.memAddress(MemoryUtil.memUTF8(string(name)))));
         answers.put("glGetIntegerv", arguments -> {
-            MemoryUtil.memPutInt(arguments.pointer(1), integer(arguments.integer(0)));
+            long target = arguments.pointer(1);
+            int[] several = integers(arguments.integer(0));
+            if (several == null) {
+                MemoryUtil.memPutInt(target, integer(arguments.integer(0)));
+            } else {
+                // Callers size the buffer for the whole answer; writing less leaves their stack garbage in it.
+                for (int index = 0; index < several.length; index++) MemoryUtil.memPutInt(target + index * (long) Integer.BYTES, several[index]);
+            }
             return 0;
         });
         Answer object = arguments -> objectNames.getAndIncrement();
@@ -127,16 +136,24 @@ public final class BlazeGlBoundary implements FunctionProvider {
     }
 
     private void names() {
-        Answer generate = arguments -> {
-            long target = arguments.pointer(1);
-            for (int index = 0; index < arguments.integer(0); index++) MemoryUtil.memPutInt(target + index * (long) Integer.BYTES, objectNames.getAndIncrement());
-            return 0;
-        };
-        for (String name : new String[]{"glGenBuffers", "glGenVertexArrays", "glGenFramebuffers", "glGenRenderbuffers",
+        Answer generate = generator(objectNames);
+        for (String name : new String[]{"glGenBuffers", "glGenVertexArrays", "glGenRenderbuffers",
                 "glGenQueries", "glGenSamplers", "glGenTransformFeedbacks", "glGenProgramPipelines", "glCreateBuffers",
-                "glCreateVertexArrays", "glCreateFramebuffers", "glCreateRenderbuffers", "glCreateSamplers"}) {
+                "glCreateVertexArrays", "glCreateRenderbuffers", "glCreateSamplers"}) {
             answers.put(name, generate);
         }
+        // Framebuffer names live in their own range, so they can never alias a real target's handle.
+        Answer framebuffers = generator(framebufferNames);
+        answers.put("glGenFramebuffers", framebuffers);
+        answers.put("glCreateFramebuffers", framebuffers);
+    }
+
+    private static Answer generator(AtomicInteger names) {
+        return arguments -> {
+            long target = arguments.pointer(1);
+            for (int index = 0; index < arguments.integer(0); index++) MemoryUtil.memPutInt(target + index * (long) Integer.BYTES, names.getAndIncrement());
+            return 0;
+        };
     }
 
     private static String string(int name) {
@@ -147,6 +164,11 @@ public final class BlazeGlBoundary implements FunctionProvider {
             case 0x8B8C -> "3.30";
             default -> "";
         };
+    }
+
+    private static int[] integers(int name) {
+        var renderer = BlazeFrontend.current();
+        return renderer == null || !RenderSystem.isOnRenderThreadOrInit() ? null : renderer.drawState().integers(name);
     }
 
     private static int integer(int name) {

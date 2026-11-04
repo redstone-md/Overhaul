@@ -53,6 +53,12 @@ public final class BlazeDrawState {
     }
 
     public void framebufferBindings(int draw,int read){drawFramebuffer=draw;readFramebuffer=read;}
+    /** Answers the OpenGL queries that return several integers, or null when the name is a single value. */
+    public int[] integers(int name){
+        return switch(name){case 0x0BA2->new int[]{x,y,width,height};case 0x0C10->new int[]{sx,sy,sw,sh};
+            case 0x0C23->new int[]{colorMask&1,colorMask>>1&1,colorMask>>2&1,colorMask>>3&1};
+            default->null;};
+    }
     public Integer integer(int name){
         return switch(name){case 0x0B71->depth?1:0;case 0x0B72->depthWrite?1:0;case 0x0B74->compare+0x200;
             case 0x0BE2->blend?1:0;case 0x0B44->cull?1:0;case 0x0C11->scissor?1:0;

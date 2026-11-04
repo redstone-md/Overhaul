@@ -10,26 +10,22 @@ import org.lwjgl.system.MemoryUtil;
 /** Routes the OpenGL state and texture entry points that mods call directly into the owned frontend. */
 final class BlazeGlRoutes {
     private static final int TEXTURE_2D = 0x0DE1;
+    private static final int PIXEL_PACK_BUFFER = 0x88EB;
+    private static final int PIXEL_UNPACK_BUFFER = 0x88EC;
 
     private BlazeGlRoutes() {}
 
     private interface Route { void run(BlazeRenderer renderer, Arguments arguments); }
 
-    static void install(Map<String, Answer> table) {
+    static void install(Map<String, Answer> table, BlazeGlBuffers buffers) {
         state(table);
-        textures(table);
+        textures(table, buffers);
         framebuffers(table);
     }
 
     /** Sodium and Veil present the main target with a raw blit, so an inert blit leaves the window black. */
     private static void framebuffers(Map<String, Answer> table) {
-        put(table, "glBindFramebuffer", (renderer, a) -> {
-            try {
-                renderer.bindFramebuffer(a.integer(0), a.integer(1));
-            } catch (IllegalArgumentException unknown) {
-                BlazeGlBoundary.reportOnce("glBindFramebuffer", "A raw OpenGL framebuffer has no Vulkan target; the current target stays bound");
-            }
-        });
+        put(table, "glBindFramebuffer", (renderer, a) -> renderer.bindFramebuffer(a.integer(0), a.integer(1)));
         put(table, "glBlitFramebuffer", (renderer, a) -> BlazeFramebufferBlit.copy(renderer, a.integer(0), a.integer(1), a.integer(2), a.integer(3),
                 a.integer(4), a.integer(5), a.integer(6), a.integer(7), a.integer(8), a.integer(9)));
     }
@@ -66,7 +62,7 @@ final class BlazeGlRoutes {
         }
     }
 
-    private static void textures(Map<String, Answer> table) {
+    private static void textures(Map<String, Answer> table, BlazeGlBuffers buffers) {
         put(table, "glGenTextures", (renderer, a) -> each(a, address -> MemoryUtil.memPutInt(address, renderer.textures().generate())));
         put(table, "glDeleteTextures", (renderer, a) -> each(a, address -> renderer.textures().delete(MemoryUtil.memGetInt(address))));
         put(table, "glActiveTexture", (renderer, a) -> renderer.textures().active(a.integer(0)));
@@ -75,12 +71,13 @@ final class BlazeGlRoutes {
         put(table, "glTexParameteri", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.integer(2)));
         put(table, "glTexImage2D", (renderer, a) -> {
             renderer.textures().image(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), null);
-            if (a.pointer(8) != 0) renderer.textures().upload(a.integer(0), a.integer(1), 0, 0, a.integer(3), a.integer(4), a.integer(6), a.integer(7), a.pointer(8));
+            long source = buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(8));
+            if (source != 0) renderer.textures().upload(a.integer(0), a.integer(1), 0, 0, a.integer(3), a.integer(4), a.integer(6), a.integer(7), source);
         });
-        put(table, "glTexSubImage2D", (renderer, a) -> renderer.textures().upload(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), a.pointer(8)));
-        put(table, "glGetTexImage", (renderer, a) -> renderer.textures().download(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.pointer(4)));
+        put(table, "glTexSubImage2D", (renderer, a) -> renderer.textures().upload(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(8))));
+        put(table, "glGetTexImage", (renderer, a) -> renderer.textures().download(a.integer(0), a.integer(1), a.integer(2), a.integer(3), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(4))));
         put(table, "glGetTexLevelParameteriv", (renderer, a) -> MemoryUtil.memPutInt(a.pointer(3), renderer.textures().levelParameter(a.integer(0), a.integer(1), a.integer(2))));
-        put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.pointer(6)));
+        put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(6))));
     }
 
     private static void each(Arguments arguments, LongConsumer action) {

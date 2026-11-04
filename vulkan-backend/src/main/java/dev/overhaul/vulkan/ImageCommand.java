@@ -111,6 +111,37 @@ public final class ImageCommand implements AutoCloseable {
         transition(target,to,command,finish(target,targetBefore));
     }
 
+    /** Scales or flips between two base levels; each rectangle is {x0,y0,x1,y1} and must lie inside its image. */
+    public static ImageCommand blit(VulkanContext context,GpuImage source,int[] from,GpuImage target,int[] to,int filter) {
+        ImageRegion sourceLevel=ImageRegion.whole(source,0,0),targetLevel=ImageRegion.whole(target,0,0);
+        validateImage(context,source,sourceLevel,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        validateImage(context,target,targetLevel,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        if (source==target) throw new IllegalArgumentException("Image blit requires two images");
+        if (source.format().aspectMask()!=target.format().aspectMask()) throw new IllegalArgumentException("Image blit aspects differ");
+        if (source.format().isDepth()&&(source.format()!=target.format()||filter!=VK_FILTER_NEAREST)) throw new IllegalArgumentException("Depth blits require one format and nearest filtering");
+        requireRectangle(from,source.width(0),source.height(0)); requireRectangle(to,target.width(0),target.height(0));
+        return new ImageCommand(context,(operation,command)-> {
+            requireDefined(source,sourceLevel);
+            int sourceBefore=source.layout(0,0),targetBefore=target.layout(0,0);
+            operation.transition(source,sourceLevel,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            operation.transition(target,targetLevel,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            try (MemoryStack stack=MemoryStack.stackPush()) {
+                VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
+                blit.srcSubresource().aspectMask(source.format().aspectMask()).layerCount(1);
+                blit.dstSubresource().aspectMask(target.format().aspectMask()).layerCount(1);
+                blit.srcOffsets(0).set(from[0],from[1],0); blit.srcOffsets(1).set(from[2],from[3],1);
+                blit.dstOffsets(0).set(to[0],to[1],0); blit.dstOffsets(1).set(to[2],to[3],1);
+                vkCmdBlitImage(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,blit,filter);
+            }
+            operation.transition(source,sourceLevel,command,sourceBefore);
+            operation.transition(target,targetLevel,command,finish(target,targetBefore));
+        });
+    }
+    private static void requireRectangle(int[] corners,int width,int height) {
+        if (corners.length!=4||Math.min(corners[0],corners[2])<0||Math.max(corners[0],corners[2])>width
+                ||Math.min(corners[1],corners[3])<0||Math.max(corners[1],corners[3])>height) throw new IllegalArgumentException("Image blit rectangle exceeds its image");
+    }
+
     public static ImageCommand clearColor(VulkanContext context,GpuImage image,int mip,int layer,float r,float g,float b,float a) {
         return clear(context,image,mip,layer,r,g,b,a,VK_IMAGE_ASPECT_COLOR_BIT,0);
     }
