@@ -25,7 +25,7 @@ public abstract class RenderSystemBlazeBootstrapMixin {
     @Inject(method="maxSupportedTextureSize",at=@At("HEAD"),cancellable=true)
     private static void overhaul$nativeTextureLimit(CallbackInfoReturnable<Integer> callback){
         var renderer=BlazeFrontend.current();if(renderer==null)return;
-        RenderSystem.assertOnRenderThreadOrInit();MAX_SUPPORTED_TEXTURE_SIZE=renderer.context().capabilities().maxImageDimension2D();callback.setReturnValue(MAX_SUPPORTED_TEXTURE_SIZE);
+        MAX_SUPPORTED_TEXTURE_SIZE=renderer.context().capabilities().maxImageDimension2D();callback.setReturnValue(MAX_SUPPORTED_TEXTURE_SIZE);
     }
     @Inject(method="getCapsString",at=@At("HEAD"),cancellable=true)
     private static void overhaul$nativeDescription(CallbackInfoReturnable<String> callback){
