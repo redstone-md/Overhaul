@@ -117,7 +117,7 @@ public final class PackPreflight {
         catch (IOException | RuntimeException failure) { diagnostics.add(PackDiagnostic.blocking(Category.SAMPLER,"textures",message(failure))); }
     }
 
-    /** Reports the shared table, which the adapter's own program selection does not consume yet. */
+    /** Reports the table the adapter's scene and shadow selection resolve through. */
     private static void reportFallbacks(ShaderPackCatalog catalog, List<PackDiagnostic> diagnostics) {
         Set<String> available = new TreeSet<>();
         for (ShaderPackCatalog.Program program : catalog.programs()) if (program.state().enabled()) available.add(bare(program.name()));

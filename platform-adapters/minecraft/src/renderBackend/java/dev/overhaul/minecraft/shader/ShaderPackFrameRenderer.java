@@ -43,7 +43,9 @@ public final class ShaderPackFrameRenderer implements AutoCloseable {
             Path path=minecraft.gameDirectory.toPath().resolve(nextConfiguration.requested()).normalize();
             try(ShaderPackSource source=ShaderPackSource.open(path);ShadercCompiler compiler=new ShadercCompiler()){
                 Map<String,String> definitions=definitions(nextConfiguration.defines());Map<String,Boolean> selected=options(nextConfiguration.options());
-                CompiledShaderPack pack=CompiledShaderPack.compileForDimension(source,key.identifier().toString(),selected,definitions,compiler);
+                String dimension=key.identifier().toString();CompiledShaderPack pack;
+                try{pack=CompiledShaderPack.compileForDimension(source,dimension,selected,definitions,compiler);}
+                catch(RuntimeException failure){throw ShaderPackFailureReport.describe(source,dimension,selected,definitions,compiler,failure);}
                 scenes.install(pack,target.width,target.height,compiler,nextConfiguration);activePack=pack;installed=true;
                 width=target.width;height=target.height;configuration=nextConfiguration;uniforms.resetHistory();
             }catch(IOException failure){throw new IllegalStateException("Cannot load shader pack: "+path,failure);}

@@ -4,6 +4,7 @@ import com.mojang.renderpearl.api.pipeline.BlendFactor;
 import com.mojang.renderpearl.api.pipeline.BlendOp;
 import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackProgramFallbacks;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -12,10 +13,6 @@ import java.util.Set;
 final class SceneProgramSelection {
     static final Set<String> SUPPORTED=Set.of("gbuffers_basic","gbuffers_textured","gbuffers_textured_lit","gbuffers_terrain","gbuffers_terrain_solid","gbuffers_terrain_cutout",
             "gbuffers_water","gbuffers_entities","gbuffers_entities_translucent","gbuffers_spidereyes","gbuffers_block","gbuffers_block_translucent");
-    private static final Map<String,String> FALLBACKS=Map.ofEntries(Map.entry("gbuffers_textured","gbuffers_basic"),Map.entry("gbuffers_textured_lit","gbuffers_textured"),
-            Map.entry("gbuffers_terrain","gbuffers_textured_lit"),Map.entry("gbuffers_terrain_solid","gbuffers_terrain"),Map.entry("gbuffers_terrain_cutout","gbuffers_terrain"),
-            Map.entry("gbuffers_water","gbuffers_terrain"),Map.entry("gbuffers_entities","gbuffers_textured_lit"),Map.entry("gbuffers_entities_translucent","gbuffers_entities"),
-            Map.entry("gbuffers_spidereyes","gbuffers_textured"),Map.entry("gbuffers_block","gbuffers_terrain"),Map.entry("gbuffers_block_translucent","gbuffers_block"));
     private final Map<String,CompiledShaderPack.Program> programs=new LinkedHashMap<>();
     SceneProgramSelection(CompiledShaderPack pack){for(var program:pack.programs())if(program.stage()==CompiledShaderPack.Stage.GBUFFER)programs.put(baseName(program),program);}
     boolean hasScene(){return !programs.isEmpty();}
@@ -27,7 +24,8 @@ final class SceneProgramSelection {
         else if(metadata.family()==PipelineCompileMetadata.Family.BLOCK||metadata.domain()==SceneDrawDomain.BLOCK_ENTITY)name=transparent?"gbuffers_block_translucent":"gbuffers_block";
         else if(metadata.domain()==SceneDrawDomain.ENTITY)name=metadata.defined("EMISSIVE")&&additive(pipeline)?"gbuffers_spidereyes":transparent?"gbuffers_entities_translucent":"gbuffers_entities";
         else return null;
-        while(name!=null){var program=programs.get(name);if(program!=null){metadata.requireScene();return program;}name=FALLBACKS.get(name);}return null;
+        var found=PackProgramFallbacks.resolve(name,programs.keySet());if(found.isEmpty())return null;
+        metadata.requireScene();return programs.get(found.get());
     }
     static String baseName(CompiledShaderPack.Program program){return program.name().substring(program.name().lastIndexOf('/')+1);}
     static boolean transparent(OverhaulPipeline pipeline){

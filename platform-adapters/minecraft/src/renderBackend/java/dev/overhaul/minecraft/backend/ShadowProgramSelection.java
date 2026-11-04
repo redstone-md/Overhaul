@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.backend;
 
 import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackProgramFallbacks;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -19,7 +20,7 @@ final class ShadowProgramSelection {
         else if(metadata.family()==PipelineCompileMetadata.Family.BLOCK||metadata.domain()==SceneDrawDomain.BLOCK_ENTITY)name="shadow_block";
         else if(metadata.domain()==SceneDrawDomain.ENTITY)name="shadow_entities";
         else return null;
-        var result=programs.get(name);if(result==null)result=programs.get("shadow");
-        if(result!=null)metadata.requireSource();return result;
+        var found=PackProgramFallbacks.resolve(name,programs.keySet());if(found.isEmpty())return null;
+        metadata.requireSource();return programs.get(found.get());
     }
 }
