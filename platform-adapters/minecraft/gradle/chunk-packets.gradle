@@ -5,6 +5,7 @@ def packetTiers = ['1.20.1': [source: 'packets120', suffix: '120'],
 def packetTier = packetTiers[target.minecraft]
 if (packetTier == null) throw new GradleException('No packet codec adapter for selected game version')
 sourceSets.main.java.srcDirs += ['src/chunkPackets/java', "src/${packetTier.source}/java"]
+if (target.minecraft in ['1.20.1', '1.21.1']) sourceSets.main.java.srcDir 'src/statePackets/java'
 sourceSets.main.resources.srcDir 'src/chunkPackets/resources'
 def packetMixins = 'overhaul.chunk-packets.mixins.json'
 overhaulMixinConfigs.add(packetMixins)
@@ -18,7 +19,7 @@ tasks.named('processResources') {
         if (target.loader != 'forge') filter { line -> line.contains('"refmap"') ? null : line }
     }
     doLast {
-        if (target.minecraft == '1.21.1') {
+        if (target.minecraft in ['1.20.1', '1.21.1']) {
             def mixins = new File(destinationDir, packetMixins)
             def config = new groovy.json.JsonSlurper().parse(mixins)
             def stateMixins = ['IdMapperSnapshotMixin', 'SectionBlockUpdatesMixin']
