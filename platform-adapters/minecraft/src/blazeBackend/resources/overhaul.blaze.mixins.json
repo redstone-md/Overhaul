@@ -6,6 +6,7 @@
   "refmap": "overhaul.refmap.json",
   "client": [
     "MinecraftBlazeOwnerMixin",
+    "SpriteInterpolationBlazeMixin",
     "VirtualScreenBlazeMixin",
     "WindowBlazeMixin",
     "RenderSystemBlazeBootstrapMixin",
