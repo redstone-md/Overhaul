@@ -8,12 +8,18 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.locks.LockSupport;
 
 /** Bounded workers with non-blocking admission and graceful drain on close. */
 public final class WorkerScheduler implements Executor, AutoCloseable {
+    /** Only a backstop: submissions unpark an idle worker directly. */
+    private static final long IDLE_PARK_NANOS = TimeUnit.MILLISECONDS.toNanos(50);
+    /** While draining, nothing signals a worker when the last pending job on another worker ends. */
+    private static final long CLOSING_PARK_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
     private final BoundedMpmcQueue<Runnable> jobs;
     private final Thread[] workers;
+    private final AtomicIntegerArray idle;
     private final AtomicBoolean accepting = new AtomicBoolean(true);
     private final AtomicInteger submissions = new AtomicInteger();
     private final AtomicInteger pending = new AtomicInteger();
@@ -23,10 +29,12 @@ public final class WorkerScheduler implements Executor, AutoCloseable {
         Objects.requireNonNull(threadPrefix, "threadPrefix");
         jobs = new BoundedMpmcQueue<Runnable>(queueCapacity);
         workers = new Thread[workerCount];
+        idle = new AtomicIntegerArray(workerCount);
         int started = 0;
         try {
             for (int i = 0; i < workerCount; i++) {
-                workers[i] = new Thread(this::work, threadPrefix + "-" + i);
+                int index = i;
+                workers[i] = new Thread(() -> work(index), threadPrefix + "-" + i);
                 workers[i].setDaemon(true);
                 workers[i].start();
                 started++;
@@ -81,19 +89,35 @@ public final class WorkerScheduler implements Executor, AutoCloseable {
         }
     }
 
-    private void wakeWorkers() { for (Thread worker : workers) LockSupport.unpark(worker); }
+    /** One queued job needs one worker; a worker that is not idle polls again before it can park. */
+    private void wakeWorkers() {
+        for (int i = 0; i < workers.length; i++) {
+            if (idle.get(i) == 1 && idle.compareAndSet(i, 1, 0)) {
+                LockSupport.unpark(workers[i]);
+                return;
+            }
+        }
+    }
 
-    private void work() {
+    private void work(int index) {
         while (accepting.get() || submissions.get() != 0 || pending.get() != 0) {
             Runnable job = jobs.poll();
-            if (job == null) {
-                LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1));
-            } else {
+            if (job == null) job = pollOrPark(index);
+            if (job != null) {
                 try { job.run(); }
                 catch (Throwable failure) { reportFailure(failure); }
                 finally { pending.decrementAndGet(); }
             }
         }
+    }
+
+    /** Publishing idle before the second poll pairs with enqueue-then-scan, so no job can be stranded. */
+    private Runnable pollOrPark(int index) {
+        idle.set(index, 1);
+        Runnable job = jobs.poll();
+        if (job == null) LockSupport.parkNanos(accepting.get() ? IDLE_PARK_NANOS : CLOSING_PARK_NANOS);
+        idle.set(index, 0);
+        return job;
     }
 
     private static void reportFailure(Throwable failure) {
