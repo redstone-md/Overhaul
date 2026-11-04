@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.util.TextureViewAndSampler;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
@@ -97,7 +99,9 @@ final class ShaderPackSceneGeneration extends BackendResource {
         };
         int slot=SceneVertexInputs.slot(state.pipeline(),semantic);Object value=state.uniforms()[slot];
         if(!(value instanceof TextureViewAndSampler pair))throw new IllegalStateException("Scene texture binding is missing: "+semantic);
-        return new Sample(owner().texture(pair.view()),owner().sampler(pair.sampler()).handle());
+        // The game binds the block atlas with LINEAR and sharpens it in terrain.fsh; packs read it with plain texture().
+        var sampler=semantic.equals("Sampler0")&&metadata.family()==PipelineCompileMetadata.Family.TERRAIN?RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST,true):pair.sampler();
+        return new Sample(owner().texture(pair.view()),owner().sampler(sampler).handle());
     }
     void sampleTransitions(VkCommandBuffer command,ScenePackPipeline pipeline,PassBindings state,PassAttachments targets,List<GpuImage.LayoutChange> changes){
         if(pipeline.needsDepthRefresh()){
