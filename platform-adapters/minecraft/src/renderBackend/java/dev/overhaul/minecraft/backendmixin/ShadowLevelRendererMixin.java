@@ -46,6 +46,8 @@ public abstract class ShadowLevelRendererMixin implements ShadowCasterAccess {
     @Shadow private void submitEntities(PoseStack pose,LevelRenderState state,SubmitNodeCollector collector){throw new AssertionError("Mixin shadow");}
     @Shadow private void submitBlockEntities(PoseStack pose,LevelRenderState state,SubmitNodeCollector collector){throw new AssertionError("Mixin shadow");}
     @Shadow public abstract ChunkSectionsToRender prepareChunkRenders(Matrix4fc view,boolean sorted);
+    @Shadow public abstract ChunkSectionsToRender prepareChunkRendersIndirect(Matrix4fc view,boolean sorted);
+    @Shadow private boolean usingMultiDrawIndirectForTerrain;
     @Unique private final ShadowCasterFrame overhaul$casters=new ShadowCasterFrame();
     @Unique private SubmitNodeStorage overhaul$shadowSubmits=new SubmitNodeStorage();
     @Unique private final ShadowDrawEmitter overhaul$shadowDraws=new ShadowDrawEmitter();
@@ -70,7 +72,8 @@ public abstract class ShadowLevelRendererMixin implements ShadowCasterAccess {
         try(var features=overhaul$shadowFeatures.prepare(overhaul$shadowSubmits)){
             ChunkSectionsToRender terrain;
             overhaul$preparingShadowTerrain=true;
-            try{terrain=prepareChunkRenders(RenderSystem.getModelViewStack(),true);}
+            // Both paths share one section store, which is rebuilt whenever its kind changes: follow the main pass.
+            try{terrain=usingMultiDrawIndirectForTerrain?prepareChunkRendersIndirect(RenderSystem.getModelViewStack(),true):prepareChunkRenders(RenderSystem.getModelViewStack(),true);}
             finally{overhaul$preparingShadowTerrain=false;}
             var atlas=textureManager.getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView();var target=gameRenderer.mainRenderTarget();
             scenes.captureShadows(()->overhaul$shadowDraws.draw(true,target,terrain,features,atlas,optionsRenderState),
