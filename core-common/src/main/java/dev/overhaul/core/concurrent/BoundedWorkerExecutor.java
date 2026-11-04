@@ -116,15 +116,16 @@ public final class BoundedWorkerExecutor implements Executor, AutoCloseable {
         }
     }
 
-    private final class Task implements Runnable {
+    /** The inherited flag is the once-only claim; it spares every task a separate atomic object. */
+    private final class Task extends AtomicBoolean implements Runnable {
+        private static final long serialVersionUID = 1L;
         private final Scope scope;
         private final Runnable command;
-        private final AtomicBoolean claimed = new AtomicBoolean();
 
         private Task(Scope scope, Runnable command) { this.scope = scope; this.command = command; }
 
         @Override public void run() {
-            if (!claimed.compareAndSet(false, true)) return;
+            if (!compareAndSet(false, true)) return;
             Scope previous = null;
             try {
                 previous = executing.get();
@@ -135,8 +136,9 @@ public final class BoundedWorkerExecutor implements Executor, AutoCloseable {
                 throw failure;
             } finally {
                 try {
-                    if (previous == null) executing.remove();
-                    else executing.set(previous);
+                    // Restoring null keeps this thread's map entry, so the next task needs no new
+                    // one, and it retains no Scope: requireOutsideTask only tests for null.
+                    executing.set(previous);
                 } finally {
                     completed.incrementAndGet();
                     release();
@@ -145,7 +147,7 @@ public final class BoundedWorkerExecutor implements Executor, AutoCloseable {
         }
 
         private void rejected() {
-            if (claimed.compareAndSet(false, true)) {
+            if (compareAndSet(false, true)) {
                 failed.incrementAndGet();
                 release();
             }
