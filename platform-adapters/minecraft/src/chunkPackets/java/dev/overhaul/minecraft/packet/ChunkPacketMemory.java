@@ -4,7 +4,7 @@ import dev.overhaul.core.memory.DirectSlabPool;
 import io.netty.buffer.ByteBufAllocator;
 import java.lang.ref.Cleaner;
 
-/** One connection's bounded admission. Existing payloads survive connection closure until unreachable. */
+/** One connection/server's bounded admission. Existing payloads survive owner closure until unreachable. */
 public final class ChunkPacketMemory implements AutoCloseable {
     public static final int MIN_FRAME_BYTES=512;
     public static final int MIN_PAYLOAD_BYTES=4096;
@@ -15,6 +15,11 @@ public final class ChunkPacketMemory implements AutoCloseable {
     private boolean closed;
 
     public static boolean eligiblePayloadSize(int bytes){return bytes>=MIN_PAYLOAD_BYTES&&bytes<=SLAB_BYTES;}
+    public ChunkPacketConstruction beginConstruction(int bytes,ByteBufAllocator allocator){
+        OwnedChunkPayload payload=tryAllocate(bytes,allocator);if(payload==null)return null;
+        try{return new ChunkPacketConstruction(payload);}
+        catch(RuntimeException|Error failure){try{payload.discardUnpublished();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
+    }
     OwnedChunkPayload tryAllocate(int bytes,ByteBufAllocator allocator){
         if(!eligiblePayloadSize(bytes))return null;
         DirectSlabPool selected=pool(allocator);if(selected==null)return null;

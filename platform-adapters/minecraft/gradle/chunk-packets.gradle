@@ -4,7 +4,7 @@ def packetTiers = ['1.20.1': [source: 'packets120', suffix: '120'],
                    '26.3': [source: 'packets263', suffix: '263']]
 def packetTier = packetTiers[target.minecraft]
 if (packetTier == null) throw new GradleException('No packet codec adapter for selected game version')
-sourceSets.main.java.srcDirs += ['src/chunkPackets/java', "src/${packetTier.source}/java"]
+sourceSets.main.java.srcDirs += ['src/chunkPackets/java', 'src/packetServer/java', "src/${packetTier.source}/java"]
 if (target.minecraft in ['1.20.1', '1.21.1']) sourceSets.main.java.srcDir 'src/statePackets/java'
 sourceSets.main.resources.srcDir 'src/chunkPackets/resources'
 def packetMixins = 'overhaul.chunk-packets.mixins.json'
@@ -19,15 +19,16 @@ tasks.named('processResources') {
         if (target.loader != 'forge') filter { line -> line.contains('"refmap"') ? null : line }
     }
     doLast {
+        def packetConfig = new File(destinationDir, packetMixins)
+        def packetJson = new groovy.json.JsonSlurper().parse(packetConfig)
+        packetJson.mixins = ((packetJson.mixins ?: []) + ['ServerChunkPacketMemoryMixin', 'ServerChunkPacketConstructionMixin']).unique()
         if (target.minecraft in ['1.20.1', '1.21.1']) {
-            def mixins = new File(destinationDir, packetMixins)
-            def config = new groovy.json.JsonSlurper().parse(mixins)
             def stateMixins = ['IdMapperSnapshotMixin', 'SectionBlockUpdatesMixin']
             if (target.loader == 'neoforge') stateMixins += 'NeoForgeIdMapperClearMixin'
             if (target.loader == 'forge') stateMixins += 'ForgeIdMapperMutationMixin'
-            config.mixins = ((config.mixins ?: []) + stateMixins).unique()
-            mixins.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)), 'UTF-8')
+            packetJson.mixins = (packetJson.mixins + stateMixins).unique()
         }
+        packetConfig.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(packetJson)), 'UTF-8')
         if (target.loader == 'fabric') {
             def metadata = new File(destinationDir, 'fabric.mod.json')
             def config = new groovy.json.JsonSlurper().parse(metadata)
