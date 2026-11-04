@@ -29,6 +29,7 @@
     "MainTargetBlazeMixin",
     "TimerQueryBlazeMixin",
     "VeilShaderCompilerBlazeMixin",
+    "VeilScreenShaderBlazeMixin",
     "DefaultChunkRendererBlazeMixin",
     "FlywheelBackendBlazeMixin","DhTerrainBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhPostProcessBlazeMixin"
   ],
