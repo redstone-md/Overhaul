@@ -69,9 +69,13 @@ public final class ShaderPackProperties {
                     || key.matches("(?:blend|alphaTest)\\.[A-Za-z0-9_/-]+(?:\\.(?:colortex(?:[0-9]|1[0-5])|shadowcolor[01]))?")
                     || key.matches("flip\\.[A-Za-z0-9_/-]+\\.(?:colortex(?:[0-9]|1[0-5])|shadowcolor[01])")
                     || key.matches("size\\.buffer\\.colortex(?:[0-9]|1[0-5])") || PackTextures.property(key);
-            if (!pipeline && !key.startsWith("screen") && !key.startsWith("profile.") && !key.equals("sliders")) result.add(key);
+            if (!pipeline && !PackPropertyPolicy.ignored(key) && !key.startsWith("screen") && !key.startsWith("profile.") && !key.equals("sliders")) result.add(key);
         }
         return List.copyOf(result);
+    }
+    /** Set by the pack, not honored here, and safe to run without; reported as degradation. */
+    public List<String> ignoredProperties() {
+        return values.keySet().stream().filter(PackPropertyPolicy::ignored).sorted().toList();
     }
 
     private static Blend parseBlend(String value) {

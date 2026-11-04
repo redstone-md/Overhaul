@@ -25,8 +25,11 @@ public final class CompiledShaderPack {
     private final PackRenderTargets targets;
     private final PackShadowSettings shadow;
     private final PackTextures textures;
-    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;}
+    private final List<PackDiagnostic> warnings;
+    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);}
     public List<Program> programs(){return programs;}
+    /** Pack features this generation runs without. */
+    public List<PackDiagnostic> warnings(){return warnings;}
     public PackRenderTargets targets(){return targets;}
     public PackShadowSettings shadow(){return shadow;}
     public PackTextures textures(){return textures;}
@@ -39,7 +42,8 @@ public final class CompiledShaderPack {
 
     public static CompiledShaderPack compileForDimension(ShaderPackSource source,String dimension,Map<String,Boolean> options,
                                               Map<String,String> macros,ShadercCompiler compiler)throws IOException{
-        ShaderPackCatalog catalog=ShaderPackCatalog.discoverForDimension(source,dimension,options);
+        ShaderPackCatalog catalog=ShaderPackCatalog.discoverForDimension(source,dimension,options,macros);
+        List<PackDiagnostic> warnings=new ArrayList<>(catalog.warnings());
         if(catalog.programs().size()>512)throw new UnsupportedShaderException("Shader pack exceeds the 512-program generation bound");
         if(!catalog.diagnostics().isEmpty())throw new UnsupportedShaderException(String.join("\n",catalog.diagnostics()));
         List<Program> programs=new ArrayList<>();PackRenderTargets.Builder targets=new PackRenderTargets.Builder(catalog.properties());
@@ -49,7 +53,9 @@ public final class CompiledShaderPack {
         PackPreprocessor preprocessor=new PackPreprocessor(source,compiler,macros,options);
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
             if(!discovered.state().enabled())continue;
-            String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);Stage stage=stage(name);
+            String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
+            if(name.startsWith("dh_")){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Distant Horizons programs are not compiled; there is no Distant Horizons integration"));continue;}
+            Stage stage=stage(name);
             String vertex=preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX);
             String fragment=preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT);
             sourceCharacters+=(long)vertex.length()+fragment.length();if(sourceCharacters>67_108_864)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
@@ -70,7 +76,7 @@ public final class CompiledShaderPack {
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
-        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs));
+        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings);
     }
     private static Stage stage(String name){
         if(name.startsWith("gbuffers_"))return Stage.GBUFFER;
