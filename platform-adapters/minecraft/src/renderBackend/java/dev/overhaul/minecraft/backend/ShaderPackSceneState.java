@@ -33,9 +33,8 @@ public final class ShaderPackSceneState implements AutoCloseable {
         var lane=owner.commands();framePins=new BackendPins(owner,color,depth);
         try{
             frame=new PackGraphRuntime.Frame(owner.texture(color),depth==null?null:owner.texture(depth),fog,Map.of());
-            if(generation.scene()&&(generation.color().image().format()!=frame.color().image().format()
-                    ||generation.color().image().width(0)!=frame.color().image().width(frame.color().baseMip())
-                    ||generation.color().image().height(0)!=frame.color().image().height(frame.color().baseMip())))throw new IllegalArgumentException("Scene colortex0 must preserve game color format/extent for ordinary image transfers");
+            if(generation.scene()&&(generation.color().image().width(0)!=frame.color().image().width(frame.color().baseMip())
+                    ||generation.color().image().height(0)!=frame.color().image().height(frame.color().baseMip())))throw new IllegalArgumentException("Scene colortex0 must preserve game color extent for ordinary image transfers");
             generation.begin(lane,frame,uniforms);active=generation.scene();
         }catch(RuntimeException|Error failure){framePins.close();framePins=null;frame=null;throw failure;}
     }

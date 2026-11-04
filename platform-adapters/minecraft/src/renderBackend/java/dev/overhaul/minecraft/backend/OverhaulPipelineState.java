@@ -18,7 +18,7 @@ final class OverhaulPipelineState {
         List<NativeGraphicsPipeline.Color> colors=new ArrayList<>();
         for(int index=0;index<formats.size();index++) {
             ColorTargetState target=index<info.colorTargetStates().size()?info.colorTargetStates().get(index):null;
-            if(target!=null&&target.format()!=null&&formats.get(index)!=VK_FORMAT_UNDEFINED&&OverhaulFormats.format(target.format())!=formats.get(index))throw new IllegalArgumentException("Pipeline/pass color format mismatch at "+index);
+            // The render pass fixes attachment formats; a world draw's declared format may differ once its target is redirected to a pack's colortex0.
             int mask=target==null?0:(target.writeRed()?VK_COLOR_COMPONENT_R_BIT:0)|(target.writeGreen()?VK_COLOR_COMPONENT_G_BIT:0)
                     |(target.writeBlue()?VK_COLOR_COMPONENT_B_BIT:0)|(target.writeAlpha()?VK_COLOR_COMPONENT_A_BIT:0);
             var blend=target==null?null:target.blendFunction().orElse(null);
