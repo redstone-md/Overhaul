@@ -259,8 +259,8 @@ afterEvaluate {
                     def prefix = mixins.package.replace('.', '/') + '/'
                     def queryHook = (mixins.mixins ?: []).contains('EntitySectionStorageMixin')
                     def queryClass = jar.getEntry('dev/overhaul/minecraft/world/SectionQueryTraversal.class') != null
-                    if (queryHook != (target.minecraft == '26.3') || queryClass != queryHook) {
-                        throw new GradleException('Entity section-query implementation is absent or escaped its 26.3 target')
+                    if (queryHook != sectionQueries || queryClass != queryHook) {
+                        throw new GradleException('Entity section-query implementation is absent or escaped its target tiers')
                     }
                     def allowed = ((mixins.mixins ?: []) + (mixins.client ?: []) + (mixins.server ?: []))
                             .collect { prefix + it.replace('.', '/') }
