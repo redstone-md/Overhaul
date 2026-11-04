@@ -25,7 +25,8 @@ public abstract class ShaderInstanceBlazeMixin implements BlazeShaderAccess {
     @Redirect(method="getOrCreate",at=@At(value="INVOKE",target="Ljava/util/Map;get(Ljava/lang/Object;)Ljava/lang/Object;"),require=1)
     private static Object overhaul$localStage(Map<?,?> cache,Object key){return BlazePrograms.current()==null?cache.get(key):null;}
 
-    @Inject(method="<init>",at=@At("RETURN"),require=1)
+    /** Every constructor: mods call the location one directly, past the string one that delegates to it. */
+    @Inject(method="<init>*",at=@At("RETURN"),require=1)
     private void overhaul$resources(CallbackInfo callback) {
         if(overhaul$programs!=null)return;
         ShaderInstance self=(ShaderInstance)(Object)this;var stage=((BlazeStageAccess)self.getVertexProgram()).overhaul$stage();
