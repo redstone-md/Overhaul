@@ -29,7 +29,8 @@
     "MainTargetBlazeMixin",
     "TimerQueryBlazeMixin",
     "VeilShaderCompilerBlazeMixin",
-    "DefaultChunkRendererBlazeMixin"
+    "DefaultChunkRendererBlazeMixin",
+    "FlywheelBackendBlazeMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }

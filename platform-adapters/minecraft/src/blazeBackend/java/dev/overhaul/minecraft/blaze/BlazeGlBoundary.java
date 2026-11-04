@@ -36,6 +36,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private static final int GL_TRUE = 1, GL_DEPTH_CLEAR_VALUE = 0x0B73, GL_COLOR_CLEAR_VALUE = 0x0C22;
     private static final int GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
     private static final int GL_ALREADY_SIGNALED = 0x911A;
+    private static final int CALLER_SAMPLES = 4096;
     private static final Set<String> UNTRANSLATED_PREFIXES = Set.of("glDraw", "glMultiDraw", "glDispatch", "glBlitFramebuffer", "glBlitNamedFramebuffer");
 
     interface Answer { long apply(Arguments arguments); }
@@ -108,12 +109,23 @@ public final class BlazeGlBoundary implements FunctionProvider {
         Answer answer = answers.get(name);
         if (answer != null) return new Entry(name, answer).address();
         if (UNTRANSLATED_PREFIXES.stream().anyMatch(name::startsWith)) {
+            AtomicInteger calls = new AtomicInteger();
             return new Entry(name, arguments -> {
-                reportOnce(name, "OpenGL draw " + name + " was called by a renderer with no native Vulkan path; it draws nothing");
+                // Walking the stack on every draw would be costly, and the renderers involved show up within the first calls.
+                if (calls.getAndIncrement() < CALLER_SAMPLES) {
+                    String caller = caller();
+                    reportOnce(name + caller, "OpenGL draw " + name + " from " + caller + " has no native Vulkan path; it draws nothing");
+                }
                 return 0;
             }).address();
         }
         return inert;
+    }
+
+    private static String caller() {
+        return StackWalker.getInstance().walk(frames -> frames.map(StackWalker.StackFrame::getClassName)
+                .filter(type -> !type.startsWith("org.lwjgl") && !type.startsWith("dev.overhaul") && !type.startsWith("java.") && !type.startsWith("jdk."))
+                .findFirst().orElse("an unknown class"));
     }
 
     /** Veil saves the clear values this way and restores them afterwards, so no answer would restore stack garbage. */
