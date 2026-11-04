@@ -24,6 +24,7 @@ public final class PackInterfaceCatalog {
 
     private static final Map<String,UniformInfo> UNIFORMS = uniforms();
     private static final Set<String> SCENE_SAMPLERS = Set.of("texture","tex","gtexture","lightmap");
+    private static final Set<String> PBR_SAMPLERS = Set.of("normals","specular");
     /** The adapter rewrites this one uniform to a varying on entity pipelines. */
     private static final String ENTITY_COLOR = "entityColor";
 
@@ -72,7 +73,8 @@ public final class PackInterfaceCatalog {
         }
         for (String sampler : new TreeMap<>(bindings.samplers()).keySet()) {
             if (customTextures.contains(sampler) || sampler.equals("noisetex")) continue;
-            if (!bound(sampler,scene)) diagnostics.add(PackDiagnostic.blocking(Category.SAMPLER,program+"."+sampler,"No image is bound to this sampler"));
+            if (scene && PBR_SAMPLERS.contains(sampler)) diagnostics.add(PackDiagnostic.degraded(Category.SAMPLER,program+"."+sampler,"Reads a neutral texel: resource-pack PBR maps are not stitched yet"));
+            else if (!bound(sampler,scene)) diagnostics.add(PackDiagnostic.blocking(Category.SAMPLER,program+"."+sampler,"No image is bound to this sampler"));
             else if (bindings.comparisonSampler(sampler) && PackShadowSettings.depthIndex(sampler) < 0) {
                 diagnostics.add(PackDiagnostic.blocking(Category.SAMPLER,program+"."+sampler,"Depth comparison requires a shadow depth texture"));
             }

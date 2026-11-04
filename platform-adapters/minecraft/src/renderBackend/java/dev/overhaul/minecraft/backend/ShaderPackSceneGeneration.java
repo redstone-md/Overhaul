@@ -28,13 +28,13 @@ final class ShaderPackSceneGeneration extends BackendResource {
     private final Map<OverhaulPipeline,ScenePackPipeline> shadowPipelines=new IdentityHashMap<>();
     private PackGraphRuntime runtime;
     private PackGraphRuntime.Uniforms uniforms;
-    private SceneFallbackTexture identityTexture;
+    private SceneFallbackTexture identityTexture,normalTexture,specularTexture;
     ShaderPackSceneGeneration(OverhaulDeviceBackend owner,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler){
         super(owner);this.pack=pack;selection=new SceneProgramSelection(pack);shadows=new ShadowProgramSelection(pack);
         try{
             var bound=new java.util.HashSet<>(SceneProgramSelection.SUPPORTED);bound.addAll(ShadowProgramSelection.SUPPORTED);
             runtime=new PackGraphRuntime(owner.context(),owner.allocator(),pack,width,height,compiler,bound);
-            if(scene()||hasShadows())identityTexture=new SceneFallbackTexture(owner);
+            if(scene()||hasShadows()){identityTexture=SceneFallbackTexture.identity(owner);normalTexture=SceneFallbackTexture.flatNormal(owner);specularTexture=SceneFallbackTexture.noSpecular(owner);}
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     CompiledShaderPack pack(){return pack;}
@@ -42,7 +42,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
     boolean hasShadows(){return shadows.present();}
     GpuImageView color(){requireNativeAlive();return runtime.color(0);}
     void begin(ImmediateCommands lane,PackGraphRuntime.Frame frame,PackGraphRuntime.Uniforms uniforms){
-        requireOpen();this.uniforms=uniforms;if(identityTexture!=null)identityTexture.initialize(lane);
+        requireOpen();this.uniforms=uniforms;if(identityTexture!=null){identityTexture.initialize(lane);normalTexture.initialize(lane);specularTexture.initialize(lane);}
         runtime.beginFrame(lane,frame,uniforms);for(var pipeline:pipelines.values())pipeline.update();for(var pipeline:shadowPipelines.values())pipeline.update();
     }
     void afterOpaque(ImmediateCommands lane,PackGraphRuntime.Frame frame){requireOpen();runtime.afterOpaque(lane,frame,uniforms);}
@@ -85,6 +85,8 @@ final class ShaderPackSceneGeneration extends BackendResource {
         if(pipeline.code.bindings.comparisonSampler(name))throw new UnsupportedShaderException("Depth comparison requires a bound shadow depth texture: "+name);
         int color=PackRenderTargets.colorIndex(name);if(color>=0)return new Sample(runtime.color(color),runtime.samplerHandle());
         int depth=PackRenderTargets.depthIndex(name);if(depth>=0)return new Sample(runtime.sampledDepth(depth),runtime.depthSamplerHandle());
+        if(name.equals("normals"))return normalTexture.sample();
+        if(name.equals("specular"))return specularTexture.sample();
         var metadata=state.pipeline().compileMetadata();
         if(name.equals("lightmap")&&metadata.family()==PipelineCompileMetadata.Family.ENTITY&&metadata.defined("EMISSIVE"))return identityTexture.sample();
         String semantic=switch(name){
@@ -110,5 +112,7 @@ final class ShaderPackSceneGeneration extends BackendResource {
     @Override protected void destroyNative(){
         for(var pipeline:pipelines.values())pipeline.close();pipelines.clear();for(var pipeline:shadowPipelines.values())pipeline.close();shadowPipelines.clear();if(runtime!=null){runtime.close();runtime=null;}
         if(identityTexture!=null){identityTexture.close();identityTexture=null;}
+        if(normalTexture!=null){normalTexture.close();normalTexture=null;}
+        if(specularTexture!=null){specularTexture.close();specularTexture=null;}
     }
 }
