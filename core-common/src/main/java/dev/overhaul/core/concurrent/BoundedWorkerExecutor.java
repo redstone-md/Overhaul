@@ -90,7 +90,7 @@ public final class BoundedWorkerExecutor implements Executor, AutoCloseable {
             catch (RuntimeException | Error failure) { lifetime.release(); throw failure; }
             try {
                 try {
-                    workers.submit(() -> { task.run(); return null; });
+                    workers.execute(task);
                     owned.incrementAndGet();
                     return;
                 } catch (RejectedExecutionException saturated) {
