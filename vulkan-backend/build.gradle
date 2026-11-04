@@ -30,25 +30,37 @@ tasks.register('vulkanSmoke', JavaExec) {
 // Minecraft 26.3 uses SDL3 and newer LWJGL bindings. Keep its native runtime
 // isolated: mixing these bindings with the default 3.3.6 native jars is invalid.
 sourceSets {
-    sdlSmoke {
+    sdlAdapter {
         java.srcDir 'src/sdl/java'
+        java.include 'dev/overhaul/vulkan/SdlSurfaceProvider.java'
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
+    sdlSmoke {
+        java.srcDir 'src/sdl/java'
+        java.exclude 'dev/overhaul/vulkan/SdlSurfaceProvider.java'
+        compileClasspath += sourceSets.main.output + sourceSets.sdlAdapter.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.sdlAdapter.output
+    }
+}
+
+configurations {
+    sdlSmokeImplementation.extendsFrom(sdlAdapterImplementation)
+    sdlSmokeRuntimeOnly.extendsFrom(sdlAdapterRuntimeOnly)
 }
 
 dependencies {
-    sdlSmokeImplementation project(':core-common')
-    sdlSmokeImplementation(project(':shader-pipeline')) { transitive = false }
-    sdlSmokeImplementation platform('org.lwjgl:lwjgl-bom:3.4.3')
+    sdlAdapterImplementation project(':core-common')
+    sdlAdapterImplementation(project(':shader-pipeline')) { transitive = false }
+    sdlAdapterImplementation platform('org.lwjgl:lwjgl-bom:3.4.3')
     ['lwjgl', 'lwjgl-vulkan', 'lwjgl-sdl', 'lwjgl-vma', 'lwjgl-shaderc'].each {
-        sdlSmokeImplementation "org.lwjgl:${it}"
+        sdlAdapterImplementation "org.lwjgl:${it}"
     }
     ['lwjgl', 'lwjgl-sdl', 'lwjgl-vma', 'lwjgl-shaderc'].each {
-        sdlSmokeRuntimeOnly "org.lwjgl:${it}::${natives}"
+        sdlAdapterRuntimeOnly "org.lwjgl:${it}::${natives}"
     }
     if (rootProject.nativeOs == 'macos') {
-        sdlSmokeRuntimeOnly "org.lwjgl:lwjgl-vulkan::${natives}"
+        sdlAdapterRuntimeOnly "org.lwjgl:lwjgl-vulkan::${natives}"
     }
 }
 
@@ -62,7 +74,7 @@ tasks.register('sdlVulkanSmoke', JavaExec) {
 tasks.register('sdlAdapterJar', Jar) {
     description = 'Packages the SDL3 surface provider separately from the default LWJGL runtime.'
     archiveClassifier = 'sdl34'
-    from(sourceSets.sdlSmoke.output) { exclude 'dev/overhaul/vulkan/sdl/**' }
+    from sourceSets.sdlAdapter.output
 }
 
 tasks.named('assemble') { dependsOn 'sdlAdapterJar' }
