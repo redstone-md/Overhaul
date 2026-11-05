@@ -17,12 +17,15 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     private static final int SECTION = 16;
     /** Depth is from the fence-passed past, and floats round; a little distance keeps a section's own surface from hiding it. */
     private static final float MARGIN = .5f;
+    /** Older depth says too little about now, and a path that stopped capturing must not keep testing against its last one. */
+    private static final long MAX_AGE_NANOS = 250_000_000L;
 
     private final BlazeDepthTiles tiles;
     private final float[] viewProjection = new float[16];
     private SoftwareDepthBuffer depth;
     private int pixelsWide, pixelsHigh;
     private double cameraX, cameraY, cameraZ;
+    private long capturedAt;
     private boolean usable;
     private float grow;
 
@@ -33,7 +36,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     /** Called for each layer with the camera now; decides whether this layer's tests can mean anything. */
     public void prepare(double x, double y, double z) {
         usable = false;
-        if (depth == null) return;
+        if (depth == null || System.nanoTime() - capturedAt > MAX_AGE_NANOS) return;
         double dx = x - cameraX, dy = y - cameraY, dz = z - cameraZ, move = Math.sqrt(dx * dx + dy * dy + dz * dz);
         usable = move <= MAX_MOVE;
         grow = (float) move + MARGIN;
@@ -41,18 +44,25 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
 
     /** Whether the section whose lowest corner is at this block position was entirely behind captured terrain. */
     public boolean hidden(int originX, int originY, int originZ) {
-        if (!usable || !behindTerrain(originX, originY, originZ)) return false;
+        if (!usable || !behindTerrain(originX, originY, originZ, originX + SECTION, originY + SECTION, originZ + SECTION)) return false;
         BlazeStats.hiddenSection();
         return true;
     }
 
-    private boolean behindTerrain(int originX, int originY, int originZ) {
-        float left = (float) (originX - cameraX) - grow, low = (float) (originY - cameraY) - grow, back = (float) (originZ - cameraZ) - grow;
-        float across = SECTION + 2 * grow;
+    /** Whether this world-space box was entirely behind captured terrain. */
+    public boolean entityHidden(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        if (!usable || !behindTerrain(minX, minY, minZ, maxX, maxY, maxZ)) return false;
+        BlazeStats.hiddenEntity();
+        return true;
+    }
+
+    private boolean behindTerrain(double minWorldX, double minWorldY, double minWorldZ, double maxWorldX, double maxWorldY, double maxWorldZ) {
+        float left = (float) (minWorldX - cameraX) - grow, low = (float) (minWorldY - cameraY) - grow, back = (float) (minWorldZ - cameraZ) - grow;
+        float acrossX = (float) (maxWorldX - minWorldX) + 2 * grow, acrossY = (float) (maxWorldY - minWorldY) + 2 * grow, acrossZ = (float) (maxWorldZ - minWorldZ) + 2 * grow;
         float[] m = viewProjection;
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE, nearest = Float.MAX_VALUE;
         for (int corner = 0; corner < 8; corner++) {
-            float x = left + ((corner & 1) == 0 ? 0 : across), y = low + ((corner & 2) == 0 ? 0 : across), z = back + ((corner & 4) == 0 ? 0 : across);
+            float x = left + ((corner & 1) == 0 ? 0 : acrossX), y = low + ((corner & 2) == 0 ? 0 : acrossY), z = back + ((corner & 4) == 0 ? 0 : acrossZ);
             float w = m[3] * x + m[7] * y + m[11] * z + m[15];
             if (w <= .05f) return false;
             float screenX = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w, screenY = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
@@ -84,6 +94,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
             cameraX = x;
             cameraY = y;
             cameraZ = z;
+            capturedAt = System.nanoTime();
         });
     }
 

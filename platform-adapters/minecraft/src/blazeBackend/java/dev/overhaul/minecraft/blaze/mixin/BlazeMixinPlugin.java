@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     private static final Map<String, BlazeOptimization> OWNERS = Map.ofEntries(
             Map.entry("LevelRendererSectionBatch121Mixin", BlazeOptimization.SECTION_BATCH),
+            Map.entry("LevelRendererEntityOcclusion121Mixin", BlazeOptimization.ENTITY_OCCLUSION),
             Map.entry("LevelRendererSections121Mixin", BlazeOptimization.SECTION_LISTS),
             Map.entry("BufferBuilderBulk121Mixin", BlazeOptimization.BULK_VERTICES),
             Map.entry("ModelCube121Mixin", BlazeOptimization.CUBE_MESH),
