@@ -133,8 +133,14 @@ public final class BlazePrograms implements AutoCloseable {
     int activeId(){return active;}
     public String incompleteActive(){requireOpen();if(active==0)return null;var entry=entry(active);return entry.snapshot==null?entry.name:null;}
     public BlazeShaderSnapshot activeSnapshot(){requireOpen();if(active==0)throw new IllegalStateException("No active Blaze shader");var supplier=entry(active).snapshot;if(supplier==null)throw new IllegalStateException("Shader construction has not completed");return supplier.get();}
-    public void release(int id){requireOwner();var entry=programs.remove(id);if(active==id)active=0;if(entry!=null)entry.releaseAll(released);}
-    private Entry entry(int id){var entry=programs.get(id);if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);return entry;}
+    private int lastId;
+    private Entry lastEntry;
+    public void release(int id){requireOwner();lastEntry=null;var entry=programs.remove(id);if(active==id)active=0;if(entry!=null)entry.releaseAll(released);}
+    private Entry entry(int id){
+        if(id==lastId&&lastEntry!=null)return lastEntry;
+        var entry=programs.get(id);if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);
+        lastId=id;lastEntry=entry;return entry;
+    }
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Blaze programs belong to another thread");}
     private void requireOpen(){requireOwner();if(closed)throw new IllegalStateException("Blaze programs are closed");}
     @Override public void close(){
