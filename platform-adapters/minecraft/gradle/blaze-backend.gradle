@@ -6,7 +6,8 @@ def tiers = [
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
                    tierMixins: ['LevelRendererSections121Mixin', 'CompiledSection121Accessor',
                                 'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
-                                'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin']]
+                                'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
+                                'ModelCube121Mixin', 'BufferBuilderBulk121Mixin']]
 ]
 ext.blazeTarget = tiers[target.minecraft]
 if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
