@@ -9,7 +9,8 @@ def tiers = [
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
                                 'ModelCube121Mixin', 'BufferBuilderBulk121Mixin', 'ItemQuads121Mixin',
                                 'XaeroMapWriter121Mixin', 'XaeroRadar121Mixin',
-                                'LevelRendererShaderPack121Mixin', 'TextureAtlas121Accessor']]
+                                'LevelRendererShaderPack121Mixin', 'TextureAtlas121Accessor',
+                                'LevelRendererSectionBatch121Mixin']]
 ]
 ext.blazeTarget = tiers[target.minecraft]
 if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {

@@ -12,13 +12,15 @@ final class BlazeVertexLayout {
 
     List<NativeGraphicsPipeline.Attribute> attributes(ProgramBindings bindings) {
         List<NativeGraphicsPipeline.Attribute> result = new ArrayList<>();
-        for (var attribute : bindings.attributes().entrySet()) {
-            BlazeMeshState.Field field=null;
-            for(var candidate:layout.fields())if(candidate.name().equals(attribute.getKey())){field=candidate;break;}
-            if(field==null)throw new UnsupportedOperationException("Missing vertex attribute: "+attribute.getKey());
-            result.add(new NativeGraphicsPipeline.Attribute(attribute.getValue(),0,field.nativeFormat(),field.offset()));
-        }
+        for (var attribute : bindings.attributes().entrySet()) result.add(attribute(attribute.getKey(), attribute.getValue()));
         return List.copyOf(result);
+    }
+
+    NativeGraphicsPipeline.Attribute attribute(String name, int location) {
+        for (var field : layout.fields()) {
+            if (field.name().equals(name)) return new NativeGraphicsPipeline.Attribute(location, 0, field.nativeFormat(), field.offset());
+        }
+        throw new UnsupportedOperationException("Missing vertex attribute: " + name);
     }
 
 }

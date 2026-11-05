@@ -41,6 +41,7 @@ public abstract class VertexBufferBlazeMixin implements BlazeVertexBufferAccess 
         if(overhaul$mesh==null)throw new IllegalStateException("Sorted indices before native vertex upload");
         return overhaul$mesh;
     }
+    @Override public BlazeMesh overhaul$meshOrNull(){return overhaul$mesh;}
     @Inject(method="bind()V",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$bind(CallbackInfo callback){if(overhaul$owned)callback.cancel();else if(BlazeFrontend.current()!=null)throw new IllegalStateException("OpenGL vertex buffer cannot bind on the owned device");}
     @Inject(method="unbind()V",at=@At("HEAD"),cancellable=true,require=1)

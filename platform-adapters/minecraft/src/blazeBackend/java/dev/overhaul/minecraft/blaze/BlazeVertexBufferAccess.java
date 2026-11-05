@@ -7,4 +7,6 @@ public interface BlazeVertexBufferAccess {
     void overhaul$streamUploads();
     BlazeMesh overhaul$uploadMesh();
     BlazeMesh overhaul$existingMesh();
+    /** Null until the first upload; a section can be compiled before its buffer arrives. */
+    BlazeMesh overhaul$meshOrNull();
 }

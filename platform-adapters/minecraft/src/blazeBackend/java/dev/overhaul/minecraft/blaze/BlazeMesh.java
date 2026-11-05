@@ -50,6 +50,9 @@ public final class BlazeMesh implements AutoCloseable {
         indices = next;
     }
 
+    BlazeMeshState stateOrNull() { return state; }
+    BlazeGeometryRange vertexRange() { return vertices; }
+    BlazeGeometryRange indexRange() { return indices; }
     public BlazeMeshState state() { requireOpen(); if (state == null) throw new IllegalStateException("Mesh has no upload"); return state; }
 
     Snapshot snapshot(){return new Snapshot(state(),vertices,indices);}

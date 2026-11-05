@@ -24,6 +24,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Set<BlazeMesh> meshes=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GpuBuffer> glDeviceBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private BlazeTerrain terrain;
+    private BlazeSectionBatch sections;
     private BlazeDh dh;
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
@@ -62,8 +63,8 @@ public final class BlazeRenderer implements AutoCloseable {
                 var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
                 int alignment=Math.toIntExact(Math.max(4,Math.max(properties.limits().nonCoherentAtomSize(),properties.limits().minUniformBufferOffsetAlignment())));
                 maximumUniformRange=properties.limits().maxUniformBufferRange();
-                hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
-                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,16);
+                hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
+                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,32);
                 uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
                 streamStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,4*1024*1024,256L*1024*1024,16);
                 streamArena=new BlazeHostArena(streamStorage,16);
@@ -108,6 +109,20 @@ public final class BlazeRenderer implements AutoCloseable {
         if(failure instanceof RuntimeException)throw(RuntimeException)failure;if(failure instanceof Error)throw(Error)failure;
     }
     public BlazeTerrain terrain(){requireOpen();if(terrain==null)terrain=new BlazeTerrain(this);return terrain;}
+    /** A shader pack's terrain programs and devices without per-draw instance offsets stay on the section-by-section path. */
+    public boolean batchesSections(BlazeShaderAccess shader){
+        requireOpen();
+        if(shader==null||!context.indirectFirstInstance()||drawingNowhere())return false;
+        if(packScene!=null&&packScene.routes(currentTarget()))return false;
+        BlazeProgramCompiler.Program program=shader.overhaul$sectionProgram();
+        if(program==null)return false;
+        shapes.computeIfAbsent(program,key->new BlazeSectionShape(key.bindings()));
+        return true;
+    }
+    public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
+        requireOpen();if(sections==null)sections=new BlazeSectionBatch(this);
+        sections.begin(shader.overhaul$sectionSnapshot(),ordered);return sections;
+    }
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
     GpuBuffer newGlDeviceBuffer(long size){

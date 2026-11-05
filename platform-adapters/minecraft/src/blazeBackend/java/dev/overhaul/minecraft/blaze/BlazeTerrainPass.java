@@ -69,11 +69,11 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
                 samples.add(sample);
                 if (name.equals(atlas)) sized = sample;
             }
-            var image = sized.view().image();
+            var image = sized == null ? samples.isEmpty() ? null : samples.get(0).view().image() : sized.view().image();
             uniforms = owner.hostStorage().acquire(program.bindings().uniformBytes());
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 ByteBuffer bytes = stack.calloc(uniforms.size());
-                writer.write(bytes, image.width(0), image.height(0));
+                writer.write(bytes, image == null ? 1 : image.width(0), image == null ? 1 : image.height(0));
                 bytes.clear();
                 uniforms.write(bytes);
             }
