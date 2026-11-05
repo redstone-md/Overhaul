@@ -6,18 +6,15 @@ import java.lang.reflect.Field;
 import java.nio.ByteOrder;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.lwjgl.system.MemoryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** A model cube flattened once, so each frame transforms plain arrays into one reserved vertex range. */
 public final class BlazeCubeMesh {
     private static final boolean LITTLE_ENDIAN=ByteOrder.nativeOrder()==ByteOrder.LITTLE_ENDIAN;
-    private static final int VERTICES_PER_QUAD=4,VERTEX_BYTES=36;
-    private static final int COLOR=12,UV=16,OVERLAY=24,LIGHT=28,NORMAL=32;
+    private static final int VERTICES_PER_QUAD=4;
     private static final int NORMAL_FLOATS=3,VERTEX_FLOATS=5,QUAD_FLOATS=NORMAL_FLOATS+VERTICES_PER_QUAD*VERTEX_FLOATS;
     private static final BlazeCubeMesh UNSUPPORTED=new BlazeCubeMesh(null);
     private static final Logger LOGGER=LoggerFactory.getLogger(BlazeCubeMesh.class);
@@ -78,22 +75,12 @@ public final class BlazeCubeMesh {
         for(int at=0;at<data.length;){
             pose.transformNormal(data[at],data[at+1],data[at+2],normal);
             at+=NORMAL_FLOATS;
-            int packedNormal=packNormal(normal);
-            for(int vertex=0;vertex<VERTICES_PER_QUAD;vertex++,at+=VERTEX_FLOATS,pointer+=VERTEX_BYTES){
+            int packedNormal=BlazeEntityVertex.packNormal(normal.x,normal.y,normal.z);
+            for(int vertex=0;vertex<VERTICES_PER_QUAD;vertex++,at+=VERTEX_FLOATS,pointer+=BlazeEntityVertex.BYTES){
                 float x=data[at],y=data[at+1],z=data[at+2];
-                MemoryUtil.memPutFloat(pointer,m00*x+m10*y+m20*z+m30);
-                MemoryUtil.memPutFloat(pointer+4L,m01*x+m11*y+m21*z+m31);
-                MemoryUtil.memPutFloat(pointer+8L,m02*x+m12*y+m22*z+m32);
-                MemoryUtil.memPutInt(pointer+COLOR,abgr);
-                MemoryUtil.memPutFloat(pointer+UV,data[at+3]);
-                MemoryUtil.memPutFloat(pointer+UV+4L,data[at+4]);
-                MemoryUtil.memPutInt(pointer+OVERLAY,overlay);
-                MemoryUtil.memPutInt(pointer+LIGHT,light);
-                MemoryUtil.memPutInt(pointer+NORMAL,packedNormal);
+                BlazeEntityVertex.put(pointer,m00*x+m10*y+m20*z+m30,m01*x+m11*y+m21*z+m31,m02*x+m12*y+m22*z+m32,abgr,data[at+3],data[at+4],overlay,light,packedNormal);
             }
         }
         return true;
     }
-    private static int packNormal(Vector3f normal){return normalByte(normal.x)|normalByte(normal.y)<<8|normalByte(normal.z)<<16;}
-    private static int normalByte(float value){return (int)(Mth.clamp(value,-1f,1f)*127f)&0xFF;}
 }
