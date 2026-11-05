@@ -22,15 +22,20 @@ public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuff
 
     public static BlazeShaderSnapshot capture(BlazeProgramCompiler.Program program,
             Map<String, Uniform> source, Map<String, Object> samplers) {
-        int bytes = program.bindings().uniformBytes();
-        if (scratch.capacity() < bytes) scratch = ByteBuffer.allocateDirect(Math.max(bytes, scratch.capacity() * 2)).order(ByteOrder.nativeOrder());
-        ByteBuffer values = scratch.clear().limit(bytes).slice().order(ByteOrder.nativeOrder());
-        MemoryUtil.memSet(values, 0);
+        ByteBuffer values = blank(program.bindings().uniformBytes());
         for (var entry : program.bindings().uniforms().entrySet()) {
             Uniform uniform = source.get(entry.getKey());
             if (uniform != null) copy(values, entry.getValue(), uniform);
         }
         return new BlazeShaderSnapshot(program, values, samplers);
+    }
+
+    /** Zeroed shared storage for one capture. */
+    public static ByteBuffer blank(int bytes) {
+        if (scratch.capacity() < bytes) scratch = ByteBuffer.allocateDirect(Math.max(bytes, scratch.capacity() * 2)).order(ByteOrder.nativeOrder());
+        ByteBuffer values = scratch.clear().limit(bytes).slice().order(ByteOrder.nativeOrder());
+        MemoryUtil.memSet(values, 0);
+        return values;
     }
 
     private static void copy(ByteBuffer target, ProgramBindings.Uniform layout, Uniform value) {

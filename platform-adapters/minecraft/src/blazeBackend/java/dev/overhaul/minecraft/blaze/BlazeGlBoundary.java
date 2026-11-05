@@ -69,6 +69,8 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private static volatile BlazeGlBuffers active;
     private final AtomicInteger objectNames = new AtomicInteger(1);
+    /** Far above the ids {@link BlazePrograms} hands out, so a raw program name never selects one of its programs. */
+    private final AtomicInteger rawProgramNames = new AtomicInteger(0x40000000);
     private final AtomicInteger framebufferNames = new AtomicInteger(BlazeRenderer.FOREIGN_FRAMEBUFFERS);
     private final Map<Integer, Long> strings = new ConcurrentHashMap<>();
     private final Map<String, Answer> answers = new HashMap<>();
@@ -171,7 +173,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
         });
         Answer object = arguments -> objectNames.getAndIncrement();
         answers.put("glCreateShader", object);
-        answers.put("glCreateProgram", object);
+        answers.put("glCreateProgram", arguments -> rawProgramNames.getAndIncrement());
         answers.put("glFenceSync", object);
         Answer status = arguments -> {
             int name = arguments.integer(1);

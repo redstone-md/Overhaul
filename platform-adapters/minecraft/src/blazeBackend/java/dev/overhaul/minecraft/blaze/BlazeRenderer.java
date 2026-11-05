@@ -202,7 +202,14 @@ public final class BlazeRenderer implements AutoCloseable {
             if(compact==null){if(!compactFailed)compactUnavailable();return;}
             shader=shader.withProgram(compact);
         }
-        if(routed)packScene.draw(mesh,shader);else draw(mesh,target,shader);
+        if(routed)packScene.draw(mesh,shader);
+        else if(programs.activeForeign())drawForeign(mesh,target,shader);
+        else draw(mesh,target,shader);
+    }
+    /** OpenGL gives an attribute the mesh lacks a constant value; a mod's program with one draws nothing here, and says so. */
+    private void drawForeign(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){
+        try{draw(mesh,target,shader);}
+        catch(UnsupportedOperationException failure){BlazeGlBoundary.reportOnce("foreign draw "+failure.getMessage(),"A mod program's draw was dropped: "+failure.getMessage());}
     }
     void packScene(BlazePackScene scene){boolean compact=scene!=null&&compactsSections();packScene=scene;if(compact)rebuildSections();}
     BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
