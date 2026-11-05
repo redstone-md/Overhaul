@@ -30,7 +30,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("XaeroMapProcessor121Mixin", BlazeOptimization.XAERO_LIMITS),
             Map.entry("ShoulderCrosshair121Mixin", BlazeOptimization.CROSSHAIR_LIMIT),
             Map.entry("SectionOcclusionFrustum121Mixin", BlazeOptimization.SECTION_BOUNDS),
-            Map.entry("RenderSectionOrigin121Mixin", BlazeOptimization.SECTION_BOUNDS));
+            Map.entry("RenderSectionOrigin121Mixin", BlazeOptimization.SECTION_BOUNDS),
+            Map.entry("CataclysmScans121Mixin", BlazeOptimization.ENTITY_SCANS),
+            Map.entry("AlexsCavesScans121Mixin", BlazeOptimization.ENTITY_SCANS));
 
     @Override public void onLoad(String mixinPackage) {
         BlazeOptimization.describeInFile();
