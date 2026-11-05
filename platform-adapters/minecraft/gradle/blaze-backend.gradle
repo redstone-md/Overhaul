@@ -8,7 +8,7 @@ def tiers = [
                                 'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
                                 'ModelCube121Mixin', 'BufferBuilderBulk121Mixin', 'ItemQuads121Mixin',
-                                'XaeroMapWriter121Mixin', 'XaeroMapProcessor121Mixin', 'ShoulderCrosshair121Mixin', 'XaeroRadar121Mixin', 'RendererRegistration121Mixin', 'RenderSectionBuffers121Mixin',
+                                'XaeroMapWriter121Mixin', 'XaeroMapProcessor121Mixin', 'ShoulderCrosshair121Mixin', 'SectionOcclusionFrustum121Mixin', 'RenderSectionOrigin121Mixin', 'Frustum121Accessor', 'XaeroRadar121Mixin', 'RendererRegistration121Mixin', 'RenderSectionBuffers121Mixin',
                                 'LevelRendererShaderPack121Mixin', 'TextureAtlas121Accessor',
                                 'LevelRendererSectionBatch121Mixin',
                                 'LevelRendererEntityOcclusion121Mixin',

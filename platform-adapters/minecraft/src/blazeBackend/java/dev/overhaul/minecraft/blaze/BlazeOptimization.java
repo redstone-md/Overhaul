@@ -31,6 +31,7 @@ public enum BlazeOptimization {
     SPRITE_INTERPOLATION("spriteInterpolation", "Interpolated texture animation blended on raw memory"),
     XAERO_LIMITS("xaeroLimits", "Xaero map processing limited to 60 Hz, map writing and radar updates limited per frame"),
     CROSSHAIR_LIMIT("crosshairLimit", "Shoulder Surfing's crosshair raycast limited to 60 Hz"),
+    SECTION_BOUNDS("sectionBounds", "Frustum test over flat section bounds instead of the graph's linked nodes"),
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
 
 
