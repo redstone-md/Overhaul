@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection;
 
@@ -11,6 +12,8 @@ import net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection
  */
 public final class BlazeVisibleSections {
     private static final ObjectArrayList<RenderSection> NONE=new ObjectArrayList<>(0);
+    /** Moves when a section's contents or dirty mark change, on any thread, or when the visible list is refilled. */
+    private static final AtomicLong CHANGES=new AtomicLong();
     private final ObjectArrayList<RenderSection> dirty=new ObjectArrayList<>();
     /** By chunk layer id: this is asked several thousand times a frame. */
     private Layer[] layers=new Layer[8];
@@ -18,19 +21,35 @@ public final class BlazeVisibleSections {
     private ObjectArrayList<RenderSection> source;
     private int scanned;
     private boolean tables;
+    private ObjectArrayList<RenderSection> dirtySource;
+    private int dirtySize;
+    private long dirtyAt=-1,scannedAt=-1;
+    private boolean missingMesh;
+
+    public static void changed(){CHANGES.incrementAndGet();}
+
+    private static boolean reuse(){return BlazeOptimization.SECTION_SCAN_REUSE.on()&&BlazeOptimization.SECTION_BATCH.on();}
 
     public ObjectArrayList<RenderSection> dirty(ObjectArrayList<RenderSection> visible){
+        long now=CHANGES.get();
+        if(reuse()&&visible==dirtySource&&visible.size()==dirtySize&&now==dirtyAt)return dirty;
         dirty.clear();
         for(int index=0,size=visible.size();index<size;index++){
             RenderSection section=visible.get(index);
             if(section.isDirty())dirty.add(section);
         }
+        dirtySource=visible;
+        dirtySize=visible.size();
+        dirtyAt=now;
         return dirty;
     }
 
     /** Runs after pending uploads, so sections finished this frame are already in their layers. */
     public void scan(ObjectArrayList<RenderSection> visible){
         boolean tables=BlazeOptimization.SECTION_TABLE.on()&&BlazeOptimization.SECTION_BATCH.on();
+        long now=CHANGES.get();
+        if(reuse()&&tables==this.tables&&now==scannedAt&&!missingMesh&&scanned(visible))return;
+        missingMesh=false;
         this.tables=tables;
         for(Layer layer:layers)if(layer!=null)layer.cursor=0;
         withBlockEntities.cursor=0;
@@ -43,7 +62,11 @@ public final class BlazeVisibleSections {
             if(contents==0)continue;
             for(;contents!=0;contents&=contents-1){
                 int id=Long.numberOfTrailingZeros(contents);
-                if(tables)layerOf(id).put(section,flat.overhaul$mesh(id),flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
+                if(tables){
+                    BlazeMesh mesh=flat.overhaul$mesh(id);
+                    if(mesh==null)missingMesh=true;
+                    layerOf(id).put(section,mesh,flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
+                }
                 else layerOf(id).put(section);
             }
         }
@@ -51,6 +74,7 @@ public final class BlazeVisibleSections {
         withBlockEntities.sections.size(withBlockEntities.cursor);
         source=visible;
         scanned=visible.size();
+        scannedAt=now;
     }
 
     /** A list swapped or changed since the scan is walked whole, as vanilla would. */

@@ -7,6 +7,7 @@ import dev.overhaul.minecraft.blaze.BlazeCompiledContents;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
 import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
+import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.client.renderer.RenderType;
@@ -35,6 +36,12 @@ abstract class RenderSectionBuffers121Mixin implements BlazeSectionBuffers {
             set.call(reference, compiled);
             overhaul$contents = ((BlazeCompiledContents) compiled).overhaul$contents();
         }
+        BlazeVisibleSections.changed();
+    }
+
+    @Inject(method = "setDirty", at = @At("TAIL"), require = 1)
+    private void overhaul$markedDirty(boolean playerChanged, CallbackInfo callback) {
+        BlazeVisibleSections.changed();
     }
 
     @Inject(method = "setOrigin", at = @At("TAIL"), require = 1)
@@ -42,6 +49,7 @@ abstract class RenderSectionBuffers121Mixin implements BlazeSectionBuffers {
         overhaul$originX = x;
         overhaul$originY = y;
         overhaul$originZ = z;
+        BlazeVisibleSections.changed();
     }
 
     @Override public long overhaul$contents() { return overhaul$contents; }

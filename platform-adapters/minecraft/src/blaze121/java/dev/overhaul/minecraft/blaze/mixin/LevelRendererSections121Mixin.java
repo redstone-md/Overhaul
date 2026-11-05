@@ -35,6 +35,11 @@ abstract class LevelRendererSections121Mixin implements BlazeLayerLists {
         return overhaul$sections.dirty(visible);
     }
 
+    @Inject(method="applyFrustum",at=@At("TAIL"))
+    private void overhaul$visibleListRefilled(CallbackInfo callback){
+        BlazeVisibleSections.changed();
+    }
+
     @Inject(method="compileSections",at=@At("TAIL"))
     private void overhaul$scanLayers(Camera camera,CallbackInfo callback){
         overhaul$sections.scan(visibleSections);
