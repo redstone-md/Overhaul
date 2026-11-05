@@ -4,7 +4,9 @@ def tiers = [
                    loaders: ['fabric', 'forge'], uploadMixin: 'VertexBufferUpload120Mixin', tierMixins: []],
         '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
-                   tierMixins: ['LevelRendererSections121Mixin', 'CompiledSection121Accessor']]
+                   tierMixins: ['LevelRendererSections121Mixin', 'CompiledSection121Accessor',
+                                'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
+                                'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin']]
 ]
 ext.blazeTarget = tiers[target.minecraft]
 if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
@@ -22,7 +24,7 @@ dependencies {
 }
 tasks.named('processResources') {
     inputs.properties(blazeMinecraft: target.minecraft, blazeJava: target.java,
-            blazeUploadMixin: blazeTarget.uploadMixin)
+            blazeUploadMixin: blazeTarget.uploadMixin, blazeTierMixins: blazeTarget.tierMixins.join(','))
     filesMatching('overhaul.blaze.mixins.json') {
         expand(compatibility: "JAVA_${target.java}")
     }
