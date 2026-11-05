@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.VulkanContext;
 import java.util.ArrayDeque;
@@ -42,7 +44,7 @@ final class BlazeDescriptors implements AutoCloseable {
         try{write(lease,program,uniforms,range,samples);return lease;}catch(RuntimeException|Error failure){lease.close();throw failure;}
     }
     private void write(Lease lease,BlazeProgramCompiler.Program program,BlazeBufferPool.Slice uniforms,int range,List<BlazeTextures.Sampled> samples){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var writes=VkWriteDescriptorSet.calloc(samples.size()+1,stack);
             writes.get(0).sType$Default().dstSet(lease.set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1)
                     .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.buffer().handle()).offset(uniforms.offset()).range(range));
@@ -73,7 +75,7 @@ final class BlazeDescriptors implements AutoCloseable {
         private long handle;
         private Layout(BlazeProgramCompiler.Program program){
             samplerCount=program.bindings().samplers().size();
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var bindings=VkDescriptorSetLayoutBinding.calloc(samplerCount+1,stack);
                 bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
                 int index=1;for(int number:program.bindings().samplers().values())bindings.get(index++).binding(number).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -91,7 +93,7 @@ final class BlazeDescriptors implements AutoCloseable {
         private int active;
         private boolean closed;
         private Page(Layout layout){
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var sizes=VkDescriptorPoolSize.calloc(layout.samplerCount==0?1:2,stack);
                 sizes.get(0).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(SETS_PER_PAGE);
                 if(layout.samplerCount!=0)sizes.get(1).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(SETS_PER_PAGE*layout.samplerCount);

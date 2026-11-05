@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
@@ -97,7 +99,7 @@ public final class BlazeMesh implements AutoCloseable {
         BlazeMeshState state(){return state;}
         void record(VkCommandBuffer command){
             if(state.indexCount()==0)return;
-            try(var stack=org.lwjgl.system.MemoryStack.stackPush()){
+            try(var stack=VulkanStack.push()){
                 vkCmdBindVertexBuffers(command,0,stack.longs(vertices.buffer().handle()),stack.longs(vertices.offset()));
                 vkCmdBindIndexBuffer(command,indices.buffer().handle(),indices.offset(),state.indexBytes()==2?VK_INDEX_TYPE_UINT16:VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(command,state.indexCount(),1,0,0,0);

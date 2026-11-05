@@ -24,7 +24,7 @@ public final class GpuImageView implements AutoCloseable {
     GpuImageView(GpuImage image,int baseMip,int mips,int baseLayer,int layers,int viewType,int aspectMask,Components components){
         this.image=image;this.baseMip=baseMip;this.mips=mips;this.baseLayer=baseLayer;this.layers=layers;this.components=java.util.Objects.requireNonNull(components);
         if(!components.identity()&&!image.context().portability().imageViewFormatSwizzle())throw new UnsupportedOperationException("This device cannot remap image-view components");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkImageViewCreateInfo info=VkImageViewCreateInfo.calloc(stack).sType$Default().image(image.handle())
                 .viewType(viewType).format(image.format().vkFormat());
             info.components().r(components.red()).g(components.green()).b(components.blue()).a(components.alpha());

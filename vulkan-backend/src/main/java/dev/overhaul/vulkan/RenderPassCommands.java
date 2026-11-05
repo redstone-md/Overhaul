@@ -8,7 +8,7 @@ import static org.lwjgl.vulkan.VK10.*;
 final class RenderPassCommands {
     private RenderPassCommands() {}
     static void begin(VkCommandBuffer command,ColorTarget target,long pipeline,long layout,long descriptors) {
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             VkClearValue.Buffer clear=VkClearValue.calloc(2,stack);
             clear.get(0).color().float32(0,.02f).float32(1,.03f).float32(2,.04f).float32(3,1);
             clear.get(1).depthStencil().depth(1).stencil(0);

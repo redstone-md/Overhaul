@@ -14,7 +14,7 @@ public final class GpuSampler implements AutoCloseable {
         DeviceCapabilities capabilities=allocator.context().capabilities();
         if(settings.anisotropy()>capabilities.maxSamplerAnisotropy()||settings.anisotropy()>1&&!capabilities.samplerAnisotropy())
             throw new IllegalArgumentException("requested anisotropy is not enabled/supported");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkSamplerCreateInfo info=VkSamplerCreateInfo.calloc(stack).sType$Default().minFilter(settings.minFilter().vk).magFilter(settings.magFilter().vk)
                 .mipmapMode(settings.mipmap().vk).addressModeU(settings.u().vk).addressModeV(settings.v().vk).addressModeW(settings.w().vk)
                 .mipLodBias(settings.lodBias()).minLod(settings.minLod()).maxLod(settings.maxLod()).anisotropyEnable(settings.anisotropy()>1).maxAnisotropy(settings.anisotropy())

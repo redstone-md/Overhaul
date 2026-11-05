@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -37,7 +39,7 @@ final class BufferCopyOperation implements OverhaulGpuOperation {
         pins=new BackendPins(owner,sourceResource,targetResource);
     }
     @Override public void record(VkCommandBuffer command) {
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             var before=VkMemoryBarrier.calloc(1,stack).sType$Default()
                     .srcAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT)
                     .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT);

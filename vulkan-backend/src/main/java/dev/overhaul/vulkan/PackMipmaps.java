@@ -24,7 +24,7 @@ final class PackMipmaps {
             GpuImageView source=levels.get(mip-1),target=levels.get(mip);
             String read=plan.read(source),write=plan.write(target);
             plan.pass("mipmap-"+write,Map.of(read,VulkanRenderGraph.Usage.TRANSFER_READ,write,VulkanRenderGraph.Usage.TRANSFER_WRITE),pass->{
-                try(MemoryStack stack=MemoryStack.stackPush()){
+                try(MemoryStack stack=VulkanStack.push()){
                     var region=VkImageBlit.calloc(1,stack);
                     region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(source.baseMip()).baseArrayLayer(source.baseLayer()).layerCount(1);
                     region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(target.baseMip()).baseArrayLayer(target.baseLayer()).layerCount(1);
@@ -39,7 +39,7 @@ final class PackMipmaps {
 
     private void requireLinearBlit(int format){
         if(supported.contains(format))return;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var properties=VkFormatProperties.malloc(stack);vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),format,properties);
             int required=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
             if((properties.optimalTilingFeatures()&required)!=required)throw new UnsupportedShaderException("Device cannot generate a filtered mip chain for pack image format: "+format);

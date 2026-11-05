@@ -23,7 +23,7 @@ public enum SwapchainPresentMode {
     public static Set<SwapchainPresentMode> supported(VulkanContext context){
         context.requireOwner();
         if(context.surface()==VK_NULL_HANDLE)throw new IllegalArgumentException("Presentation modes require an attached surface");
-        for(int attempt=0;attempt<8;attempt++)try(MemoryStack stack=MemoryStack.stackPush()){
+        for(int attempt=0;attempt<8;attempt++)try(MemoryStack stack=VulkanStack.push()){
             IntBuffer count=stack.ints(0);
             check(vkGetPhysicalDeviceSurfacePresentModesKHR(context.physicalDevice(),context.surface(),count,null),"surface present mode count");
             int capacity=count.get(0);

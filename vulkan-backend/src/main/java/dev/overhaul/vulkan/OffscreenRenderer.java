@@ -57,7 +57,7 @@ public final class OffscreenRenderer implements AutoCloseable {
         if (!meshes.contains(mesh)) throw new IllegalArgumentException("mesh belongs to another renderer");
         camera.write(columnMajorTransform);
         commands.submit(command -> {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 IndexedPass.begin(command, target, camera, pipeline);
                 vkCmdBindVertexBuffers(command, 0, stack.longs(mesh.vertices.handle(), mesh.instances.handle()), stack.longs(0, 0));
                 vkCmdBindIndexBuffer(command, mesh.indices.handle(), 0, VK_INDEX_TYPE_UINT32);

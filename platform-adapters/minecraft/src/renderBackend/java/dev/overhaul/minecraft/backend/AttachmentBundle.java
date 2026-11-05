@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.FrameRing;
 import dev.overhaul.vulkan.GpuImageView;
 import org.lwjgl.system.MemoryStack;
@@ -35,7 +37,7 @@ final class AttachmentBundle implements AutoCloseable {
     void create(){
         if(closed)throw new IllegalStateException("Attachment bundle is closed");
         if(renderPass!=0)return;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkAttachmentDescription.Buffer attachments=VkAttachmentDescription.calloc(key.targets().size(),stack);
             LongBuffer handles=stack.mallocLong(key.targets().size());
             for(int index=0;index<key.targets().size();index++){

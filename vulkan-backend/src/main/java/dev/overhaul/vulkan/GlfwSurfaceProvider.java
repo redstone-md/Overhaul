@@ -25,7 +25,7 @@ public final class GlfwSurfaceProvider implements SurfaceProvider {
     }
 
     @Override public long createSurface(VkInstance instance) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             LongBuffer handle = stack.mallocLong(1);
             // GLFW may live in the loader's parent layer, which cannot resolve VkInstance.
             check(nglfwCreateWindowSurface(instance.address(), window, 0L, memAddress(handle)),

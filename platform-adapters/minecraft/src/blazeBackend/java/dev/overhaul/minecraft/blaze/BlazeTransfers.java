@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.*;
 import java.nio.ByteBuffer;
 import java.util.function.BiConsumer;
@@ -124,7 +126,7 @@ final class BlazeTransfers {
             this.source=source;this.sourceOffset=sourceOffset;this.target=target;this.targetOffset=targetOffset;this.bytes=bytes;this.staging=staging;
         }
         @Override public void record(VkCommandBuffer command){
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var before=VkMemoryBarrier.calloc(1,stack).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(COPIES);
                 vkCmdPipelineBarrier(command,STAGES,VK_PIPELINE_STAGE_TRANSFER_BIT,0,before,null,null);
                 vkCmdCopyBuffer(command,source.handle(),target.handle(),VkBufferCopy.calloc(1,stack).srcOffset(sourceOffset).dstOffset(targetOffset).size(bytes));
@@ -139,7 +141,7 @@ final class BlazeTransfers {
         private final int targetOffset;
         private BufferCopy(BlazeBufferPool.Slice source,BlazeBufferPool.Slice target,int targetOffset){this.source=source;this.target=target;this.targetOffset=targetOffset;}
         @Override public void record(VkCommandBuffer command){
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 vkCmdCopyBuffer(command,source.buffer().handle(),target.buffer().handle(),VkBufferCopy.calloc(1,stack).srcOffset(source.offset()).dstOffset((long)target.offset()+targetOffset).size(source.size()));
                 var barrier=VkMemoryBarrier.calloc(1,stack).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_INDEX_READ_BIT);
                 vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,0,barrier,null,null);

@@ -132,7 +132,7 @@ final class VisibilitySmoke {
              ImmediateCommands commands = new ImmediateCommands(context);
              GpuBuffer readback = allocator.hostBuffer(gpu.indirect.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
             commands.submit(command -> {
-                try (MemoryStack stack = MemoryStack.stackPush()) {
+                try (MemoryStack stack = VulkanStack.push()) {
                     VkMemoryBarrier.Buffer before = VkMemoryBarrier.calloc(1, stack).sType$Default()
                         .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
                     vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,

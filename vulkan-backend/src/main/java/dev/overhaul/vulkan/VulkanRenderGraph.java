@@ -215,7 +215,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
             try{
               commands.submit(command->{
                 transition(command,view,Usage.TRANSFER_READ,changes);
-                try (MemoryStack stack=MemoryStack.stackPush()) {
+                try (MemoryStack stack=VulkanStack.push()) {
                     VkBufferImageCopy.Buffer copy=VkBufferImageCopy.calloc(1,stack);
                     copy.imageSubresource().aspectMask(image.aspect()).mipLevel(view.baseMip()).baseArrayLayer(view.baseLayer()).layerCount(1);
                     copy.imageExtent().set(image.width(),image.height(),1);

@@ -71,7 +71,7 @@ final class PackDepthMipmaps implements AutoCloseable {
         }
     }
     private void createResources(int format){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             LongBuffer pointer=stack.mallocLong(1);
             var attachment=VkAttachmentDescription.calloc(1,stack).format(format).samples(VK_SAMPLE_COUNT_1_BIT)
                     .loadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
@@ -89,7 +89,7 @@ final class PackDepthMipmaps implements AutoCloseable {
     }
     private void record(VulkanRenderGraph.PassContext pass,String read,String write){
         var source=pass.image(read);var target=pass.image(write);
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             long set=descriptor(source,stack),framebuffer=framebuffer(target,stack);
             var begin=VkRenderPassBeginInfo.calloc(stack).sType$Default().renderPass(renderPass).framebuffer(framebuffer);
             begin.renderArea().extent().set(target.width(),target.height());

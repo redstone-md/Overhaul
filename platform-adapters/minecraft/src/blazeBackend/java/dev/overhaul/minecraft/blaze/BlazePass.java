@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.*;
 import java.nio.ByteBuffer;
@@ -92,7 +94,7 @@ final class BlazePass implements BlazeQueue.Operation {
             images.transition(command,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
         target.prepare(command,images);
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             if(open==null)target.begin(command,stack);
             if(open==null||open.pipeline!=pipeline)vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
             if(constants!=0)vkCmdBindVertexBuffers(command,1,stack.longs(constants),stack.longs(0));

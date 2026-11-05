@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
 import dev.overhaul.vulkan.FrameRing;
 import dev.overhaul.vulkan.GpuBuffer;
@@ -40,7 +42,7 @@ final class CascadeReceiverBinding implements AutoCloseable {
     private long set(){
         if(set!=0)return set;
         if(uniforms==null)throw new IllegalStateException("Receiver draw recorded without its captured cascades");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             pool=owner.descriptorPools().acquire(SHAPE);LongBuffer pointer=stack.mallocLong(1);
             check(vkAllocateDescriptorSets(owner.context().device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default()
                     .descriptorPool(pool.handle()).pSetLayouts(stack.longs(source.receivers().receiverLayout())),pointer),"cascade receiver descriptor allocation");

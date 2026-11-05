@@ -25,13 +25,13 @@ final class IndirectUpdates implements AutoCloseable {
         }
         GpuBuffer source = staging[slot];
         source.write(state.bytes());
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             barrier(frame.command(), batch.indirect, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, stack);
             for (int start = 0; start < state.changedCount(); start += REGIONS_PER_COPY) {
                 int count = Math.min(REGIONS_PER_COPY, state.changedCount() - start);
-                try (MemoryStack regionsStack = MemoryStack.stackPush()) {
+                try (MemoryStack regionsStack = VulkanStack.push()) {
                     VkBufferCopy.Buffer regions = VkBufferCopy.calloc(count, regionsStack);
                     for (int i = 0; i < count; i++) regions.get(i).srcOffset((long) (start + i) * 4)
                         .dstOffset((long) state.changedDraw(start + i) * 20).size(4);

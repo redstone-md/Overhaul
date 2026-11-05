@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.backend.api.BackendRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
@@ -25,7 +27,7 @@ public final class OverhaulPipeline extends BackendResource implements BackendRe
 
     private OverhaulPipeline(OverhaulDeviceBackend owner,Prepared prepared) {
         super(owner);this.prepared=prepared;
-        try(MemoryStack stack=MemoryStack.stackPush()) {
+        try(MemoryStack stack=VulkanStack.push()) {
             VkPhysicalDeviceProperties properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(owner.context().physicalDevice(),properties);
             if(prepared.info().pushConstantsSize()>properties.limits().maxPushConstantsSize())throw new UnsupportedOperationException("Push constants exceed device limit");
             VkDescriptorSetLayoutBinding.Buffer bindings=VkDescriptorSetLayoutBinding.calloc(uniforms().size(),stack);

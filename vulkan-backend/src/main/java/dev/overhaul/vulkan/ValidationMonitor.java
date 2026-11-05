@@ -31,7 +31,7 @@ final class ValidationMonitor implements AutoCloseable {
     }
 
     static boolean available() {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             IntBuffer count = stack.ints(0);
             check(vkEnumerateInstanceLayerProperties(count, null), "validation layer count");
             VkLayerProperties.Buffer layers = VkLayerProperties.malloc(count.get(0), stack);
@@ -50,7 +50,7 @@ final class ValidationMonitor implements AutoCloseable {
 
     void attach(VkInstance instance) {
         this.instance = instance;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             LongBuffer pointer = stack.mallocLong(1);
             check(vkCreateDebugUtilsMessengerEXT(instance, info(stack), null, pointer), "vkCreateDebugUtilsMessengerEXT");
             messenger = pointer.get(0);

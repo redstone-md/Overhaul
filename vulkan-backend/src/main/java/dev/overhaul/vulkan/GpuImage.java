@@ -60,7 +60,7 @@ public final class GpuImage implements AutoCloseable {
         int[] old=new int[Math.multiplyExact(mipCount,layerCount)];int cursor=0;
         for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++){
             int before=layouts[layer*mips+mip];old[cursor++]=before;
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 VkImageMemoryBarrier.Buffer barrier=VkImageMemoryBarrier.calloc(1,stack).sType$Default().image(handle)
                     .oldLayout(before).newLayout(newLayout).srcAccessMask(access(before)).dstAccessMask(access(newLayout))
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);

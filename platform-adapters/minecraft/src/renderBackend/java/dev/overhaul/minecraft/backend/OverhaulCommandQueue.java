@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.FrameRing;
 import org.lwjgl.system.MemoryStack;
 import java.util.ArrayDeque;
@@ -23,7 +25,7 @@ final class OverhaulCommandQueue implements AutoCloseable {
 
     OverhaulCommandQueue(OverhaulDeviceBackend owner) {
         this.owner=owner; frames=new FrameRing(owner.context(),3);
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             var properties=org.lwjgl.vulkan.VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(owner.context().physicalDevice(),properties);
             mapAlignment=properties.limits().nonCoherentAtomSize();
@@ -52,7 +54,7 @@ final class OverhaulCommandQueue implements AutoCloseable {
         flushing=true;
         try {
             FrameRing.Submission submitted=frames.submit(frame-> {
-                try (MemoryStack stack=MemoryStack.stackPush()) {
+                try (MemoryStack stack=VulkanStack.push()) {
                     // Includes write-after-read dependencies between separate queue batches.
                     var barrier=org.lwjgl.vulkan.VkMemoryBarrier.calloc(1,stack).sType$Default()
                             .srcAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT)

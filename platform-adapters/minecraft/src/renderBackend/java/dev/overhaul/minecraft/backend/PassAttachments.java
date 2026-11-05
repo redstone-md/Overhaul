@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
 import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
@@ -108,7 +110,7 @@ final class PassAttachments implements AutoCloseable {
         create();
         for(Entry entry:entries){GpuImageView view=entry.view();transitions.add(view.image().recordTransition(command,view.baseMip(),1,view.baseLayer(),1,
                 entry.depth()?VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));}
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkClearValue.Buffer clear=VkClearValue.calloc(entries.size(),stack);
             for(int index=0;index<entries.size();index++){Entry entry=entries.get(index);
                 if(entry.depth())clear.get(index).depthStencil().depth(entry.clearDepth()==null?1:entry.clearDepth().floatValue()).stencil(0);

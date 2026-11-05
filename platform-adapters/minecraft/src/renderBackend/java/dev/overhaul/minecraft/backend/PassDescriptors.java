@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.util.TextureViewAndSampler;
@@ -33,7 +35,7 @@ final class PassDescriptors implements AutoCloseable {
             activeValues.add(uniforms[slot]);
         }
         Key key=new Key(pipeline,List.copyOf(activeValues));Long existing=sets.get(key);if(existing!=null)return existing;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             DescriptorPoolCache.Lease pool=pool(pipeline);LongBuffer pointer=stack.mallocLong(1);
             check(vkAllocateDescriptorSets(resources.context().device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default()
                     .descriptorPool(pool.handle()).pSetLayouts(stack.longs(pipeline.descriptorLayout())),pointer),"overhaul descriptor allocation");

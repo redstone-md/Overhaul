@@ -43,7 +43,7 @@ public final class ModelRenderer implements AutoCloseable {
         requireOpen();if(!meshes.contains(mesh))throw new IllegalArgumentException("Model belongs to another renderer");
         mesh.sort(view);camera.setMatrix("transform",4,view.transform(mesh.originX(),mesh.originY(),mesh.originZ()));descriptors.write(camera.snapshot());
         commands.submit(command->{
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 GraphicsPipeline first=pipelines.get(RenderLayer.OPAQUE);
                 RenderPassCommands.begin(command,target,first.pipeline,first.layout,descriptors.set);
                 vkCmdBindVertexBuffers(command,0,stack.longs(mesh.vertices.handle()),stack.longs(0));

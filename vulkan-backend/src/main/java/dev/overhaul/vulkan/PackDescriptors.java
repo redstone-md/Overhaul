@@ -22,7 +22,7 @@ final class PackDescriptors implements AutoCloseable {
         this.context=context;
         if (!textures.keySet().equals(bindings.samplers().keySet())) throw new IllegalArgumentException("Textures must exactly match the shader samplers");
         if (textures.size()>16) throw new IllegalArgumentException("Diagnostic pack renderer supports at most 16 samplers");
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             uniforms=allocator.hostBuffer(Math.max(16,bindings.uniformBytes()),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
             int stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
             VkDescriptorSetLayoutBinding.Buffer entries=VkDescriptorSetLayoutBinding.calloc(1+textures.size(),stack);

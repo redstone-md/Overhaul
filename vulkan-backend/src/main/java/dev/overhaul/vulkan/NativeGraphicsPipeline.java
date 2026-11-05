@@ -49,7 +49,7 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
         this.context=context;context.device();
         validateFeatures(description);
         long[] modules=new long[description.shaders().size()];
-        try(MemoryStack stack=MemoryStack.stackPush()) {
+        try(MemoryStack stack=VulkanStack.push()) {
             LongBuffer pointer=stack.mallocLong(1);
             check(vkCreatePipelineCache(context.device(),VkPipelineCacheCreateInfo.calloc(stack).sType$Default(),null,pointer),"vkCreatePipelineCache");cache=pointer.get(0);
             VkPipelineLayoutCreateInfo pipelineLayout=VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(description.descriptorLayouts()));
@@ -128,7 +128,7 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
     public long layout(){context.device();if(layout==0)throw new IllegalStateException("Pipeline closed");return layout;}
     public byte[] cacheData(){
         context.device();if(cache==0)throw new IllegalStateException("Pipeline closed");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             org.lwjgl.PointerBuffer size=stack.mallocPointer(1);check(vkGetPipelineCacheData(context.device(),cache,size,null),"pipeline cache size");
             if(size.get(0)>Integer.MAX_VALUE)throw new IllegalStateException("Pipeline cache too large");
             ByteBuffer data=org.lwjgl.system.MemoryUtil.memAlloc((int)size.get(0));

@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -51,7 +53,7 @@ public abstract class WindowBlazeMixin {
         Minecraft client=Minecraft.getInstance();if(client==null){overhaul$releaseFailedWindow();throw new IllegalStateException("Blaze3D Vulkan initialization requires its owning Minecraft instance");}
         var owner=(MinecraftBlazeAccess)client;
         if(owner.overhaul$blazeRenderer()!=null){overhaul$releaseFailedWindow();throw new IllegalStateException("A client can own only one Blaze3D Vulkan window");}
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var width=stack.mallocInt(1);var height=stack.mallocInt(1);glfwGetFramebufferSize(window,width,height);
             var renderer=new BlazeRenderer(window,Math.max(1,width.get(0)),Math.max(1,height.get(0)));
             try{renderer.pendingWindowCleanup(this::overhaul$releaseFailedWindow);owner.overhaul$installBlazeRenderer(renderer);overhaul$blazeRenderer=renderer;renderer.resize(width.get(0),height.get(0));}

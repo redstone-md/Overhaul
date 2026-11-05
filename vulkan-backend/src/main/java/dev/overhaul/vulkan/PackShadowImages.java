@@ -55,7 +55,7 @@ final class PackShadowImages implements AutoCloseable {
                 comparison?SamplerSettings.Compare.LESS_OR_EQUAL:SamplerSettings.Compare.NONE));samplers.add(sampler);return sampler;
     }
     static ImageFormat depthFormat(VulkanContext context,boolean linear){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             int required=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|(linear?VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT:0);
             var properties=VkFormatProperties.malloc(stack);
             for(var format:List.of(ImageFormat.D32_SFLOAT,ImageFormat.D16_UNORM)){

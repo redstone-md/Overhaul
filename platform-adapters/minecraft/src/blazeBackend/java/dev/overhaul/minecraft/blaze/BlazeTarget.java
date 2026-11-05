@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.GpuAllocator;
 import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
@@ -88,7 +90,7 @@ public final class BlazeTarget implements AutoCloseable {
         ImageFormat[] formats=new ImageFormat[attachments.size()];int written=0;
         for(int index=0;index<formats.length;index++)if(attachments.get(index)!=null){formats[index]=attachments.get(index).image().format();written++;}
         colorFormats=Collections.unmodifiableList(Arrays.asList(formats));
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var descriptions=VkAttachmentDescription.calloc(written+(depth==null?0:1),stack);
             var colorReference=VkAttachmentReference.calloc(formats.length,stack);
             LongBuffer views=stack.mallocLong(descriptions.capacity());int next=0;
@@ -137,7 +139,7 @@ public final class BlazeTarget implements AutoCloseable {
         if((!colorClear&&!depthClear)||right<=x||top<=y)return;
         BlazeImageUse images=new BlazeImageUse();
         BlazeQueue.Operation operation=new BlazeQueue.Operation(){
-            @Override public void record(VkCommandBuffer command){prepare(command,images);try(MemoryStack stack=MemoryStack.stackPush()){
+            @Override public void record(VkCommandBuffer command){prepare(command,images);try(MemoryStack stack=VulkanStack.push()){
             begin(command,stack);var clears=VkClearAttachment.calloc((colorClear?1:0)+(depthClear?1:0),stack);int index=0;
             if(colorClear)clears.get(index++).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(0).clearValue().color().float32(0,values.r()).float32(1,values.g()).float32(2,values.b()).float32(3,values.a());
             if(depthClear)clears.get(index).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).clearValue().depthStencil().depth(values.depth());

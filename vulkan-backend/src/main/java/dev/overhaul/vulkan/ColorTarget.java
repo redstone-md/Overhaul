@@ -24,7 +24,7 @@ final class ColorTarget implements AutoCloseable {
         this.context = context;
         this.width = width;
         this.height = height;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             LongBuffer pointer = stack.mallocLong(1);
             color = new AttachmentImage(context, width, height, VK_FORMAT_R8G8B8A8_UNORM,
                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -77,7 +77,7 @@ final class ColorTarget implements AutoCloseable {
     }
 
     void copyTo(VkCommandBuffer command, GpuBuffer readback) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack);
             region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
             region.imageExtent().set(width, height, 1);
@@ -90,7 +90,7 @@ final class ColorTarget implements AutoCloseable {
     }
 
     void blitTo(VkCommandBuffer command, long destination, int destinationWidth, int destinationHeight) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.calloc(1, stack).sType$Default()
                 .image(color.image).oldLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL).newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
                 .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT).dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)

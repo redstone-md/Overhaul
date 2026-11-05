@@ -259,7 +259,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     static void clear(PackFrameGraph plan,GpuImageView target,PackRenderTargets.Color color){
         String name=plan.write(target);plan.pass("clear-"+name,Map.of(name,VulkanRenderGraph.Usage.TRANSFER_WRITE),pass->{
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var value=VkClearColorValue.calloc(stack).float32(0,color.red()).float32(1,color.green()).float32(2,color.blue()).float32(3,color.alpha());
                 var range=VkImageSubresourceRange.calloc(1,stack).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).baseMipLevel(target.baseMip()).levelCount(1).baseArrayLayer(target.baseLayer()).layerCount(1);
                 vkCmdClearColorImage(pass.command(),target.image().handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,value,range);
@@ -270,7 +270,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         requireBlit(source.image().format().vkFormat(),VK_FORMAT_FEATURE_BLIT_SRC_BIT);requireBlit(target.image().format().vkFormat(),VK_FORMAT_FEATURE_BLIT_DST_BIT);
         String read=plan.read(source),write=plan.write(target);
         plan.pass(passName,Map.of(read,VulkanRenderGraph.Usage.TRANSFER_READ,write,VulkanRenderGraph.Usage.TRANSFER_WRITE),pass->{
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var region=VkImageBlit.calloc(1,stack);region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(source.baseMip()).baseArrayLayer(source.baseLayer()).layerCount(1);
                 region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(target.baseMip()).baseArrayLayer(target.baseLayer()).layerCount(1);
                 int sourceHeight=source.image().height(source.baseMip());region.srcOffsets(0).set(0,flip?sourceHeight:0,0);
@@ -281,7 +281,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         });
     }
     private void requireBlit(int format,int feature){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var properties=VkFormatProperties.malloc(stack);vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),format,properties);
             if((properties.optimalTilingFeatures()&feature)==0)throw new UnsupportedShaderException("Device cannot blit shader-pack image format: "+format);
         }

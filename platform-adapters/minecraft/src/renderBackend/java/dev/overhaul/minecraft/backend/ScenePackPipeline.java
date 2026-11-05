@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.minecraft.shader.CascadeShadowFrame;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
@@ -40,7 +42,7 @@ final class ScenePackPipeline implements AutoCloseable {
         values=new UniformBlock(code.bindings);upload=ByteBuffer.allocateDirect(code.bindings.uniformBytes()).order(ByteOrder.nativeOrder());
         shape=new DescriptorPoolCache.Shape(upload.capacity()>0?1:0,code.bindings.samplers().size(),0,code.normals?1:0,64);
         var owner=original.owner();
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             if(code.bindings.samplerTypes().containsValue("sampler2DShadow"))owner.context().portability().requireMutableComparisonSamplers();
             int count=shape.uniformBuffers()+shape.combinedSamplers()+shape.storageBuffers();var bindings=VkDescriptorSetLayoutBinding.calloc(count,stack);int slot=0;
             if(shape.uniformBuffers()>0){uniforms=owner.allocator().hostBuffer(upload.capacity(),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
@@ -87,7 +89,7 @@ final class ScenePackPipeline implements AutoCloseable {
     }
     void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors gameDescriptors,ScenePackDescriptors packDescriptors,GpuBuffer uniformBuffer){
         var owner=original.owner();var pipeline=variant(attachments);
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             long packSet=packDescriptors.set(this,bindings,uniformBuffer),gameSet=gameDescriptors.set(original,bindings.uniforms());
             vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(packSet,gameSet),null);
             if(code.normals){var source=bindings.vertices().get(code.inputs.storage().slot());if(source==null||source.offset()%4!=0||source.offset()/4>Integer.MAX_VALUE)throw new UnsupportedShaderException("Scene vertex address cannot be represented by its SSBO word offset");

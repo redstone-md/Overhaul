@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.FrameRing;
 import dev.overhaul.vulkan.GpuBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -24,7 +26,7 @@ final class ScenePackDescriptors implements AutoCloseable {
     long set(ScenePackPipeline pipeline,PassBindings bindings,GpuBuffer uniforms){
         var vertex=pipeline.code.normals?bindings.vertices().get(pipeline.code.inputs.storage().slot()):null;Key key=new Key(pipeline,Collections.unmodifiableList(new ArrayList<>(Arrays.asList(bindings.uniforms()))),vertex==null?null:vertex.buffer());
         Long existing=sets.get(key);if(existing!=null)return existing;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var pool=pool(pipeline.shape);LongBuffer pointer=stack.mallocLong(1);
             check(vkAllocateDescriptorSets(owner.context().device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool.handle()).pSetLayouts(stack.longs(pipeline.descriptorLayout)),pointer),"scene pack descriptor allocation");pool.allocated();long set=pointer.get(0);
             var writes=VkWriteDescriptorSet.calloc(pipeline.shape.uniformBuffers()+pipeline.shape.combinedSamplers()+pipeline.shape.storageBuffers(),stack);int slot=0;

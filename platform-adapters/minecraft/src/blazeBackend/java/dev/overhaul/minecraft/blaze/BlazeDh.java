@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compile.ShaderStage;
@@ -59,7 +61,7 @@ public final class BlazeDh implements AutoCloseable {
 
     private record BoxDraw(GpuBuffer vertices, GpuBuffer indices, GpuBuffer colors, GpuBuffer scales, GpuBuffer chunks, GpuBuffer subChunks, BoxGroup group) implements BlazeTerrainPass.Draw {
         @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 ByteBuffer push = stack.malloc(BOX_PUSH_BYTES);
                 int[] chunk = group.chunkOffset();
                 float[] sub = group.subOffset();

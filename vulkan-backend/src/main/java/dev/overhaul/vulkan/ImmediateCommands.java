@@ -24,7 +24,7 @@ public final class ImmediateCommands implements AutoCloseable {
     public ImmediateCommands(VulkanContext context) {
         this.context = context;
         images = new ImageTransfers(this,context);
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             LongBuffer pointer = stack.mallocLong(1);
             VkCommandPoolCreateInfo info = VkCommandPoolCreateInfo.calloc(stack).sType$Default()
                 .queueFamilyIndex(context.queueFamily()).flags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -58,7 +58,7 @@ public final class ImmediateCommands implements AutoCloseable {
         if (pool == 0) throw new IllegalStateException("command lane closed");
         if(this.recording)throw new IllegalStateException("nested immediate command submission");
         this.recording=true;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             check(vkResetCommandPool(context.device(), pool, 0), "vkResetCommandPool");
             check(vkBeginCommandBuffer(command, VkCommandBufferBeginInfo.calloc(stack).sType$Default()
                 .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)), "vkBeginCommandBuffer");
@@ -85,7 +85,7 @@ public final class ImmediateCommands implements AutoCloseable {
     public void copy(GpuBuffer source, GpuBuffer target, long size) {
         if (size < 1 || size > source.size() || size > target.size()) throw new IllegalArgumentException("copy out of bounds");
         submit(command -> {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 VkBufferCopy.Buffer copy = VkBufferCopy.calloc(1, stack).size(size);
                 vkCmdCopyBuffer(command, source.handle(), target.handle(), copy);
                 VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack).sType$Default()

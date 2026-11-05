@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.GpuAllocator;
 import dev.overhaul.vulkan.VulkanContext;
 import java.util.ArrayList;
@@ -105,7 +107,7 @@ final class BlazeRawFramebuffers implements AutoCloseable {
     private boolean renderable(BlazeTextures.Attachment attachment, int feature) {
         var format = attachment.image().format();
         boolean supported;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             var properties = VkFormatProperties.malloc(stack);
             vkGetPhysicalDeviceFormatProperties(context.physicalDevice(), format.vkFormat(), properties);
             supported = (properties.optimalTilingFeatures() & feature) != 0 && !format.name().endsWith("INT");

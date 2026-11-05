@@ -45,6 +45,5 @@ dependencies { implementation blazeRuntimeJars }
 tasks.withType(JavaExec).configureEach {
     systemProperty 'overhaul.blaze.enabled', 'true'
     if (providers.gradleProperty('blazeStats').isPresent()) systemProperty 'overhaul.blaze.stats', 'true'
-    systemProperty 'org.lwjgl.system.stackSize', '1024'
     jvmArgs '--enable-native-access=ALL-UNNAMED'
 }

@@ -72,7 +72,7 @@ public final class AsyncRenderer implements AutoCloseable {
                 copy(frame.command(), transfer, gpu.indices, batch.vertexBytes);
                 copy(frame.command(), transfer, gpu.instances, batch.vertexBytes + batch.indexBytes);
                 copy(frame.command(), transfer, gpu.indirect, batch.commandOffset());
-                try (MemoryStack stack = MemoryStack.stackPush()) {
+                try (MemoryStack stack = VulkanStack.push()) {
                     VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack).sType$Default()
                         .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
                         .dstAccessMask(VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
@@ -90,7 +90,7 @@ public final class AsyncRenderer implements AutoCloseable {
     }
 
     private static void copy(VkCommandBuffer command, GpuBuffer staging, GpuBuffer destination, long offset) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             vkCmdCopyBuffer(command, staging.handle(), destination.handle(),
                 VkBufferCopy.calloc(1, stack).srcOffset(offset).size(destination.size()));
         }
@@ -144,7 +144,7 @@ public final class AsyncRenderer implements AutoCloseable {
     }
 
     private void recordDraws(VkCommandBuffer command, GpuBatch batch) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             vkCmdBindIndexBuffer(command, batch.indices.handle(), 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindVertexBuffers(command, 0, stack.longs(batch.vertices.handle(), batch.instances.handle()), stack.longs(0, 0));
             if (batch.multiDraw) {

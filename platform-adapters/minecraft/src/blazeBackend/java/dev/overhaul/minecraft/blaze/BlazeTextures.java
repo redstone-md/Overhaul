@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.overhaul.vulkan.*;
 import java.nio.ByteBuffer;
@@ -205,7 +207,7 @@ public final class BlazeTextures implements AutoCloseable {
         if(level!=0||border!=0||input!=null||internal!=GL_RGBA||format!=GL_RGBA||type!=GL_UNSIGNED_BYTE)
             throw new UnsupportedOperationException("Unsupported proxy texture capability query");
         proxyWidth=proxyHeight=proxyInternal=0;if(width<1||height<1)return;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var support=VkImageFormatProperties.malloc(stack);
             int result=vkGetPhysicalDeviceImageFormatProperties(context.physicalDevice(),ImageFormat.RGBA8_UNORM.vkFormat(),VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,0,support);

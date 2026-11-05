@@ -43,7 +43,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         this.context = context;
         if (context.surface() == 0) throw new IllegalArgumentException("presentation requires a surface");
         frames = new FrameRing(context, acquired.length);
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             createSemaphores(acquired, stack);
             createSemaphores(manualAcquire,stack);
             configure(width,height,presentMode);
@@ -68,7 +68,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         abandonManualAcquire();
         context.waitIdle();
         frames.drain();
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VkSurfaceCapabilitiesKHR capabilities = VkSurfaceCapabilitiesKHR.malloc(stack);
             check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context.physicalDevice(), context.surface(), capabilities), "surface capabilities");
             if ((capabilities.supportedUsageFlags() & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0)
@@ -144,7 +144,7 @@ public final class SwapchainPresenter implements AutoCloseable {
     /** Queues a clear with the same semaphore scheduling used by rendered image presentation. */
     public boolean presentClear(float red, float green, float blue) {
         return present((command, image) -> {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 VkClearColorValue color = VkClearColorValue.calloc(stack)
                     .float32(0, red).float32(1, green).float32(2, blue).float32(3, 1);
                 VkImageSubresourceRange.Buffer range = VkImageSubresourceRange.calloc(1, stack)
@@ -158,7 +158,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         requireOpen();
         if (sourceContext != context) throw new IllegalArgumentException("rendered image belongs to another Vulkan context");
         if (swapchain == 0 || suspended) return false;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             if (!destinationBlitSupported || !supportsFormat(VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_FEATURE_BLIT_SRC_BIT, stack))
                 throw new IllegalStateException("source/destination formats do not support GPU blitting");
         }
@@ -175,7 +175,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         requireOpen();
         if(manualIndex!=-1)throw new IllegalStateException("a manually acquired image has not been presented");
         if (swapchain == 0 || suspended) return false;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             IntBuffer index = stack.mallocInt(1);
             FrameRing.Submission submission = frames.submit(frame -> {
                 int acquire = vkAcquireNextImageKHR(context.device(), swapchain, 1_000_000_000L,
@@ -215,7 +215,7 @@ public final class SwapchainPresenter implements AutoCloseable {
             }
         }
         if(!available)manualConsumption[manualSlot].await();
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             IntBuffer index=stack.mallocInt(1);
             int result=vkAcquireNextImageKHR(context.device(),swapchain,1_000_000_000L,manualAcquire[manualSlot],VK_NULL_HANDLE,index);
             if(result==VK_ERROR_OUT_OF_DATE_KHR){needsResize=true;suspended=true;return false;}
@@ -247,14 +247,14 @@ public final class SwapchainPresenter implements AutoCloseable {
         if(image.format().name().endsWith("UINT")||image.format().name().endsWith("SINT"))throw new IllegalArgumentException("surface color conversion does not accept integer formats");
         image.requireUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT);int mip=source.baseMip(),layer=source.baseLayer();
         int previous=image.layout(mip,layer);if(previous==VK_IMAGE_LAYOUT_UNDEFINED)throw new IllegalStateException("source image has not been initialized");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             if(!destinationBlitSupported||!supportsFormat(image.format().vkFormat(),VK_FORMAT_FEATURE_BLIT_SRC_BIT,stack))throw new IllegalArgumentException("surface blit format unsupported");
         }
         java.util.List<GpuImage.LayoutChange> changes=new java.util.ArrayList<>();
         try{
             FrameRing.Submission completion=frames.submit(frame->writeAcquired(frame,manualIndex,manualAcquire[manualSlot],(command,destination)->{
                 changes.add(image.recordTransition(command,mip,1,layer,1,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
-                try(MemoryStack stack=MemoryStack.stackPush()){
+                try(MemoryStack stack=VulkanStack.push()){
                     VkImageBlit.Buffer region=VkImageBlit.calloc(1,stack);
                     region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(mip).baseArrayLayer(layer).layerCount(1);
                     region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
@@ -278,7 +278,7 @@ public final class SwapchainPresenter implements AutoCloseable {
 
     private void writeAcquired(FrameRing.Frame frame,int index,long acquire,ImageWriter writer){
         frame.waitFor(acquire,VK_PIPELINE_STAGE_TRANSFER_BIT);frame.signal(finished[index]);long image=images[index];
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             transition(frame.command(),image,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0,VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,stack);
             writer.write(frame.command(),image);
@@ -287,7 +287,7 @@ public final class SwapchainPresenter implements AutoCloseable {
         }
     }
     private boolean presentIndex(int index){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkPresentInfoKHR info=VkPresentInfoKHR.calloc(stack).sType$Default().pWaitSemaphores(stack.longs(finished[index]))
                 .swapchainCount(1).pSwapchains(stack.longs(swapchain)).pImageIndices(stack.ints(index));
             int result=vkQueuePresentKHR(context.queue(),info);

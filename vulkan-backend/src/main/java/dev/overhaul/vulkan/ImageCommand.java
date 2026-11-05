@@ -45,7 +45,7 @@ public final class ImageCommand implements AutoCloseable {
         return new ImageCommand(context,(operation,command)-> {
             int before=target.layout(region.mipLevel(),region.arrayLayer());
             operation.transition(target,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            try (MemoryStack stack=MemoryStack.stackPush()) {
+            try (MemoryStack stack=VulkanStack.push()) {
                 hostToTransfer(command,stack);
                 vkCmdCopyBufferToImage(command,source.handle(),target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         copyRegion(target,region,offset,pitch,stack));
@@ -65,7 +65,7 @@ public final class ImageCommand implements AutoCloseable {
                 before[index]=target.layout(region.mipLevel(),region.arrayLayer());
                 operation.transition(target,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             }
-            try (MemoryStack stack=MemoryStack.stackPush()) { hostToTransfer(command,stack); }
+            try (MemoryStack stack=VulkanStack.push()) { hostToTransfer(command,stack); }
             VkBufferImageCopy.Buffer list=VkBufferImageCopy.calloc(copies.size());
             try {
                 for (int index=0;index<copies.size();index++)
@@ -89,7 +89,7 @@ public final class ImageCommand implements AutoCloseable {
             requireDefined(source,region);
             int before=source.layout(region.mipLevel(),region.arrayLayer());
             operation.transition(source,region,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            try (MemoryStack stack=MemoryStack.stackPush()) {
+            try (MemoryStack stack=VulkanStack.push()) {
                 vkCmdCopyImageToBuffer(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),
                         copyRegion(source,region,offset,pitch,stack));
                 VkMemoryBarrier.Buffer host=VkMemoryBarrier.calloc(1,stack).sType$Default()
@@ -125,7 +125,7 @@ public final class ImageCommand implements AutoCloseable {
         int sourceBefore=source.layout(from.mipLevel(),from.arrayLayer()),targetBefore=target.layout(to.mipLevel(),to.arrayLayer());
         transition(source,from,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         transition(target,to,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             VkImageCopy.Buffer copy=VkImageCopy.calloc(1,stack);
             copy.srcSubresource().aspectMask(source.format().aspectMask()).mipLevel(from.mipLevel()).baseArrayLayer(from.arrayLayer()).layerCount(1);
             copy.dstSubresource().aspectMask(target.format().aspectMask()).mipLevel(to.mipLevel()).baseArrayLayer(to.arrayLayer()).layerCount(1);
@@ -150,7 +150,7 @@ public final class ImageCommand implements AutoCloseable {
             int sourceBefore=source.layout(0,0),targetBefore=target.layout(0,0);
             operation.transition(source,sourceLevel,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
             operation.transition(target,targetLevel,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            try (MemoryStack stack=MemoryStack.stackPush()) {
+            try (MemoryStack stack=VulkanStack.push()) {
                 VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
                 blit.srcSubresource().aspectMask(source.format().aspectMask()).layerCount(1);
                 blit.dstSubresource().aspectMask(target.format().aspectMask()).layerCount(1);
@@ -173,7 +173,7 @@ public final class ImageCommand implements AutoCloseable {
             for (int level=base+1;level<image.mipLevels();level++) {
                 operation.transition(image,ImageRegion.whole(image,level-1,layer),command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
                 operation.transition(image,ImageRegion.whole(image,level,layer),command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                try (MemoryStack stack=MemoryStack.stackPush()) {
+                try (MemoryStack stack=VulkanStack.push()) {
                     VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
                     blit.srcSubresource().aspectMask(image.format().aspectMask()).mipLevel(level-1).baseArrayLayer(layer).layerCount(1);
                     blit.dstSubresource().aspectMask(image.format().aspectMask()).mipLevel(level).baseArrayLayer(layer).layerCount(1);
@@ -219,7 +219,7 @@ public final class ImageCommand implements AutoCloseable {
         return new ImageCommand(context,(operation,command)-> {
             int before=image.layout(mip,layer);
             operation.transition(image,region,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            try (MemoryStack stack=MemoryStack.stackPush()) {
+            try (MemoryStack stack=VulkanStack.push()) {
                 VkImageSubresourceRange.Buffer range=VkImageSubresourceRange.calloc(1,stack).aspectMask(aspects)
                         .baseMipLevel(mip).levelCount(1).baseArrayLayer(layer).layerCount(1);
                 if (aspects!=VK_IMAGE_ASPECT_COLOR_BIT) vkCmdClearDepthStencilImage(command,image.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

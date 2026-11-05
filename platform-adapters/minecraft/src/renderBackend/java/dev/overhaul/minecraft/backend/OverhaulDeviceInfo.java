@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.device.*;
 import dev.overhaul.vulkan.VulkanContext;
 import org.lwjgl.system.MemoryStack;
@@ -11,7 +13,7 @@ import static org.lwjgl.vulkan.VK10.*;
 final class OverhaulDeviceInfo {
     private OverhaulDeviceInfo() {}
     static DeviceInfo read(VulkanContext context) {
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             var properties=VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
             var limits=properties.limits();

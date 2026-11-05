@@ -82,7 +82,7 @@ final class AsyncSmoke {
                     destinations.add(destination);
                     FrameRing.Submission submission = ring.submit(frame -> {
                         frame.retireAfterFence(() -> { staging.close(); retired.incrementAndGet(); });
-                        try (MemoryStack stack = MemoryStack.stackPush()) {
+                        try (MemoryStack stack = VulkanStack.push()) {
                             vkCmdCopyBuffer(frame.command(), staging.handle(), destination.handle(), VkBufferCopy.calloc(1, stack).size(256));
                             VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack).sType$Default()
                                 .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_HOST_READ_BIT);

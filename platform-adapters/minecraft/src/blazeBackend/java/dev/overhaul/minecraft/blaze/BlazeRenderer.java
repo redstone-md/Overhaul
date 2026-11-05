@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.*;
 import java.util.ArrayList;
@@ -65,7 +67,7 @@ public final class BlazeRenderer implements AutoCloseable {
         try{
             allocator=new GpuAllocator(context);commands=new ImmediateCommands(context);
             queue=new BlazeQueue(context);
-            try(MemoryStack stack=MemoryStack.stackPush()){
+            try(MemoryStack stack=VulkanStack.push()){
                 var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
                 int alignment=Math.toIntExact(Math.max(4,Math.max(properties.limits().nonCoherentAtomSize(),properties.limits().minUniformBufferOffsetAlignment())));
                 maximumUniformRange=properties.limits().maxUniformBufferRange();

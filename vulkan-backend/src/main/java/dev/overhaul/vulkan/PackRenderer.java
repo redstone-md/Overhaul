@@ -62,7 +62,7 @@ public final class PackRenderer implements AutoCloseable {
             ByteBuffer draw=ByteBuffer.allocate(20).order(ByteOrder.nativeOrder());
             draw.putInt(geometry.indexCount()).putInt(1).putInt(0).putInt(0).putInt(0).flip(); indirect.write(draw);
             commands.submit(command->{
-                try (MemoryStack stack=MemoryStack.stackPush()) {
+                try (MemoryStack stack=VulkanStack.push()) {
                     RenderPassCommands.begin(command,target,pipeline.pipeline,pipeline.layout,descriptors.set);
                     vkCmdBindVertexBuffers(command,0,stack.longs(vertices.handle()),stack.longs(0));
                     vkCmdBindIndexBuffer(command,indices.handle(),0,VK_INDEX_TYPE_UINT32);

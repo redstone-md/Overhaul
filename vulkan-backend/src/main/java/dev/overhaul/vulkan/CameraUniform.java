@@ -22,7 +22,7 @@ final class CameraUniform implements AutoCloseable {
     CameraUniform(VulkanContext context, GpuAllocator allocator) {
         this.context = context;
         buffer = allocator.hostBuffer(64, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             LongBuffer pointer = stack.mallocLong(1);
             VkDescriptorSetLayoutBinding.Buffer binding = VkDescriptorSetLayoutBinding.calloc(1, stack)
                 .binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT);

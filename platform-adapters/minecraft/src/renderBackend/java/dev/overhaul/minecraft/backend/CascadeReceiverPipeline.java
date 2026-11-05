@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.minecraft.shader.OwnedReceiverShaders;
 import dev.overhaul.minecraft.shader.SceneDrawDomain;
 import dev.overhaul.shader.compile.ShadercCompiler;
@@ -49,7 +51,7 @@ final class CascadeReceiverPipeline implements AutoCloseable {
     void bind(VkCommandBuffer command,PassBindings bindings,PassAttachments attachments,PassDescriptors descriptors,long receiverSet){
         var variant=variant(attachments.renderPass,attachments.colorFormats(),attachments.depthFormat());
         vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,variant.handle());
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,variant.layout(),0,stack.longs(descriptors.set(original,bindings.uniforms()),receiverSet),null);
             if(bindings.constants()!=null&&original.pushConstantsSize()>0)vkCmdPushConstants(command,variant.layout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,bindings.constants());
         }

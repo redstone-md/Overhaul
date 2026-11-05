@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.commands.GpuQueryPool;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -25,7 +27,7 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
         if (count<1) { close(); throw new IllegalArgumentException("query count must be positive"); }
         this.count=count;
         prepared=new boolean[count]; written=new boolean[count];generations=new long[count];
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             IntBuffer familyCount=stack.ints(0);
             vkGetPhysicalDeviceQueueFamilyProperties(owner.context().physicalDevice(),familyCount,null);
             VkQueueFamilyProperties.Buffer families=VkQueueFamilyProperties.malloc(familyCount.get(0),stack);
@@ -86,7 +88,7 @@ public final class OverhaulQueryPool extends BackendResource implements GpuQuery
         if(!owner().queue().resourceComplete(this))return OptionalLong.empty();
         requireIndex(index); // Retirement callbacks may have changed this resource's lifetime/generation.
         if (!written[index]) return OptionalLong.empty();
-        try (MemoryStack stack=MemoryStack.stackPush()) {
+        try (MemoryStack stack=VulkanStack.push()) {
             LongBuffer result=stack.callocLong(2);
             int status=vkGetQueryPoolResults(owner().context().device(),handle,index,1,result,16,
                     VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);

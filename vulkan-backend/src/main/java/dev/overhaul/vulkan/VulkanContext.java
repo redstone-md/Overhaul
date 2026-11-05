@@ -84,10 +84,7 @@ public final class VulkanContext implements AutoCloseable {
     }
 
     private void initialize(SurfaceProvider provider, List<String> requiredExtensions, boolean validate) {
-        if (MemoryStack.stackGet().getSize() < 256 * 1024)
-            throw new IllegalStateException("Vulkan device enumeration needs a larger LWJGL stack; set "
-                + "-Dorg.lwjgl.system.stackSize=1024 before initializing LWJGL");
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VkApplicationInfo app = VkApplicationInfo.calloc(stack).sType$Default()
                 .pApplicationName(stack.UTF8("overhaul")).applicationVersion(1)
                 .pEngineName(stack.UTF8("overhaul")).engineVersion(1).apiVersion(VK_API_VERSION_1_1);
@@ -216,7 +213,7 @@ public final class VulkanContext implements AutoCloseable {
             throw new IllegalArgumentException("surface needs instance extensions that were not enabled before device creation");
         long candidate = provider.createSurface(instance);
         if (candidate == 0) throw new IllegalStateException("surface provider returned a null Vulkan surface");
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             IntBuffer supported = stack.ints(0);
             check(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamily, candidate, supported), "deferred surface support");
             if (supported.get(0) == 0) throw new IllegalStateException("selected graphics queue cannot present to this surface");

@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
@@ -174,7 +176,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
 
     private record Draw(Run[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions) implements BlazeTerrainPass.Draw {
         @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 var buffers = stack.mallocLong(2);
                 var bindOffsets = stack.mallocLong(2);
                 long indirect = commands.buffer().handle();

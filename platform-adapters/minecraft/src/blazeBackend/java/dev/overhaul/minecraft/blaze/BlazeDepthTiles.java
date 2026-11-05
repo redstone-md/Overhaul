@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.compile.ShaderStage;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.vulkan.FrameRing;
@@ -66,7 +68,7 @@ final class BlazeDepthTiles implements AutoCloseable {
 
     private void create() {
         VkDevice device = context.device();
-        try (MemoryStack stack = MemoryStack.stackPush(); ShadercCompiler compiler = new ShadercCompiler()) {
+        try (MemoryStack stack = VulkanStack.push(); ShadercCompiler compiler = new ShadercCompiler()) {
             var pointer = stack.mallocLong(1);
             var bindings = VkDescriptorSetLayoutBinding.calloc(2, stack);
             bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
@@ -147,7 +149,7 @@ final class BlazeDepthTiles implements AutoCloseable {
                 buffer = null;
             }
             if (buffer == null) buffer = allocator.hostBuffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 var writes = VkWriteDescriptorSet.calloc(2, stack);
                 var image = VkDescriptorImageInfo.calloc(1, stack).sampler(sampler.handle()).imageView(depth.handle()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 var storage = VkDescriptorBufferInfo.calloc(1, stack).buffer(buffer.handle()).offset(0).range(bytes);
@@ -172,7 +174,7 @@ final class BlazeDepthTiles implements AutoCloseable {
 
         @Override public void record(VkCommandBuffer command) {
             images.transition(command, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(readback.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, stack.ints(size));

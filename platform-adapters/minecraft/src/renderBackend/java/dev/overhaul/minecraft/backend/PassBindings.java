@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.pipeline.IndexType;
@@ -21,7 +23,7 @@ record PassBindings(OverhaulPipeline pipeline,Object[] uniforms,Map<Integer,GpuB
     void bind(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments,PassDescriptors descriptors) {
         var nativePipeline=pipeline.variant(attachments.renderPass,attachments.colorFormats(),attachments.depthFormat());
         vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,nativePipeline.handle());
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             long set=descriptors.set(pipeline,uniforms);
             vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,nativePipeline.layout(),0,stack.longs(set),null);
             if(constants!=null&&pipeline.pushConstantsSize()>0)vkCmdPushConstants(command,nativePipeline.layout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,constants);
@@ -32,7 +34,7 @@ record PassBindings(OverhaulPipeline pipeline,Object[] uniforms,Map<Integer,GpuB
         geometry(command,resources,attachments,pipeline.vertexBindings());
     }
     void geometry(VkCommandBuffer command,NativePassResources resources,PassAttachments attachments,java.util.List<dev.overhaul.vulkan.NativeGraphicsPipeline.Binding> expectedBindings){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             attachments.viewport(command,viewport,stack);
             for(var expected:expectedBindings){
                 GpuBufferSlice slice=vertices.get(expected.slot());

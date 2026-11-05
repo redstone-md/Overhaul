@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.backend;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import dev.overhaul.vulkan.FrameRing;
 import dev.overhaul.vulkan.VulkanContext;
@@ -57,7 +59,7 @@ final class DescriptorPoolCache implements AutoCloseable {
         catch(RuntimeException|Error failure){destroy(pool);throw failure;}
     }
     private Pool create(Shape shape){
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             int count=(shape.uniformBuffers()>0?1:0)+(shape.combinedSamplers()>0?1:0)+(shape.texelBuffers()>0?1:0)+(shape.storageBuffers()>0?1:0);
             VkDescriptorPoolSize.Buffer sizes=VkDescriptorPoolSize.calloc(count,stack);int index=0;
             if(shape.uniformBuffers()>0)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(shape.uniformBuffers()*shape.maxSets());

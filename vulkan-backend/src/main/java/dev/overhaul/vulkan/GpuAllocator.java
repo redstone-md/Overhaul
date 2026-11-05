@@ -27,7 +27,7 @@ public final class GpuAllocator implements AutoCloseable {
 
     public GpuAllocator(VulkanContext context) {
         this.context = context;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VmaVulkanFunctions functions = VmaVulkanFunctions.calloc(stack).set(context.instance(), context.device());
             VmaAllocatorCreateInfo info = VmaAllocatorCreateInfo.calloc(stack)
                 .instance(context.instance()).physicalDevice(context.physicalDevice()).device(context.device())
@@ -59,7 +59,7 @@ public final class GpuAllocator implements AutoCloseable {
         boolean depthStencil=format.aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT;
         if(depthStencil&&(usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)!=0||!depthStencil&&(usage&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)!=0)
             throw new IllegalArgumentException("attachment usage differs from image format");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkImageFormatProperties support=VkImageFormatProperties.malloc(stack);
             check(vkGetPhysicalDeviceImageFormatProperties(context.physicalDevice(),format.vkFormat(),VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,flags,support),"image format support");
             if(width>support.maxExtent().width()||height>support.maxExtent().height()||mips>support.maxMipLevels()||layers>support.maxArrayLayers())
@@ -81,7 +81,7 @@ public final class GpuAllocator implements AutoCloseable {
     private GpuBuffer createBuffer(long size, int usage, boolean host) {
         requireOpen();
         if (size < 1 || size > Integer.MAX_VALUE) throw new IllegalArgumentException("buffer size out of range");
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             VkBufferCreateInfo info = VkBufferCreateInfo.calloc(stack).sType$Default()
                 .size(size).usage(usage).sharingMode(VK_SHARING_MODE_EXCLUSIVE);
             VmaAllocationCreateInfo allocation = VmaAllocationCreateInfo.calloc(stack)
@@ -98,7 +98,7 @@ public final class GpuAllocator implements AutoCloseable {
 
     ByteBuffer map(long allocation, int size) {
         requireOpen();
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             PointerBuffer pointer = stack.mallocPointer(1);
             check(vmaMapMemory(handle, allocation, pointer), "vmaMapMemory");
             return memByteBuffer(pointer.get(0), size);

@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.vulkan.VulkanContext;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
@@ -10,7 +12,7 @@ public final class BlazeCapabilities {
     private BlazeCapabilities(){}
     public static int integer(VulkanContext context,int name,int textureUnits){
         if(textureUnits<1)throw new IllegalArgumentException("The frontend needs a positive texture unit capacity");
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);var limits=properties.limits();
             return switch(name){
                 case 3379->limits.maxImageDimension2D();
@@ -28,7 +30,7 @@ public final class BlazeCapabilities {
         if(name==7937)return context.deviceName();
         if(name==7939)return "";
         if(name==35724)return "SPIR-V";
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
             return switch(name){
                 case 7936->"Vulkan vendor 0x"+Integer.toHexString(properties.vendorID());

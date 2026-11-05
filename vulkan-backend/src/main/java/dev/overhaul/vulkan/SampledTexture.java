@@ -23,7 +23,7 @@ final class SampledTexture implements AutoCloseable {
     }
     private SampledTexture(VulkanContext context,GpuAllocator allocator,ImmediateCommands commands,int width,int height,ByteBuffer pixels,boolean linear,boolean clamp){
         this.context=context;
-        try(MemoryStack stack=MemoryStack.stackPush()){
+        try(MemoryStack stack=VulkanStack.push()){
             VkFormatProperties properties=VkFormatProperties.malloc(stack);
             vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),VK_FORMAT_R8G8B8A8_UNORM,properties);
             int required=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|(linear?VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT:0);

@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.VulkanStack;
+
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.FrameRing;
 import dev.overhaul.vulkan.GpuBuffer;
@@ -71,7 +73,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
             }
             var image = sized == null ? samples.isEmpty() ? null : samples.get(0).view().image() : sized.view().image();
             uniforms = owner.hostStorage().acquire(program.bindings().uniformBytes());
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 ByteBuffer bytes = stack.calloc(uniforms.size());
                 writer.write(bytes, image == null ? 1 : image.width(0), image == null ? 1 : image.height(0));
                 bytes.clear();
@@ -89,7 +91,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
 
     /** Binds indexed geometry and the offset every native terrain vertex shader takes as its push constant. */
     static void bindGeometry(VkCommandBuffer command, long pipelineLayout, GpuBuffer vertices, GpuBuffer indices, float x, float y, float z) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             vkCmdPushConstants(command, pipelineLayout, PUSH_STAGES, 0, stack.floats(x, y, z, 0));
             vkCmdBindVertexBuffers(command, 0, stack.longs(vertices.handle()), stack.longs(0));
             vkCmdBindIndexBuffer(command, indices.handle(), 0, VK_INDEX_TYPE_UINT32);
@@ -104,7 +106,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
             images.transition(command, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
         target.prepare(command, images);
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             target.begin(command, stack);
             vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
             vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout(), 0, stack.longs(descriptors.set()), stack.ints(0));

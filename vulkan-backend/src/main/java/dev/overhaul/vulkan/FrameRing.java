@@ -42,7 +42,7 @@ public final class FrameRing implements AutoCloseable {
         awaitSlot(slot);
         Frame frame = new Frame(index, slot.command);
         recording = true;
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = VulkanStack.push()) {
             check(vkResetCommandPool(context.device(), slot.pool, 0), "frame command pool reset");
             check(vkBeginCommandBuffer(slot.command, VkCommandBufferBeginInfo.calloc(stack).sType$Default()
                 .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)), "frame command begin");
@@ -235,7 +235,7 @@ public final class FrameRing implements AutoCloseable {
         private List<AutoCloseable> retirements = new ArrayList<>();
 
         private Slot() {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
+            try (MemoryStack stack = VulkanStack.push()) {
                 LongBuffer handle = stack.mallocLong(1);
                 check(vkCreateCommandPool(context.device(), VkCommandPoolCreateInfo.calloc(stack).sType$Default()
                     .queueFamilyIndex(context.queueFamily()).flags(VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), null, handle), "frame command pool");
