@@ -15,6 +15,8 @@ import org.joml.Matrix4f;
 public final class BlazeSectionOcclusion implements AutoCloseable {
     private static final double MAX_MOVE = 4;
     private static final int SECTION = 16;
+    /** Block entity models may lean out of their section a little. */
+    private static final int BLOCK_ENTITY_REACH = 2;
     /** Depth is from the fence-passed past, and floats round; a little distance keeps a section's own surface from hiding it. */
     private static final float MARGIN = .5f;
     /** Older depth says too little about now, and a path that stopped capturing must not keep testing against its last one. */
@@ -46,6 +48,14 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     public boolean hidden(int originX, int originY, int originZ) {
         if (!usable || !behindTerrain(originX, originY, originZ, originX + SECTION, originY + SECTION, originZ + SECTION)) return false;
         BlazeStats.hiddenSection();
+        return true;
+    }
+
+    /** Whether everything the block entities of this section draw was entirely behind captured terrain. */
+    public boolean blockEntitiesHidden(int originX, int originY, int originZ) {
+        if (!usable || !behindTerrain(originX - BLOCK_ENTITY_REACH, originY - BLOCK_ENTITY_REACH, originZ - BLOCK_ENTITY_REACH,
+                originX + SECTION + BLOCK_ENTITY_REACH, originY + SECTION + BLOCK_ENTITY_REACH, originZ + SECTION + BLOCK_ENTITY_REACH)) return false;
+        BlazeStats.hiddenBlockEntities();
         return true;
     }
 
