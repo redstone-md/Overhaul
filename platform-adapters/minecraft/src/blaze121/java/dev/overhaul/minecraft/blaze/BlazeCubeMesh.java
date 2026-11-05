@@ -16,12 +16,15 @@ public final class BlazeCubeMesh {
     private static final boolean LITTLE_ENDIAN=ByteOrder.nativeOrder()==ByteOrder.LITTLE_ENDIAN;
     private static final int VERTICES_PER_QUAD=4;
     private static final int NORMAL_FLOATS=3,VERTEX_FLOATS=5,QUAD_FLOATS=NORMAL_FLOATS+VERTICES_PER_QUAD*VERTEX_FLOATS;
-    private static final BlazeCubeMesh UNSUPPORTED=new BlazeCubeMesh(null);
+    /** A quad's normal when it lies on an axis: 0-2 for +x +y +z, 3-5 for the opposite, else {@link #OFF_AXIS}. */
+    private static final byte OFF_AXIS=-1;
+    private static final BlazeCubeMesh UNSUPPORTED=new BlazeCubeMesh(null,null);
     private static final Logger LOGGER=LoggerFactory.getLogger(BlazeCubeMesh.class);
     private static boolean reported;
     private final float[] quads;
+    private final byte[] axes;
 
-    private BlazeCubeMesh(float[] quads){this.quads=quads;}
+    private BlazeCubeMesh(float[] quads,byte[] axes){this.quads=quads;this.axes=axes;}
 
     /** Flattens a cube, or returns a mesh that always declines when the cube has an unexpected shape. */
     public static BlazeCubeMesh of(ModelPart.Cube cube){
@@ -32,7 +35,9 @@ public final class BlazeCubeMesh {
             int count=Array.getLength(array);
             float[] data=new float[count*QUAD_FLOATS];
             for(int index=0;index<count;index++)if(!flatten(Array.get(array,index),data,index*QUAD_FLOATS))return UNSUPPORTED;
-            return new BlazeCubeMesh(data);
+            byte[] axes=new byte[count];
+            for(int index=0;index<count;index++)axes[index]=axis(data[index*QUAD_FLOATS],data[index*QUAD_FLOATS+1],data[index*QUAD_FLOATS+2]);
+            return new BlazeCubeMesh(data,axes);
         }catch(ReflectiveOperationException|RuntimeException failure){
             if(!reported){reported=true;LOGGER.warn("Model cubes stay on the vanilla path",failure);}
             return UNSUPPORTED;
@@ -51,6 +56,19 @@ public final class BlazeCubeMesh {
             data[at+3]=(float)field(vertex,"u");data[at+4]=(float)field(vertex,"v");
         }
         return true;
+    }
+    private static byte axis(float x,float y,float z){
+        if(y==0f&&z==0f&&Math.abs(x)==1f)return (byte)(x>0f?0:3);
+        if(x==0f&&z==0f&&Math.abs(y)==1f)return (byte)(y>0f?1:4);
+        if(x==0f&&y==0f&&Math.abs(z)==1f)return (byte)(z>0f?2:5);
+        return OFF_AXIS;
+    }
+    private static int packed(PoseStack.Pose pose,float x,float y,float z,Vector3f scratch){
+        pose.transformNormal(x,y,z,scratch);
+        return BlazeEntityVertex.packNormal(scratch.x,scratch.y,scratch.z);
+    }
+    private static int opposite(int packed){
+        return -(byte)packed&0xFF|(-(byte)(packed>>8)&0xFF)<<8|(-(byte)(packed>>16)&0xFF)<<16;
     }
     private static Object field(Object owner,String name) throws ReflectiveOperationException {
         Field field=owner.getClass().getDeclaredField(name);
@@ -72,10 +90,20 @@ public final class BlazeCubeMesh {
         float m30=matrix.m30(),m31=matrix.m31(),m32=matrix.m32();
         int abgr=FastColor.ABGR32.fromArgb32(color);
         Vector3f normal=new Vector3f();
-        for(int at=0;at<data.length;){
-            pose.transformNormal(data[at],data[at+1],data[at+2],normal);
+        // Six faces, three directions: the opposite of a transformed and packed normal is that value negated.
+        int alongX=packed(pose,1f,0f,0f,normal),alongY=packed(pose,0f,1f,0f,normal),alongZ=packed(pose,0f,0f,1f,normal);
+        byte[] faces=axes;
+        for(int at=0,quad=0;at<data.length;quad++){
+            int packedNormal=switch(faces[quad]){
+                case 0->alongX;
+                case 1->alongY;
+                case 2->alongZ;
+                case 3->opposite(alongX);
+                case 4->opposite(alongY);
+                case 5->opposite(alongZ);
+                default->packed(pose,data[at],data[at+1],data[at+2],normal);
+            };
             at+=NORMAL_FLOATS;
-            int packedNormal=BlazeEntityVertex.packNormal(normal.x,normal.y,normal.z);
             for(int vertex=0;vertex<VERTICES_PER_QUAD;vertex++,at+=VERTEX_FLOATS,pointer+=BlazeEntityVertex.BYTES){
                 float x=data[at],y=data[at+1],z=data[at+2];
                 BlazeEntityVertex.put(pointer,m00*x+m10*y+m20*z+m30,m01*x+m11*y+m21*z+m31,m02*x+m12*y+m22*z+m32,abgr,data[at+3],data[at+4],overlay,light,packedNormal);
