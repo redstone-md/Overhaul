@@ -26,6 +26,10 @@ abstract class LevelRendererSections121Mixin implements BlazeLayerLists {
         return overhaul$sections.scanned(visibleSections);
     }
 
+    @Override public BlazeVisibleSections.Layer overhaul$layerTable(RenderType layer){
+        return overhaul$sections.table(visibleSections,layer);
+    }
+
     @ModifyExpressionValue(method="compileSections",at=@At(value="FIELD",target="Lnet/minecraft/client/renderer/LevelRenderer;visibleSections:Lit/unimi/dsi/fastutil/objects/ObjectArrayList;"))
     private ObjectArrayList<RenderSection> overhaul$dirtySections(ObjectArrayList<RenderSection> visible){
         return overhaul$sections.dirty(visible);

@@ -4,6 +4,8 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeLayerLists;
+import dev.overhaul.minecraft.blaze.BlazeMesh;
+import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
 import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
@@ -51,7 +53,17 @@ abstract class LevelRendererSectionBatch121Mixin {
         boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
         int layerId = layer.getChunkLayerId();
         if (occlusion != null) occlusion.prepare(x, y, z);
-        while (forward ? sections.hasNext() : sections.hasPrevious()) {
+        BlazeVisibleSections.Layer table = (Object) this instanceof BlazeLayerLists lists ? lists.overhaul$layerTable(layer) : null;
+        if (table != null) {
+            for (int size = table.size(), at = 0; at < size; at++) {
+                int index = forward ? at : size - 1 - at;
+                BlazeMesh mesh = table.mesh(index);
+                if (mesh == null) continue;
+                int originX = table.originX(index), originY = table.originY(index), originZ = table.originZ(index);
+                if (occlusion != null && occlusion.hidden(originX, originY, originZ)) continue;
+                batch.add(mesh, (float) (originX - x), (float) (originY - y), (float) (originZ - z));
+            }
+        } else while (forward ? sections.hasNext() : sections.hasPrevious()) {
             RenderSection section = forward ? sections.next() : sections.previous();
             if (!listed && section.getCompiled().isEmpty(layer)) continue;
             var mesh = ((BlazeVertexBufferAccess) ((BlazeSectionBuffers) (Object) section).overhaul$buffer(layerId)).overhaul$meshOrNull();

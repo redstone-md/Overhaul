@@ -1,7 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
-import dev.overhaul.minecraft.blaze.mixin.CompiledSection121Accessor;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import java.util.Arrays;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection;
 
@@ -17,6 +17,7 @@ public final class BlazeVisibleSections {
     private final Layer withBlockEntities=new Layer();
     private ObjectArrayList<RenderSection> source;
     private int scanned;
+    private boolean tables;
 
     public ObjectArrayList<RenderSection> dirty(ObjectArrayList<RenderSection> visible){
         dirty.clear();
@@ -29,14 +30,21 @@ public final class BlazeVisibleSections {
 
     /** Runs after pending uploads, so sections finished this frame are already in their layers. */
     public void scan(ObjectArrayList<RenderSection> visible){
+        boolean tables=BlazeOptimization.SECTION_TABLE.on()&&BlazeOptimization.SECTION_BATCH.on();
+        this.tables=tables;
         for(Layer layer:layers)if(layer!=null)layer.cursor=0;
         withBlockEntities.cursor=0;
         for(int index=0,size=visible.size();index<size;index++){
             RenderSection section=visible.get(index);
-            var compiled=section.getCompiled();
-            if(!compiled.getRenderableBlockEntities().isEmpty())withBlockEntities.put(section);
-            for(RenderType type:((CompiledSection121Accessor)compiled).overhaul$hasBlocks()){
-                layerOf(type.getChunkLayerId()).put(section);
+            BlazeSectionBuffers flat=tables?(BlazeSectionBuffers)(Object)section:null;
+            long contents=tables?flat.overhaul$contents():((BlazeCompiledContents)section.getCompiled()).overhaul$contents();
+            if((contents&BlazeCompiledContents.BLOCK_ENTITIES)!=0)withBlockEntities.put(section);
+            contents&=~(BlazeCompiledContents.BLOCK_ENTITIES|BlazeCompiledContents.KNOWN);
+            if(contents==0)continue;
+            for(;contents!=0;contents&=contents-1){
+                int id=Long.numberOfTrailingZeros(contents);
+                if(tables)layerOf(id).put(section,flat.overhaul$mesh(id),flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
+                else layerOf(id).put(section);
             }
         }
         for(Layer layer:layers)if(layer!=null)layer.sections.size(layer.cursor);
@@ -58,6 +66,13 @@ public final class BlazeVisibleSections {
         return scanned(visible)?withBlockEntities.sections:visible;
     }
 
+    /** The scan's flat view of a layer, or null when it has none or its list no longer stands. */
+    public Layer table(ObjectArrayList<RenderSection> visible,RenderType type){
+        if(!tables||!scanned(visible))return null;
+        int id=type.getChunkLayerId();
+        return id<0||id>=layers.length||layers[id]==null?Layer.EMPTY:layers[id];
+    }
+
     private Layer layerOf(int id){
         if(id>=layers.length)layers=java.util.Arrays.copyOf(layers,id+1);
         Layer layer=layers[id];
@@ -71,13 +86,33 @@ public final class BlazeVisibleSections {
     }
 
     /** Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier. */
-    private static final class Layer {
+    public static final class Layer {
+        private static final Layer EMPTY=new Layer();
         private final ObjectArrayList<RenderSection> sections=new ObjectArrayList<>();
         private int cursor;
+        private BlazeMesh[] meshes=new BlazeMesh[256];
+        private int[] origins=new int[3*256];
         private void put(RenderSection section){
             if(cursor==sections.size())sections.add(section);
             else if(sections.get(cursor)!=section)sections.set(cursor,section);
             cursor++;
         }
+        private void put(RenderSection section,BlazeMesh mesh,int x,int y,int z){
+            int at=cursor;
+            put(section);
+            if(at==meshes.length){
+                meshes=Arrays.copyOf(meshes,at*2);
+                origins=Arrays.copyOf(origins,at*6);
+            }
+            if(meshes[at]!=mesh)meshes[at]=mesh;
+            origins[at*3]=x;
+            origins[at*3+1]=y;
+            origins[at*3+2]=z;
+        }
+        public int size(){return cursor;}
+        public BlazeMesh mesh(int index){return meshes[index];}
+        public int originX(int index){return origins[index*3];}
+        public int originY(int index){return origins[index*3+1];}
+        public int originZ(int index){return origins[index*3+2];}
     }
 }
