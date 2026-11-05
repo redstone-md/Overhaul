@@ -6,6 +6,7 @@ import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeLayerLists;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
+import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
 import dev.overhaul.minecraft.blaze.BlazeSectionOcclusion;
 import dev.overhaul.minecraft.blaze.BlazeShaderAccess;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
@@ -48,12 +49,13 @@ abstract class LevelRendererSectionBatch121Mixin {
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
         BlazeSectionOcclusion occlusion = renderer.occlusion();
         boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
+        int layerId = layer.getChunkLayerId();
         if (occlusion != null) occlusion.prepare(x, y, z);
         while (forward ? sections.hasNext() : sections.hasPrevious()) {
             int place = forward ? sections.nextIndex() : sections.previousIndex();
             RenderSection section = forward ? sections.next() : sections.previous();
             if (!listed && section.getCompiled().isEmpty(layer)) continue;
-            var mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$meshOrNull();
+            var mesh = ((BlazeVertexBufferAccess) ((BlazeSectionBuffers) (Object) section).overhaul$buffer(layerId)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = section.getOrigin();
             if (occlusion != null && occlusion.hidden(place, origin.getX(), origin.getY(), origin.getZ())) continue;

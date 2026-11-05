@@ -24,6 +24,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ClientLevelBiomes121Mixin", BlazeOptimization.BIOME_CACHE),
             Map.entry("FogRendererBiomes121Mixin", BlazeOptimization.BIOME_CACHE),
             Map.entry("SpriteInterpolationBlazeMixin", BlazeOptimization.SPRITE_INTERPOLATION),
+            Map.entry("RenderSectionBuffers121Mixin", BlazeOptimization.SECTION_BATCH),
             Map.entry("XaeroMapWriter121Mixin", BlazeOptimization.XAERO_LIMITS),
             Map.entry("XaeroRadar121Mixin", BlazeOptimization.XAERO_LIMITS));
 
