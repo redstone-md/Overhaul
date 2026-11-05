@@ -58,7 +58,7 @@ public final class MeshBatch implements AutoCloseable {
     ByteBuffer bytes() { requireOpen(); return bytes.asReadOnlyBuffer().order(ByteOrder.nativeOrder()); }
     private void requireOpen() { if (bytes == null) throw new IllegalStateException("mesh batch closed"); }
 
-    @Override public void close() { if (bytes != null) { memFree(bytes); bytes = null; } }
+    @Override public void close() { if (bytes != null) { memFree((java.nio.Buffer) bytes); bytes = null; } }
 
     public static final class Builder {
         private final List<Entry> entries = new ArrayList<>();

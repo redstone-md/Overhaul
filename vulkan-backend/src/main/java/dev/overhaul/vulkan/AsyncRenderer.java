@@ -63,7 +63,7 @@ public final class AsyncRenderer implements AutoCloseable {
                     patched.put(packet).flip();
                     for (int i = 0; i < batch.commandCount; i++) patched.putInt(batch.commandOffset() + i * 20 + 16, 0);
                     staging.write(patched);
-                } finally { org.lwjgl.system.MemoryUtil.memFree(patched); }
+                } finally { org.lwjgl.system.MemoryUtil.memFree((java.nio.Buffer) patched); }
             } else staging.write(packet);
             GpuBuffer transfer = staging;
             gpu.lastUse = ring.submit(frame -> {

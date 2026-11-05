@@ -50,5 +50,5 @@ final class IndirectCommandState implements AutoCloseable {
         for (int i = 0; i < changedCount; i++) current[changedDraws[i]] = changes.getInt(i * 4);
     }
 
-    @Override public void close() { if (changes != null) { memFree(changes); changes = null; } }
+    @Override public void close() { if (changes != null) { memFree((java.nio.Buffer) changes); changes = null; } }
 }

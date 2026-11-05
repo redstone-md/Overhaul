@@ -133,7 +133,7 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
             if(size.get(0)>Integer.MAX_VALUE)throw new IllegalStateException("Pipeline cache too large");
             ByteBuffer data=org.lwjgl.system.MemoryUtil.memAlloc((int)size.get(0));
             try{check(vkGetPipelineCacheData(context.device(),cache,size,data),"pipeline cache data");byte[] result=new byte[(int)size.get(0)];data.get(result);return result;}
-            finally{org.lwjgl.system.MemoryUtil.memFree(data);}
+            finally{org.lwjgl.system.MemoryUtil.memFree((java.nio.Buffer) data);}
         }
     }
     @Override public void close(){context.device();if(pipeline!=0)vkDestroyPipeline(context.device(),pipeline,null);if(layout!=0)vkDestroyPipelineLayout(context.device(),layout,null);if(cache!=0)vkDestroyPipelineCache(context.device(),cache,null);pipeline=layout=cache=0;}

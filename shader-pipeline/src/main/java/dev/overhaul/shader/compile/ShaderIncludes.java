@@ -3,6 +3,7 @@ package dev.overhaul.shader.compile;
 import org.lwjgl.util.shaderc.ShadercIncludeResolve;
 import org.lwjgl.util.shaderc.ShadercIncludeResult;
 import org.lwjgl.util.shaderc.ShadercIncludeResultRelease;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -54,6 +55,6 @@ final class ShaderIncludes implements AutoCloseable {
         release.free(); resolve.free();
     }
     private record Allocation(ShadercIncludeResult result, ByteBuffer name, ByteBuffer content) {
-        void close() { result.free(); memFree(content); memFree(name); }
+        void close() { result.free(); memFree((Buffer) content); memFree((Buffer) name); }
     }
 }
