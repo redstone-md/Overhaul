@@ -7,6 +7,11 @@ import dev.overhaul.vulkan.ImageFormat;
 import dev.overhaul.vulkan.ImmediateCommands;
 import dev.overhaul.vulkan.VulkanContext;
 import dev.overhaul.vulkan.FrameRing;
+import java.nio.LongBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 import static dev.overhaul.vulkan.VulkanException.check;
@@ -16,16 +21,18 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeTarget implements AutoCloseable {
     private final VulkanContext context;
     private final int width, height, level;
-    private final boolean ownsColor, ownsDepth;
+    private final boolean ownsColor, ownsDepth, borrowsViews;
     private GpuImage color, depth;
     private GpuImageView colorView, depthView;
+    private List<GpuImageView> attachments;
+    private List<ImageFormat> colorFormats;
     private long renderPass, framebuffer;
     private BlazeQueue queue;
     private boolean closing;
 
     public BlazeTarget(VulkanContext context, GpuAllocator allocator, ImmediateCommands commands, int width, int height, boolean useDepth) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("Empty framebuffer");
-        this.context=context;this.width=width;this.height=height;level=0;ownsColor=true;ownsDepth=true;
+        this.context=context;this.width=width;this.height=height;level=0;ownsColor=true;ownsDepth=true;borrowsViews=false;
         try {
             color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             colorView=color.view(0,1,0,1);commands.clearColor(color,0,0,0,0,0,0);
@@ -41,7 +48,7 @@ public final class BlazeTarget implements AutoCloseable {
      */
     BlazeTarget(VulkanContext context, GpuAllocator allocator, BlazeTextures.Attachment colorAttachment, BlazeTextures.Attachment depthAttachment) {
         if (colorAttachment == null && depthAttachment == null) throw new IllegalArgumentException("Framebuffer without attachments");
-        this.context=context;ownsColor=colorAttachment==null;ownsDepth=false;
+        this.context=context;ownsColor=colorAttachment==null;ownsDepth=false;borrowsViews=false;
         BlazeTextures.Attachment sized=colorAttachment!=null?colorAttachment:depthAttachment;
         level=sized.mip();
         int fitWidth=sized.image().width(sized.mip()),fitHeight=sized.image().height(sized.mip());
@@ -55,33 +62,62 @@ public final class BlazeTarget implements AutoCloseable {
         } catch(RuntimeException|Error failure){close();throw failure;}
     }
 
+    /**
+     * A target over views somebody else owns, for programs writing several colour outputs. A null view leaves its
+     * location unwritten. Colours and depth outlive this target: the owner retires it before closing them.
+     */
+    BlazeTarget(VulkanContext context, List<GpuImageView> colors, GpuImageView sharedDepth) {
+        this.context=context;level=0;ownsColor=false;ownsDepth=false;borrowsViews=true;
+        attachments=Collections.unmodifiableList(new ArrayList<>(colors));
+        int fitWidth=Integer.MAX_VALUE,fitHeight=Integer.MAX_VALUE;
+        for(GpuImageView view:attachments){
+            if(view==null)continue;
+            if(colorView==null)colorView=view;
+            fitWidth=Math.min(fitWidth,view.image().width(view.baseMip()));fitHeight=Math.min(fitHeight,view.image().height(view.baseMip()));
+        }
+        if(colorView==null)throw new IllegalArgumentException("Framebuffer without a colour output");
+        color=colorView.image();depthView=sharedDepth;depth=sharedDepth==null?null:sharedDepth.image();
+        if(depth!=null){fitWidth=Math.min(fitWidth,depth.width(sharedDepth.baseMip()));fitHeight=Math.min(fitHeight,depth.height(sharedDepth.baseMip()));}
+        width=fitWidth;height=fitHeight;
+        try{createPass();}catch(RuntimeException|Error failure){close();throw failure;}
+    }
+
     private void createPass() {
+        if(attachments==null)attachments=Collections.singletonList(colorView);
+        ImageFormat[] formats=new ImageFormat[attachments.size()];int written=0;
+        for(int index=0;index<formats.length;index++)if(attachments.get(index)!=null){formats[index]=attachments.get(index).image().format();written++;}
+        colorFormats=Collections.unmodifiableList(Arrays.asList(formats));
         try(MemoryStack stack=MemoryStack.stackPush()){
-            var attachments=VkAttachmentDescription.calloc(depth==null?1:2,stack);
-            attachments.get(0).format(color.format().vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
-                    .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
-                    .initialLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            if(depth!=null)attachments.get(1).format(depth.format().vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+            var descriptions=VkAttachmentDescription.calloc(written+(depth==null?0:1),stack);
+            var colorReference=VkAttachmentReference.calloc(formats.length,stack);
+            LongBuffer views=stack.mallocLong(descriptions.capacity());int next=0;
+            for(int index=0;index<formats.length;index++){
+                if(formats[index]==null){colorReference.get(index).attachment(VK_ATTACHMENT_UNUSED).layout(VK_IMAGE_LAYOUT_UNDEFINED);continue;}
+                descriptions.get(next).format(formats[index].vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                        .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                        .initialLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                colorReference.get(index).attachment(next).layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                views.put(next++,attachments.get(index).handle());
+            }
+            if(depth!=null)descriptions.get(next).format(depth.format().vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
                     .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
                     .initialLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            var colorReference=VkAttachmentReference.calloc(1,stack).attachment(0).layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            var subpass=VkSubpassDescription.calloc(1,stack).pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(1).pColorAttachments(colorReference);
-            if(depth!=null)subpass.pDepthStencilAttachment(VkAttachmentReference.calloc(stack).attachment(1).layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+            var subpass=VkSubpassDescription.calloc(1,stack).pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(formats.length).pColorAttachments(colorReference);
+            if(depth!=null){subpass.pDepthStencilAttachment(VkAttachmentReference.calloc(stack).attachment(next).layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));views.put(next,depthView.handle());}
             var pointer=stack.mallocLong(1);
             int stages=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             int access=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             var dependencies=VkSubpassDependency.calloc(2,stack);
             dependencies.get(0).srcSubpass(VK_SUBPASS_EXTERNAL).dstSubpass(0).srcStageMask(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).dstStageMask(stages).srcAccessMask(VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(access);
             dependencies.get(1).srcSubpass(0).dstSubpass(VK_SUBPASS_EXTERNAL).srcStageMask(stages).dstStageMask(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).srcAccessMask(access).dstAccessMask(VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
-            check(vkCreateRenderPass(context.device(),VkRenderPassCreateInfo.calloc(stack).sType$Default().pAttachments(attachments).pSubpasses(subpass).pDependencies(dependencies),null,pointer),"Blaze render pass");renderPass=pointer.get(0);
-            var views=depth==null?stack.longs(colorView.handle()):stack.longs(colorView.handle(),depthView.handle());
+            check(vkCreateRenderPass(context.device(),VkRenderPassCreateInfo.calloc(stack).sType$Default().pAttachments(descriptions).pSubpasses(subpass).pDependencies(dependencies),null,pointer),"Blaze render pass");renderPass=pointer.get(0);
             check(vkCreateFramebuffer(context.device(),VkFramebufferCreateInfo.calloc(stack).sType$Default().renderPass(renderPass).pAttachments(views).width(width).height(height).layers(1),null,pointer),"Blaze framebuffer");framebuffer=pointer.get(0);
         }
     }
 
     void attach(BlazeQueue queue){if(this.queue!=null&&this.queue!=queue)throw new IllegalStateException("Framebuffer belongs to another graphics lane");this.queue=queue;}
     void prepare(VkCommandBuffer command,BlazeImageUse images){
-        images.transition(command,colorView,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        for(int index=0;index<attachments.size();index++){GpuImageView view=attachments.get(index);if(view!=null)images.transition(command,view,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);}
         if(depthView!=null)images.transition(command,depthView,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
     void begin(VkCommandBuffer command,MemoryStack stack){
@@ -118,6 +154,14 @@ public final class BlazeTarget implements AutoCloseable {
     }
     public GpuImage color(){return color;}public GpuImage depth(){return depth;}public GpuImageView colorView(){return colorView;}
     public GpuImageView depthView(){return depthView;}
+    /** One entry per colour location; null where the location writes nothing. */
+    List<ImageFormat> colorFormats(){return colorFormats;}
+    /** True when drawing here writes this image, which a draw must then not also sample. */
+    boolean writes(GpuImage image){
+        if(image==depth)return true;
+        for(int index=0;index<attachments.size();index++){GpuImageView view=attachments.get(index);if(view!=null&&view.image()==image)return true;}
+        return false;
+    }
     public int width(){return width;}public int height(){return height;}int level(){return level;}long renderPass(){return renderPass;}long framebuffer(){return framebuffer;}
     @Override public void close(){
         if(closing)return;closing=true;
@@ -126,7 +170,8 @@ public final class BlazeTarget implements AutoCloseable {
     private void destroy(){
         if(framebuffer!=0){vkDestroyFramebuffer(context.device(),framebuffer,null);framebuffer=0;}
         if(renderPass!=0){vkDestroyRenderPass(context.device(),renderPass,null);renderPass=0;}
-        if(depthView!=null){depthView.close();depthView=null;}if(colorView!=null){colorView.close();colorView=null;}
+        if(!borrowsViews){if(depthView!=null)depthView.close();if(colorView!=null)colorView.close();}
+        depthView=null;colorView=null;
         if(depth!=null){if(ownsDepth)depth.close();depth=null;}if(color!=null){if(ownsColor)color.close();color=null;}
     }
 }

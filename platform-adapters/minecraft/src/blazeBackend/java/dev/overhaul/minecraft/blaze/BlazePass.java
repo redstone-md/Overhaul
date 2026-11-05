@@ -22,6 +22,7 @@ final class BlazePass implements BlazeQueue.Operation {
     private final BlazeTarget target;
     private final BlazeProgramCompiler.Program program;
     private final BlazeDrawState.Snapshot state;
+    private final long constants;
     private final List<BlazeMesh.Snapshot> meshes=new ArrayList<>(4);
     private final List<BlazeTextures.Sampled> samples=new ArrayList<>();
     private final BlazeImageUse images=new BlazeImageUse();
@@ -33,11 +34,11 @@ final class BlazePass implements BlazeQueue.Operation {
     private boolean closed;
 
     BlazePass(BlazeRenderer owner,BlazeTarget target,BlazeMesh mesh,BlazeShaderSnapshot shader,BlazeDrawState.Snapshot state){
-        this.target=target;this.program=shader.program();this.state=state;
+        this.target=target;this.program=shader.program();this.state=state;constants=owner.vertexConstants(program);
         try{
             for(String name:program.bindings().samplers().keySet()){
                 BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name));
-                if(sample.view().image()==target.color()||sample.view().image()==target.depth())throw new SamplingFeedback();
+                if(target.writes(sample.view().image()))throw new SamplingFeedback();
                 samples.add(sample);
             }
             ByteBuffer bytes=shader.uniforms();
@@ -94,6 +95,7 @@ final class BlazePass implements BlazeQueue.Operation {
         try(MemoryStack stack=MemoryStack.stackPush()){
             if(open==null)target.begin(command,stack);
             if(open==null||open.pipeline!=pipeline)vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
+            if(constants!=0)vkCmdBindVertexBuffers(command,1,stack.longs(constants),stack.longs(0));
             dynamicState(command,stack,state,clip);
             var set=stack.longs(descriptors.set());
             IntBuffer offset=stack.mallocInt(1);

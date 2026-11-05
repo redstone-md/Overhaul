@@ -50,7 +50,7 @@ final class BlazeDescriptors implements AutoCloseable {
             for(int binding:program.bindings().samplers().values()){
                 BlazeTextures.Sampled sample=samples.get(index);
                 writes.get(++index).sType$Default().dstSet(lease.set).dstBinding(binding).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1)
-                        .pImageInfo(VkDescriptorImageInfo.calloc(1,stack).imageView(sample.view().handle()).sampler(sample.sampler().handle()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+                        .pImageInfo(VkDescriptorImageInfo.calloc(1,stack).imageView(sample.view().handle()).sampler(sample.sampler()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
             }
             vkUpdateDescriptorSets(context.device(),writes,null);
         }

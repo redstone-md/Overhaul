@@ -18,7 +18,7 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Device-owned texture namespace, upload pixel-store state and deterministic resource closure. */
 public final class BlazeTextures implements AutoCloseable {
-    public record Sampled(GpuImageView view,GpuSampler sampler){}
+    public record Sampled(GpuImageView view,long sampler){}
     /** One subresource of a texture that a framebuffer renders to. */
     record Attachment(GpuImage image,int mip,int layer){}
     private final VulkanContext context;
@@ -167,6 +167,7 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public Sampled resolve(Object value){
         requireOpen();int id;
+        if(value instanceof Sampled ready)return ready;
         if(value instanceof Integer number)id=number;
         else if(value instanceof java.util.function.IntSupplier supplier)id=supplier.getAsInt();
         else if(value instanceof AbstractTexture texture)id=texture.getId();
@@ -184,7 +185,7 @@ public final class BlazeTextures implements AutoCloseable {
         var texture=texture(id);if(!texture.complete())texture=incomplete();var view=texture.view();
         if(queue==null)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)if(view.image().layout(mip,view.baseLayer())!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             commands.transition(view.image(),mip,view.baseLayer(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        return new Sampled(view,texture.sampler());
+        return new Sampled(view,texture.sampler().handle());
     }
     private BlazeTexture current(){requireOpen();return texture(bindings[active]);}
     private BlazeTexture incomplete(){

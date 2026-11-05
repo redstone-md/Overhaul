@@ -33,6 +33,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private ImmediateCommands commands;
     private BlazeQueue queue;
     private BlazeBufferPool hostStorage,geometryStorage;
+    private final java.util.Map<BlazeProgramCompiler.Program,BlazeProgramShape> shapes=new java.util.IdentityHashMap<>();
     private BlazeHostArena uniformArena,uploadArena,streamArena;
     private BlazeBufferPool streamStorage;
     private BlazeSequenceIndices sequenceIndices;
@@ -178,24 +179,28 @@ public final class BlazeRenderer implements AutoCloseable {
             BlazeDrawState.Snapshot draw,BlazeTarget target,long descriptorLayout){
         int topology=mesh.topology();
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
-        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.color().format(),target.depth()==null?null:target.depth().format());
+        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.colorFormats(),target.depth()==null?null:target.depth().format());
         NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return existing;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
+        BlazeProgramShape shape=shapes.get(program);
         var description=new NativeGraphicsPipeline.Description(List.of(
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",program.fragment().directBuffer())),
-                List.of(new NativeGraphicsPipeline.Binding(0,mesh.layout().stride(),0)),new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
+                shape!=null?shape.bindings(mesh.layout()):List.of(new NativeGraphicsPipeline.Binding(0,mesh.layout().stride(),0)),
+                shape!=null?shape.attributes(mesh.layout()):new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
-                List.of(draw.color()),true,0,0,draw.logic());
+                shape!=null?shape.colors(draw.color()):List.of(draw.color()),true,0,0,draw.logic());
         NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description);
         try{pipelines.put(key,pipeline);return pipeline;}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
     }
+    void shape(BlazeProgramCompiler.Program program,BlazeProgramShape shape){requireOpen();shapes.put(program,shape);}
+    long vertexConstants(BlazeProgramCompiler.Program program){BlazeProgramShape shape=shapes.get(program);return shape==null?0:shape.vertexConstants();}
     public void forgetProgram(BlazeProgramCompiler.Program program){
-        requireOpen();var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
+        requireOpen();shapes.remove(program);var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
         if(descriptors!=null)descriptors.forget(program);
     }
     private record PipelineKey(BlazeProgramCompiler.Program program,BlazeMeshState.Layout layout,int topology,
-            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,ImageFormat colorFormat,ImageFormat depthFormat){}
+            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,List<ImageFormat> colorFormats,ImageFormat depthFormat){}
 
     public void resize(int width,int height){
         requireOpen();if(width<0||height<0)throw new IllegalArgumentException("Negative window size");
