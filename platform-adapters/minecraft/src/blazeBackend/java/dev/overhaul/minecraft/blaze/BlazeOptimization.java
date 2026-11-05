@@ -33,6 +33,7 @@ public enum BlazeOptimization {
     CROSSHAIR_LIMIT("crosshairLimit", "Shoulder Surfing's crosshair raycast limited to 60 Hz"),
     SECTION_BOUNDS("sectionBounds", "Frustum test over flat section bounds instead of the graph's linked nodes"),
     ENTITY_SCANS("entityScans", "Cataclysm and Alex's Caves camera effect entity scans once a tick instead of every frame"),
+    DH_CLOUDS("dhClouds", "Distant Horizons cloud movement updated at 60 Hz"),
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
 
 

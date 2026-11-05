@@ -164,6 +164,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
     BlazeRawFramebuffers rawFramebuffers(){requireOpen();return rawFramebuffers;}
     public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS){rawFramebuffers.delete(id);foreignClearDepths.remove(id);}else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
+    private long frames;
     public BlazeTarget currentTarget(){return target(drawTarget);}
     public BlazeTarget readTarget(){return target(readTarget);}
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
@@ -270,7 +271,9 @@ public final class BlazeRenderer implements AutoCloseable {
                 supported.contains(SwapchainPresentMode.MAILBOX)?SwapchainPresentMode.MAILBOX:SwapchainPresentMode.FIFO;
         queue.flush();presenter.configure(width,height,mode);
     }
-    public void present(){requireOpen();queue.flush();long start=BlazeStats.start();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}BlazeStats.present(start);}
+    /** Counts presented frames, for work that must make one choice per frame. */
+    public long frame(){return frames;}
+    public void present(){requireOpen();frames++;queue.flush();long start=BlazeStats.start();if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}BlazeStats.present(start);}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Blaze3D device is closed");}
     @Override public void close(){
         if(closed)return;
