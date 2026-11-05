@@ -46,7 +46,7 @@ public final class PackInterfaceCatalog {
         add(table,Binding.BOUND,"int","renderStage","terrainIconSize");
         add(table,Binding.BOUND,"float","velocity");
         add(table,Binding.BOUND,"ivec3","cameraPositionInt","previousCameraPositionInt");
-        add(table,Binding.BOUND,"vec3","cameraPositionFract","previousCameraPositionFract","eyePosition","relativeEyePosition","playerLookVector");
+        add(table,Binding.BOUND,"vec3","cameraPositionFract","previousCameraPositionFract","eyePosition","relativeEyePosition","playerLookVector","endFlashPosition");
         add(table,Binding.BOUND,"vec4","lightningBoltPosition");
         add(table,Binding.CONSTANT,"int","currentRenderedItemId");
         add(table,Binding.CONSTANT,"int","bossBattle");

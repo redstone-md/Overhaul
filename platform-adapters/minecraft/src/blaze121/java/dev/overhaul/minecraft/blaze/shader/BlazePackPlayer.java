@@ -21,6 +21,8 @@ import net.minecraft.world.phys.HitResult;
 /** Effects, held items, fog and the smoothed values, sampled from the camera entity once per frame. */
 final class BlazePackPlayer {
     private static final int GL_LINEAR = 9729, TERRAIN_ICON_SIZE = 16, NO_BOSS = 0;
+    /** End flashes arrive in 1.21.9; on this version there is never one, so the flash sits at the origin, unlit. */
+    private static final float[] NO_END_FLASH = new float[3];
     private final BlazePackBiome biome = new BlazePackBiome();
     private float wetness, eyeBlock, eyeSky, centerDepth, nightVision, blindness, darkness, darknessLight, mood;
     private float fogStart, fogEnd, fogDensity, health, maxHealth;
@@ -125,6 +127,7 @@ final class BlazePackPlayer {
             case "terrainIconSize" -> values.setInt(name, TERRAIN_ICON_SIZE);
             case "bossBattle" -> values.setInt(name, NO_BOSS);
             case "endFlashIntensity" -> values.setFloat(name, 0);
+            case "endFlashPosition" -> values.setVector(name, NO_END_FLASH);
             default -> {
                 return false;
             }
@@ -157,7 +160,7 @@ final class BlazePackPlayer {
             case "atlasSize", "terrainTextureSize" -> component == 0 ? atlasWidth : atlasHeight;
             case "terrainIconSize" -> TERRAIN_ICON_SIZE;
             case "bossBattle" -> NO_BOSS;
-            case "endFlashIntensity" -> 0;
+            case "endFlashIntensity", "endFlashPosition" -> 0;
             case "is_alive" -> flag(entity != null && entity.isAlive());
             case "is_burning" -> flag(entity != null && entity.isOnFire());
             case "is_child" -> flag(entity instanceof LivingEntity living && living.isBaby());
