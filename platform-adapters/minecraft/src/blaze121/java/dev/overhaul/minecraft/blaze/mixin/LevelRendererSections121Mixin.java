@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
+import dev.overhaul.minecraft.blaze.BlazeLayerLists;
 import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Camera;
@@ -17,9 +18,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Vanilla loop bodies stay in place for other mods; they only receive shorter lists. The translucent resort loop keeps the whole list. */
 @Mixin(LevelRenderer.class)
-abstract class LevelRendererSections121Mixin {
+abstract class LevelRendererSections121Mixin implements BlazeLayerLists {
     @Shadow private ObjectArrayList<RenderSection> visibleSections;
     @Unique private final BlazeVisibleSections overhaul$sections=new BlazeVisibleSections();
+
+    @Override public boolean overhaul$layerListed(){
+        return overhaul$sections.scanned(visibleSections);
+    }
 
     @ModifyExpressionValue(method="compileSections",at=@At(value="FIELD",target="Lnet/minecraft/client/renderer/LevelRenderer;visibleSections:Lit/unimi/dsi/fastutil/objects/ObjectArrayList;"))
     private ObjectArrayList<RenderSection> overhaul$dirtySections(ObjectArrayList<RenderSection> visible){

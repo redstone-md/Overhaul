@@ -42,9 +42,14 @@ public final class BlazeVisibleSections {
 
     /** A list swapped or changed since the scan is walked whole, as vanilla would. */
     public ObjectArrayList<RenderSection> layer(ObjectArrayList<RenderSection> visible,RenderType type){
-        if(visible!=source||visible.size()!=scanned)return visible;
+        if(!scanned(visible))return visible;
         Layer layer=layers.get(type);
         return layer==null?NONE:layer.sections;
+    }
+
+    /** Whether {@link #layer} would answer from a scan, so its sections are known to have geometry in the layer asked about. */
+    public boolean scanned(ObjectArrayList<RenderSection> visible){
+        return visible==source&&visible.size()==scanned;
     }
 
     /** Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier. */

@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeLayerLists;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
 import dev.overhaul.minecraft.blaze.BlazeSectionOcclusion;
@@ -46,11 +47,12 @@ abstract class LevelRendererSectionBatch121Mixin {
         BlazeRenderer renderer = BlazeFrontend.require();
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
         BlazeSectionOcclusion occlusion = renderer.occlusion();
+        boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
         if (occlusion != null) occlusion.prepare(x, y, z);
         while (forward ? sections.hasNext() : sections.hasPrevious()) {
             int place = forward ? sections.nextIndex() : sections.previousIndex();
             RenderSection section = forward ? sections.next() : sections.previous();
-            if (section.getCompiled().isEmpty(layer)) continue;
+            if (!listed && section.getCompiled().isEmpty(layer)) continue;
             var mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = section.getOrigin();

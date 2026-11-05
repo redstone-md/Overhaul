@@ -137,11 +137,22 @@ public final class SoftwareDepthBuffer {
                 || minX >= maxX || minY >= maxY || !Float.isFinite(nearestDepth)
                 || nearestDepth < 0 || nearestDepth > 1) return false;
         if (dirtyMaxX > 0) rebuild();
-        // A parent can only prove what its children prove too, so start where the rectangle spans at most two cells each way.
+        // A cell holds the farthest depth below it, so a coarse pass proves the rectangle hidden and only level zero proves it visible.
         int span = Math.max(maxX - minX, maxY - minY), level = Math.min(levels.length - 1, Integer.SIZE - Integer.numberOfLeadingZeros(span - 1));
-        for (int y = minY >> level; y <= (maxY - 1) >> level; y++) {
-            for (int x = minX >> level; x <= (maxX - 1) >> level; x++) {
-                if (!test(level, x, y, minX, minY, maxX, maxY, nearestDepth)) return false;
+        while (!behind(level, minX, minY, maxX, maxY, nearestDepth)) {
+            if (level == 0) return false;
+            level = Math.max(0, level - 2);
+        }
+        return true;
+    }
+
+    private boolean behind(int level, int minX, int minY, int maxX, int maxY, float near) {
+        float[] cells = levels[level];
+        int wide = widths[level], left = minX >> level, right = (maxX - 1) >> level, bottom = (maxY - 1) >> level;
+        for (int y = minY >> level; y <= bottom; y++) {
+            int row = y * wide;
+            for (int x = left; x <= right; x++) {
+                if (!(near > cells[row + x] + DEPTH_BIAS)) return false;
             }
         }
         return true;
@@ -151,39 +162,18 @@ public final class SoftwareDepthBuffer {
     private void rebuild() {
         int minX = dirtyMinX, minY = dirtyMinY, maxX = dirtyMaxX, maxY = dirtyMaxY;
         for (int level = 1; level < levels.length; level++) {
-            int childWidth = widths[level - 1], childHeight = heights[level - 1];
+            float[] child = levels[level - 1], parent = levels[level];
+            int childWidth = widths[level - 1], childHeight = heights[level - 1], parentWidth = widths[level];
             minX >>= 1; minY >>= 1; maxX = (maxX + 1) >> 1; maxY = (maxY + 1) >> 1;
             for (int y = minY; y < maxY; y++) {
+                // A lone last row or column reads itself twice, which leaves the maximum as it is.
+                int upper = 2 * y * childWidth, lower = (2 * y + 1 < childHeight ? 2 * y + 1 : 2 * y) * childWidth, row = y * parentWidth;
                 for (int x = minX; x < maxX; x++) {
-                    float maximum = 0;
-                    for (int dy = 0; dy < 2; dy++) {
-                        for (int dx = 0; dx < 2; dx++) {
-                            int cx = 2 * x + dx, cy = 2 * y + dy;
-                            if (cx < childWidth && cy < childHeight) {
-                                maximum = Math.max(maximum, levels[level - 1][cy * childWidth + cx]);
-                            }
-                        }
-                    }
-                    levels[level][y * widths[level] + x] = maximum;
+                    int first = 2 * x, second = first + 1 < childWidth ? first + 1 : first;
+                    parent[row + x] = Math.max(Math.max(child[upper + first], child[upper + second]), Math.max(child[lower + first], child[lower + second]));
                 }
             }
         }
         markClean();
-    }
-
-    private boolean test(int level, int x, int y, int minX, int minY, int maxX, int maxY, float near) {
-        int scale = 1 << level, left = x * scale, top = y * scale;
-        int right = Math.min(width, left + scale), bottom = Math.min(height, top + scale);
-        if (right <= minX || bottom <= minY || left >= maxX || top >= maxY) return true;
-        if (near > levels[level][y * widths[level] + x] + DEPTH_BIAS) return true;
-        if (level == 0 || (left >= minX && top >= minY && right <= maxX && bottom <= maxY)) return false;
-        for (int dy = 0; dy < 2; dy++) {
-            for (int dx = 0; dx < 2; dx++) {
-                int cx = 2 * x + dx, cy = 2 * y + dy;
-                if (cx < widths[level - 1] && cy < heights[level - 1]
-                        && !test(level - 1, cx, cy, minX, minY, maxX, maxY, near)) return false;
-            }
-        }
-        return true;
     }
 }
