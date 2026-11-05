@@ -20,7 +20,7 @@ public abstract class VertexBufferBlazeMixin implements BlazeVertexBufferAccess 
     @Shadow private int vertexBufferId,indexBufferId,arrayObjectId,indexCount;
     @Shadow private VertexFormat format;
     @Unique private BlazeMesh overhaul$mesh;
-    @Unique private boolean overhaul$owned;
+    @Unique private boolean overhaul$owned,overhaul$stream;
 
     @Redirect(method="<init>",at=@At(value="INVOKE",target="Lcom/mojang/blaze3d/platform/GlStateManager;_glGenBuffers()I",remap=false),require=2,allow=2)
     private int overhaul$bufferId(){var owner=BlazeFrontend.current();if(owner==null)return GlStateManager._glGenBuffers();overhaul$owned=true;return owner.nextHandle();}
@@ -28,10 +28,11 @@ public abstract class VertexBufferBlazeMixin implements BlazeVertexBufferAccess 
     private int overhaul$arrayId(){var owner=BlazeFrontend.current();if(owner==null)return GlStateManager._glGenVertexArrays();overhaul$owned=true;return owner.nextHandle();}
 
     @Override public boolean overhaul$owned(){return overhaul$owned;}
+    @Override public void overhaul$streamUploads(){overhaul$stream=true;}
     @Override public BlazeMesh overhaul$uploadMesh(){
         if(!overhaul$owned)throw new IllegalStateException("OpenGL vertex buffer cannot migrate between devices");
         var owner=BlazeFrontend.require();
-        if(overhaul$mesh==null)overhaul$mesh=owner.newMesh();
+        if(overhaul$mesh==null)overhaul$mesh=owner.newMesh(overhaul$stream);
         return overhaul$mesh;
     }
     @Override public BlazeMesh overhaul$existingMesh(){

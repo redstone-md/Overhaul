@@ -46,22 +46,26 @@ final class BlazeBufferPool implements AutoCloseable {
         for(Page page:pages)if(page.active!=0)throw new IllegalStateException("Closing native buffer pool with live slices");
         for(Page page:pages)page.buffer.close();pages.clear();allocated=0;closed=true;
     }
-    final class Slice implements AutoCloseable {
+    final class Slice implements BlazeGeometryRange {
         private final Page page;
         private final int offset,bytes,reserved;
         private int references=1;
         private boolean released;
         private Slice(Page page,int offset,int bytes,int reserved){this.page=page;this.offset=offset;this.bytes=bytes;this.reserved=reserved;}
-        GpuBuffer buffer(){if(references==0)throw new IllegalStateException("Expired native buffer slice");return page.buffer;}
-        int offset(){return offset;}int size(){return bytes;}
+        @Override public GpuBuffer buffer(){if(references==0)throw new IllegalStateException("Expired native buffer slice");return page.buffer;}
+        @Override public int offset(){return offset;}
+        int size(){return bytes;}
         void write(ByteBuffer source){if(released)throw new IllegalStateException("Expired native buffer slice owner");if(source.remaining()!=bytes)throw new IllegalArgumentException("Slice upload size differs");buffer().write(offset,source);}
-        Pin retain(){if(released)throw new IllegalStateException("Expired native buffer slice owner");references=Math.addExact(references,1);return new Pin(this);}
+        @Override public Pin retain(){if(released)throw new IllegalStateException("Expired native buffer slice owner");references=Math.addExact(references,1);return new Pin(this);}
+        @Override public void retire(BlazeQueue queue){queue.retire(this);}
         private void releaseReference(){if(--references==0)page.release(offset,reserved);}
         @Override public void close(){if(!released){released=true;releaseReference();}}
     }
     final class Pin implements AutoCloseable {
         private Slice slice;
         private Pin(Slice slice){this.slice=slice;}
+        /** Another hold on the slice, which stays valid after the slice's owner has let go. */
+        Pin share(){slice.references=Math.addExact(slice.references,1);return new Pin(slice);}
         @Override public void close(){if(slice!=null){Slice old=slice;slice=null;old.releaseReference();}}
     }
     private final class Page {

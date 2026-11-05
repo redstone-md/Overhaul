@@ -33,7 +33,9 @@ public final class BlazeRenderer implements AutoCloseable {
     private ImmediateCommands commands;
     private BlazeQueue queue;
     private BlazeBufferPool hostStorage,geometryStorage;
-    private BlazeHostArena uniformArena,uploadArena;
+    private BlazeHostArena uniformArena,uploadArena,streamArena;
+    private BlazeBufferPool streamStorage;
+    private BlazeSequenceIndices sequenceIndices;
     private BlazeDescriptors descriptors;
     private BlazeTransfers transfers;
     private BlazePrograms programs;
@@ -60,8 +62,11 @@ public final class BlazeRenderer implements AutoCloseable {
                 hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
                 geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,16);
                 uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
+                streamStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,4*1024*1024,256L*1024*1024,16);
+                streamArena=new BlazeHostArena(streamStorage,16);
             }
-            descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage,uploadArena);
+            descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage,uploadArena,streamArena);
+            sequenceIndices=new BlazeSequenceIndices(transfers,queue);
             programs=new BlazePrograms(this::forgetProgram);textures=new BlazeTextures(context,allocator,commands,queue,transfers);
             rawFramebuffers=new BlazeRawFramebuffers(context,allocator,queue,textures);
             backBuffer=new BlazeTarget(context,allocator,commands,Math.max(1,width),Math.max(1,height),true);
@@ -110,7 +115,8 @@ public final class BlazeRenderer implements AutoCloseable {
     void writeGlDeviceBuffer(GpuBuffer target,long offset,long source,long bytes){requireOpen();transfers.write(target,offset,source,bytes);}
     void copyGlDeviceBuffer(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes){requireOpen();transfers.copy(source,sourceOffset,target,targetOffset,bytes);}
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
-    public BlazeMesh newMesh(){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,meshes::remove);meshes.add(mesh);return mesh;}
+    /** A streaming mesh is replaced before nearly every draw, so its bytes go where the GPU reads them. */
+    public BlazeMesh newMesh(boolean stream){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,sequenceIndices,stream,meshes::remove);meshes.add(mesh);return mesh;}
     public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
     BlazeRawFramebuffers rawFramebuffers(){requireOpen();return rawFramebuffers;}
     public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)rawFramebuffers.delete(id);else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
@@ -216,6 +222,8 @@ public final class BlazeRenderer implements AutoCloseable {
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
         if(backBuffer!=null)failure=release(backBuffer::close,failure);if(presenter!=null)failure=release(presenter::close,failure);
         if(descriptors!=null)failure=release(descriptors::close,failure);
+        if(sequenceIndices!=null)failure=release(sequenceIndices::close,failure);
+        if(streamArena!=null)failure=release(streamArena::close,failure);if(streamStorage!=null)failure=release(streamStorage::close,failure);
         if(uniformArena!=null)failure=release(uniformArena::close,failure);if(uploadArena!=null)failure=release(uploadArena::close,failure);if(geometryStorage!=null)failure=release(geometryStorage::close,failure);if(hostStorage!=null)failure=release(hostStorage::close,failure);
         if(queue!=null)failure=release(queue::close,failure);
         if(commands!=null)failure=release(commands::close,failure);if(allocator!=null)failure=release(allocator::close,failure);

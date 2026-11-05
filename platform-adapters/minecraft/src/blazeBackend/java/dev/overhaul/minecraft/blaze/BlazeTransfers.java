@@ -9,12 +9,19 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Snapshots CPU sources immediately, records transfers later in the shared graphics lane. */
 final class BlazeTransfers {
-    private static final int MAX_CHUNK=8*1024*1024;
+    private static final int MAX_CHUNK=8*1024*1024,MAX_STREAM=4*1024*1024;
     private final VulkanContext context;
     private final BlazeQueue queue;
     private final BlazeBufferPool host,geometry;
-    private final BlazeHostArena uploads;
-    BlazeTransfers(VulkanContext context,BlazeQueue queue,BlazeBufferPool host,BlazeBufferPool geometry,BlazeHostArena uploads){this.context=context;this.queue=queue;this.host=host;this.geometry=geometry;this.uploads=uploads;}
+    private final BlazeHostArena uploads,stream;
+    BlazeTransfers(VulkanContext context,BlazeQueue queue,BlazeBufferPool host,BlazeBufferPool geometry,BlazeHostArena uploads,BlazeHostArena stream){this.context=context;this.queue=queue;this.host=host;this.geometry=geometry;this.uploads=uploads;this.stream=stream;}
+    /** Geometry drawn once: written where the GPU reads it, so no copy has to end the render pass. */
+    BlazeGeometryRange stream(ByteBuffer source){
+        int bytes=source.remaining();
+        if(bytes>MAX_STREAM)return geometry(source);
+        BlazeBufferPool.Slice chunk=stream.reserve(bytes);
+        return new BlazePinnedRange(chunk,stream.write(source,bytes));
+    }
     BlazeBufferPool.Slice geometry(ByteBuffer source){
         return geometry(source.remaining(),(target,offset)->target.put(source.slice(source.position()+offset,target.remaining())));
     }

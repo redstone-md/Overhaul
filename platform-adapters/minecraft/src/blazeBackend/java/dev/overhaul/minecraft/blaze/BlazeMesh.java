@@ -1,7 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.function.Consumer;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import static org.lwjgl.vulkan.VK10.*;
@@ -10,32 +9,34 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeMesh implements AutoCloseable {
     private final BlazeQueue queue;
     private final BlazeTransfers transfers;
+    private final BlazeSequenceIndices sequences;
     private final Consumer<BlazeMesh> onClose;
-    private BlazeBufferPool.Slice vertices, indices;
+    private final boolean stream;
+    private BlazeGeometryRange vertices, indices;
     private BlazeMeshState state;
     private boolean closed;
 
-    BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.onClose=onClose; }
+    BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, BlazeSequenceIndices sequences, boolean stream, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.sequences=sequences;this.stream=stream;this.onClose=onClose; }
 
     public void upload(BlazeMeshState next,ByteBuffer bytes,ByteBuffer originalIndices) {
         requireOpen();
-        BlazeBufferPool.Slice vertex = null, index = null;
+        BlazeGeometryRange vertex = null, index = null;
         try {
             if (bytes.remaining() != Math.multiplyExact(next.vertexCount(), next.layout().stride())) {
                 throw new IllegalArgumentException("Mesh vertex bytes differ from the actual draw state: "+bytes.remaining()+" bytes for "+next.vertexCount()+" vertices of "+next.layout().stride());
             }
-            if (bytes.hasRemaining()) vertex = transfers.geometry(bytes);
+            if (bytes.hasRemaining()) vertex = geometry(bytes);
             int expected=Math.multiplyExact(next.indexCount(),next.indexBytes());
             if (originalIndices!=null&&originalIndices.remaining()!=expected) {
                 throw new IllegalArgumentException("Mesh index bytes differ from the actual draw state");
             }
-            if(expected>0)index=originalIndices==null?transfers.geometry(expected,(target,offset)->sequential(next,target,offset)):transfers.geometry(originalIndices);
+            if(expected>0)index=originalIndices==null?sequences.range(next):geometry(originalIndices);
             release();
             vertices = vertex; indices = index; state = next;
             vertex = null; index = null;
         } finally {
-            if (vertex != null) queue.retire(vertex);
-            if (index != null) queue.retire(index);
+            if (vertex != null) vertex.retire(queue);
+            if (index != null) index.retire(queue);
         }
     }
 
@@ -44,10 +45,8 @@ public final class BlazeMesh implements AutoCloseable {
         if (state == null) throw new IllegalStateException("Index replacement before vertex upload");
         int expected=Math.multiplyExact(state.indexCount(),state.indexBytes());
         if (bytes!=null&&bytes.remaining()!=expected) throw new IllegalArgumentException("Sorted index byte count changed");
-        BlazeMeshState captured=state;
-        BlazeBufferPool.Slice next=expected==0?null:bytes==null
-                ?transfers.geometry(expected,(target,offset)->sequential(captured,target,offset)):transfers.geometry(bytes);
-        if (indices != null) queue.retire(indices);
+        BlazeGeometryRange next=expected==0?null:bytes==null?sequences.range(state):geometry(bytes);
+        if (indices != null) indices.retire(queue);
         indices = next;
     }
 
@@ -57,9 +56,9 @@ public final class BlazeMesh implements AutoCloseable {
     /** Captured before the ordinary game VertexBuffer can replace its next upload. */
     static final class Snapshot implements AutoCloseable {
         private final BlazeMeshState state;
-        private final BlazeBufferPool.Slice vertices,indices;
+        private final BlazeGeometryRange vertices,indices;
         private BlazeBufferPool.Pin vertexUse,indexUse;
-        private Snapshot(BlazeMeshState state,BlazeBufferPool.Slice vertices,BlazeBufferPool.Slice indices){
+        private Snapshot(BlazeMeshState state,BlazeGeometryRange vertices,BlazeGeometryRange indices){
             this.state=state;this.vertices=vertices;this.indices=indices;
             try{if(vertices!=null)vertexUse=vertices.retain();if(indices!=null)indexUse=indices.retain();}
             catch(RuntimeException|Error failure){close();throw failure;}
@@ -76,20 +75,8 @@ public final class BlazeMesh implements AutoCloseable {
         @Override public void close(){if(vertexUse!=null){vertexUse.close();vertexUse=null;}if(indexUse!=null){indexUse.close();indexUse=null;}}
     }
 
-    private static void sequential(BlazeMeshState state,ByteBuffer result,int byteOffset) {
-        result.order(ByteOrder.nativeOrder());
-        int[] corners = state.pattern() == BlazeMeshState.IndexPattern.EXPANDED_LINES ? new int[]{0, 1, 2, 3, 2, 1} : new int[]{0, 1, 2, 2, 3, 0};
-        boolean quads = state.pattern() != BlazeMeshState.IndexPattern.SEQUENTIAL;
-        int first=byteOffset/state.indexBytes(),count=result.remaining()/state.indexBytes();
-        for (int index = first; index < first+count; index++) {
-            int vertex = quads ? (index / 6) * 4 + corners[index % 6] : index;
-            if (vertex >= state.vertexCount()) throw new IllegalArgumentException("Sequential index exceeds vertex count");
-            if (state.indexBytes() == 2) result.putShort((short) vertex);
-            else result.putInt(vertex);
-        }
-    }
-
     private void requireOpen() { if (closed) throw new IllegalStateException("Blaze mesh is closed"); }
-    private void release() { if (vertices != null) queue.retire(vertices); if (indices != null) queue.retire(indices); vertices = indices = null; }
+    private BlazeGeometryRange geometry(ByteBuffer bytes) { return stream?transfers.stream(bytes):transfers.geometry(bytes); }
+    private void release() { if (vertices != null) vertices.retire(queue); if (indices != null) indices.retire(queue); vertices = indices = null; }
     @Override public void close() { if (!closed) { release(); state = null; closed = true; onClose.accept(this); } }
 }
