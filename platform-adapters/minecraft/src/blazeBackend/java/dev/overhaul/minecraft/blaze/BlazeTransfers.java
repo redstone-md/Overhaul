@@ -14,6 +14,8 @@ final class BlazeTransfers {
     private final BlazeQueue queue;
     private final BlazeBufferPool host,geometry;
     private final BlazeHostArena uploads,stream;
+    /** Mip levels of a 2D image cannot exceed the bits of its size. */
+    private final java.util.BitSet[] uploadTiles=new java.util.BitSet[32];
     BlazeTransfers(VulkanContext context,BlazeQueue queue,BlazeBufferPool host,BlazeBufferPool geometry,BlazeHostArena uploads,BlazeHostArena stream){this.context=context;this.queue=queue;this.host=host;this.geometry=geometry;this.uploads=uploads;this.stream=stream;}
     /** Geometry drawn once: written where the GPU reads it, so no copy has to end the render pass. */
     BlazeGeometryRange stream(ByteBuffer source){
@@ -71,7 +73,7 @@ final class BlazeTransfers {
         int rows=Math.max(1,(MAX_CHUNK-tight)/stride+1);
         for(int row=0;row<region.height();){
             int count=Math.min(rows,region.height()-row);
-            ImageRegion chunk=new ImageRegion(region.mipLevel(),region.arrayLayer(),region.x(),region.y()+row,region.width(),count);
+            ImageRegion chunk=count==region.height()?region:new ImageRegion(region.mipLevel(),region.arrayLayer(),region.x(),region.y()+row,region.width(),count);
             int length=Math.addExact(Math.multiplyExact(count-1,stride),tight);
             uploadChunk(target,chunk,source.slice(source.position()+Math.multiplyExact(row,stride),length),pitch,length);
             row+=count;
@@ -91,8 +93,8 @@ final class BlazeTransfers {
     private void batched(GpuImage target,ImageRegion region,ByteBuffer source,int pitch,int bytes){
         BlazeBufferPool.Slice chunk=uploads.reserve(bytes);
         BlazeUploadBatch batch=queue.last() instanceof BlazeUploadBatch open&&open.accepts(target,chunk,region)?open:null;
-        if(batch==null){batch=new BlazeUploadBatch(context,target,chunk);queue.add(batch,chunk.size());batch.accepts(target,chunk,region);}
-        batch.add(uploads.write(source.slice(source.position(),bytes),bytes),pitch,region);
+        if(batch==null){batch=new BlazeUploadBatch(context,target,chunk,uploadTiles);queue.add(batch,chunk.size());batch.accepts(target,chunk,region);}
+        batch.add(uploads.write(source,bytes),pitch,region);
     }
     void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){image(ImageCommand.clearColor(context,image,mip,layer,r,g,b,a),image);}
     void copy(GpuImage source,ImageRegion from,GpuImage target,ImageRegion to){image(ImageCommand.copy(context,source,from,target,to),source,target);}

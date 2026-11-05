@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.overhaul.minecraft.mixin.HudCacheGuiAccessor;
 import dev.overhaul.minecraft.mixin.HudCacheGuiLayerManagerAccessor;
 import dev.overhaul.minecraft.mixin.HudCacheMinecraftAccessor;
+import java.util.List;
 import java.util.Set;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -32,6 +33,10 @@ public final class HudFrameCache {
 
     private static final long REFRESH_NANOS = 1_000_000_000L / Math.max(1L, Long.getLong("overhaul.hudCache.hz", 30L));
     private static final Set<ResourceLocation> LIVE_LAYERS = Set.of(VanillaGuiLayers.CAMERA_OVERLAYS, VanillaGuiLayers.CROSSHAIR);
+
+    private static List<GuiLayerManager.NamedLayer> liveSource;
+    private static int liveSourceSize;
+    private static GuiLayerManager.NamedLayer[] live;
 
     private static boolean listening;
     private static boolean cachedPass;
@@ -70,15 +75,21 @@ public final class HudFrameCache {
         }
     }
 
+    private static GuiLayerManager.NamedLayer[] liveLayers(List<GuiLayerManager.NamedLayer> layers) {
+        if (layers != liveSource || layers.size() != liveSourceSize) {
+            live = layers.stream().filter(layer -> LIVE_LAYERS.contains(layer.name())).toArray(GuiLayerManager.NamedLayer[]::new);
+            liveSource = layers;
+            liveSourceSize = layers.size();
+        }
+        return live;
+    }
+
     private static void renderLiveLayers(Gui gui, GuiGraphics graphics, DeltaTracker delta) {
         GuiLayerManager manager = ((HudCacheGuiAccessor) gui).overhaul$layerManager();
         PoseStack pose = graphics.pose();
         RenderSystem.enableDepthTest();
         pose.pushPose();
-        for (GuiLayerManager.NamedLayer layer : ((HudCacheGuiLayerManagerAccessor) manager).overhaul$layers()) {
-            if (!LIVE_LAYERS.contains(layer.name())) {
-                continue;
-            }
+        for (GuiLayerManager.NamedLayer layer : liveLayers(((HudCacheGuiLayerManagerAccessor) manager).overhaul$layers())) {
             if (!NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Pre(graphics, delta, layer.name(), layer.layer())).isCanceled()) {
                 layer.layer().render(graphics, delta);
                 NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Post(graphics, delta, layer.name(), layer.layer()));

@@ -25,11 +25,12 @@ final class BlazeUploadBatch implements BlazeQueue.Operation {
     private int layer=-1;
     private boolean closed;
 
-    BlazeUploadBatch(VulkanContext context,GpuImage target,BlazeBufferPool.Slice chunk){
-        this.target=target;this.chunk=chunk;pin=chunk.retain();
+    /** Takes over a tile grid per mip from the batch before it, which can no longer accept regions. */
+    BlazeUploadBatch(VulkanContext context,GpuImage target,BlazeBufferPool.Slice chunk,BitSet[] tiles){
+        this.target=target;this.chunk=chunk;pin=chunk.retain();occupied=tiles;
+        for(BitSet grid:tiles)if(grid!=null)grid.clear();
         copies=new ImageCopies(context,chunk.buffer(),target);
         command=ImageCommand.copyBufferToImage(context,copies);
-        occupied=new BitSet[target.mipLevels()];
     }
     /** Claims the region's tiles when it can join; false leaves the batch untouched. */
     boolean accepts(GpuImage image,BlazeBufferPool.Slice next,ImageRegion region){

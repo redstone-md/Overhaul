@@ -4,8 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.overhaul.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Arrays;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.MemoryStack;
@@ -27,7 +26,8 @@ public final class BlazeTextures implements AutoCloseable {
     private final BlazeQueue queue;
     private final BlazeTransfers transfers;
     private final BlazeSamplers samplers;
-    private final Map<Integer,BlazeTexture> textures=new HashMap<>();
+    /** By name: names are handed out in sequence and never reused, and this is read several times a draw. */
+    private BlazeTexture[] textures=new BlazeTexture[1024];
     private final BlazePixelStore pixels=new BlazePixelStore();
     private final int[] bindings=new int[32];
     private BlazeTexture incomplete;
@@ -41,16 +41,16 @@ public final class BlazeTextures implements AutoCloseable {
         this.context=context;this.allocator=allocator;this.commands=commands;
         this.queue=queue;this.transfers=transfers;samplers=new BlazeSamplers(allocator,queue);
         if(allocator.context()!=context||commands.context()!=context)throw new IllegalArgumentException("Texture dependencies belong to different devices");
-        textures.put(0,new BlazeTexture(allocator,queue,transfers,samplers));
+        textures[0]=new BlazeTexture(allocator,queue,transfers,samplers);
     }
-    public int generate(){requireOpen();int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,samplers));return id;}
+    public int generate(){requireOpen();int id=nextId();store(id,new BlazeTexture(allocator,queue,transfers,samplers));return id;}
     public int borrow(GpuImageView view){
         requireOpen();if(view.image().context()!=context||view.layerCount()!=1)throw new IllegalArgumentException("Foreign or layered borrowed texture");
-        int id=nextId();textures.put(id,new BlazeTexture(allocator,queue,transfers,samplers,view));return id;
+        int id=nextId();store(id,new BlazeTexture(allocator,queue,transfers,samplers,view));return id;
     }
     /** The renderable storage behind a name, or null while the name holds none at that level. */
     Attachment attachment(int id,int level){
-        requireOpen();BlazeTexture texture=textures.get(id);if(texture==null||!texture.defined(level))return null;
+        requireOpen();BlazeTexture texture=find(id);if(texture==null||!texture.defined(level))return null;
         texture.attach();return new Attachment(texture.image(),texture.mip(level),texture.layer());
     }
     void renderbufferStorage(int id,int internal,int width,int height){
@@ -60,7 +60,7 @@ public final class BlazeTextures implements AutoCloseable {
     void storage(int target,int levels,int internal,int width,int height){target(target);current().allocate(internal,width,height,levels,commands);}
     private int nextId(){if(next<=0)throw new IllegalStateException("Texture namespace exhausted");return next++;}
     public void delete(int id){
-        requireOpen();if(id==0)return;BlazeTexture texture=textures.remove(id);if(texture==null)return;
+        requireOpen();if(id==0)return;BlazeTexture texture=find(id);if(texture==null)return;textures[id]=null;
         for(int unit=0;unit<bindings.length;unit++)if(bindings[unit]==id)bindings[unit]=0;texture.close();
     }
     public void active(int textureUnit){
@@ -69,7 +69,7 @@ public final class BlazeTextures implements AutoCloseable {
     public int active(){requireOpen();return GL_TEXTURE0+active;}
     public int textureUnits(){requireOpen();return bindings.length;}
     public int boundId(int unit){requireOpen();if(unit<0||unit>=bindings.length)throw new IllegalArgumentException("Texture unit outside owned range");return bindings[unit];}
-    public void bind(int id){requireOpen();if(id!=0&&!textures.containsKey(id))throw new IllegalArgumentException("Unknown owned texture: "+id);bindings[active]=id;}
+    public void bind(int id){requireOpen();if(id!=0&&find(id)==null)throw new IllegalArgumentException("Unknown owned texture: "+id);bindings[active]=id;}
     public Integer integer(int name){
         requireOpen();if(name==GL_ACTIVE_TEXTURE)return GL_TEXTURE0+active;if(name==GL_TEXTURE_BINDING_2D)return bindings[active];return pixels.integer(name);
     }
@@ -98,7 +98,6 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void upload(int target,int level,int x,int y,int width,int height,int format,int type,long address){
         requireOpen();target(target);if(width==0||height==0)return;
-        region(current(),level,x,y,width,height);
         if(address==0)throw new IllegalArgumentException("Null pixel source");
         var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         upload(target,level,x,y,width,height,format,type,MemoryUtil.memByteBuffer(address,layout.bytes()));
@@ -112,10 +111,10 @@ public final class BlazeTextures implements AutoCloseable {
             if(texture.image().format().isDepth()||BlazePixels.bytes(format,type)!=storage){
                 BlazeGlBoundary.reportOnce("upload "+texture.internal+" "+format+" "+type,"Texture upload with no conversion was skipped: internal "+texture.internal+", format "+format+", type "+type);return;
             }
-            var exact=source.slice();exact.position(layout.offset());exact.limit(layout.bytes());uploadImage(texture.image(),area,exact.slice(),layout.stride());return;
+            uploadImage(texture.image(),area,source.slice(source.position()+layout.offset(),layout.bytes()-layout.offset()),layout.stride());return;
         }
         if(type==GL_UNSIGNED_BYTE&&texture.channels==storage&&BlazePixels.components(format)==storage&&format!=GL_BGRA&&format!=GL_BGR&&layout.stride()>=(long)width*storage){
-            var direct=source.slice();direct.position(layout.offset());direct.limit(layout.bytes());uploadImage(texture.image(),area,direct.slice(),layout.stride());return;
+            uploadImage(texture.image(),area,source.slice(source.position()+layout.offset(),layout.bytes()-layout.offset()),layout.stride());return;
         }
         ByteBuffer converted=BlazePixels.unpack(source,layout,width,height,format,type,texture.channels,storage);
         try{uploadImage(texture.image(),area,converted,0);}finally{MemoryUtil.memFree(converted);}
@@ -214,7 +213,9 @@ public final class BlazeTextures implements AutoCloseable {
             if(width<=support.maxExtent().width()&&height<=support.maxExtent().height()){proxyWidth=width;proxyHeight=height;proxyInternal=internal;}
         }
     }
-    private BlazeTexture texture(int id){var texture=textures.get(id);if(texture==null)throw new IllegalStateException("No allocated owned texture is bound: "+id);return texture;}
+    private BlazeTexture find(int id){return id>=0&&id<textures.length?textures[id]:null;}
+    private void store(int id,BlazeTexture texture){if(id>=textures.length)textures=Arrays.copyOf(textures,id*2);textures[id]=texture;}
+    private BlazeTexture texture(int id){var texture=find(id);if(texture==null)throw new IllegalStateException("No allocated owned texture is bound: "+id);return texture;}
     private ImmediateCommands immediate(){if(queue!=null)queue.flush();return commands;}
     private void uploadImage(GpuImage image,ImageRegion area,ByteBuffer bytes,int pitch){if(transfers!=null)transfers.upload(image,area,bytes,pitch);else commands.upload(image,area,bytes,pitch);}
     private void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){if(transfers!=null)transfers.clearColor(image,mip,layer,r,g,b,a);else commands.clearColor(image,mip,layer,r,g,b,a);}
@@ -222,10 +223,10 @@ public final class BlazeTextures implements AutoCloseable {
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Texture registry is closed");}
     @Override public void close(){
         if(closed)return;requireOpen();Throwable failure=null;
-        for(var texture:textures.values())try{texture.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
+        for(var texture:textures)if(texture!=null)try{texture.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
         if(incomplete!=null)try{incomplete.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{incomplete=null;}
         try{samplers.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
-        textures.clear();java.util.Arrays.fill(bindings,0);closed=true;
+        Arrays.fill(textures,null);Arrays.fill(bindings,0);closed=true;
         if(failure instanceof RuntimeException error)throw error;if(failure instanceof Error error)throw error;
     }
 }
