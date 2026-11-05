@@ -150,6 +150,7 @@ public final class BlazeRenderer implements AutoCloseable {
         return occlusion;
     }
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
+    public BlazeDh dhIfUsed(){return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
     GpuBuffer newGlDeviceBuffer(long size){
         requireOpen();

@@ -88,6 +88,8 @@ public final class BlazeDh implements AutoCloseable {
     private long compositeFrame = -1;
     private BlazeTarget fadeTarget;
     private GpuImageView fadeColorView;
+    private boolean holdFade;
+    private Runnable heldFade;
 
     BlazeDh(BlazeRenderer owner) {
         this.owner = owner;
@@ -173,6 +175,10 @@ public final class BlazeDh implements AutoCloseable {
      * the pass draws to its colour alone; a frame without a composite has no LOD colour of its own to fade to.
      */
     public void vanillaFade(int mcDepthTexture, float[] dhInverse, float[] mcInverse, float fadeStart, float fadeEnd, float maxLevelHeight) {
+        if (holdFade) {
+            heldFade = () -> vanillaFade(mcDepthTexture, dhInverse, mcInverse, fadeStart, fadeEnd, maxLevelHeight);
+            return;
+        }
         BlazeTarget frame = owner.currentTarget();
         if (frame == null || frame.colorView() == null || compositeFrame != owner.frame()) return;
         var textures = owner.textures();
@@ -191,6 +197,19 @@ public final class BlazeDh implements AutoCloseable {
         }, "uDhColor");
         pass.add((command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0));
         owner.enqueue(pass);
+    }
+
+    /** DH fades before the cutout layer, which leaves plants on the seabed standing unfaded in front of faded ground. */
+    public void holdFade() {
+        holdFade = true;
+    }
+
+    /** The cutout layer has drawn, so the fade held for it sees all opaque terrain. */
+    public void releaseFade() {
+        holdFade = false;
+        Runnable fade = heldFade;
+        heldFade = null;
+        if (fade != null) fade.run();
     }
 
     private BlazeTarget fadeTarget(GpuImageView color) {

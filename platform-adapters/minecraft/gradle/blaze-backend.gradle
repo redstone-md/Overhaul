@@ -6,7 +6,7 @@ def tiers = [
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
                    tierMixins: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin',
                                 'LevelEntityClasses121Mixin', 'EntitySectionManagerClasses121Mixin', 'EntityLight121Mixin', 'EntityDispatcherLight121Mixin',
-                                'LevelRendererSections121Mixin', 'ViewAreaColumns121Mixin', 'DhRenderList121Mixin',
+                                'LevelRendererSections121Mixin', 'LevelRendererDhFade121Mixin', 'ViewAreaColumns121Mixin', 'DhRenderList121Mixin',
                                 'BufferBuilderParticles121Mixin', 'ParticleQuads121Mixin', 'CompiledContents121Mixin',
                                 'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
