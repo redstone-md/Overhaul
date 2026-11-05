@@ -26,7 +26,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazeTerrain terrain;
     private BlazeDh dh;
     private BlazeRawFramebuffers rawFramebuffers;
-    private float foreignClearDepth=1;
+    private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
     private GpuAllocator allocator;
@@ -119,7 +119,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeMesh newMesh(boolean stream){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,sequenceIndices,stream,meshes::remove);meshes.add(mesh);return mesh;}
     public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
     BlazeRawFramebuffers rawFramebuffers(){requireOpen();return rawFramebuffers;}
-    public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)rawFramebuffers.delete(id);else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
+    public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS){rawFramebuffers.delete(id);foreignClearDepths.remove(id);}else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
     public BlazeTarget currentTarget(){return target(drawTarget);}
     public BlazeTarget readTarget(){return target(readTarget);}
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
@@ -150,12 +150,14 @@ public final class BlazeRenderer implements AutoCloseable {
     public void clear(int mask){clear(mask,clearValues());}
     /**
      * Distant Horizons sets a reverse-Z clear depth for its own framebuffer and never restores it, so a depth set
-     * while a mod framebuffer is bound stays with mod framebuffers instead of reaching the game's targets.
+     * while a mod framebuffer is bound stays with that framebuffer. It must not reach the game's targets or another
+     * mod's framebuffer: Xaero's minimap clears without setting a depth, and a cleared 0 rejects every LEQUAL draw.
      */
-    void clearDepth(double depth){if(drawTarget>=FOREIGN_FRAMEBUFFERS)foreignClearDepth=(float)Math.max(0,Math.min(1,depth));else state.clearDepth(depth);}
+    void clearDepth(double depth){if(drawTarget>=FOREIGN_FRAMEBUFFERS)foreignClearDepths.put(drawTarget,(float)Math.max(0,Math.min(1,depth)));else state.clearDepth(depth);}
     BlazeDrawState.Clear clearValues(){
         var values=state.clear();
-        return drawTarget>=FOREIGN_FRAMEBUFFERS?new BlazeDrawState.Clear(values.r(),values.g(),values.b(),values.a(),foreignClearDepth):values;
+        Float own=drawTarget>=FOREIGN_FRAMEBUFFERS?foreignClearDepths.get(drawTarget):null;
+        return own!=null?new BlazeDrawState.Clear(values.r(),values.g(),values.b(),values.a(),own):values;
     }
     void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
