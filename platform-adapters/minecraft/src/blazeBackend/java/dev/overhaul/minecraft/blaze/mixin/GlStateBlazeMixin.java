@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.mojang.blaze3d.platform.GlStateManager;
 import dev.overhaul.minecraft.blaze.BlazeDrawState;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeGlBoundary;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -68,6 +69,8 @@ public abstract class GlStateBlazeMixin {
     private static void overhaul$clearDepth(double value,CallbackInfo c){var s=overhaul$state();if(s!=null){s.clearDepth(value);}}
     @Inject(method="_clear",at=@At("HEAD"),cancellable=true,require=1)
     private static void overhaul$clear(int mask,boolean checkError,CallbackInfo c){var owner=BlazeFrontend.current();if(owner!=null){owner.clear(mask);c.cancel();}}
+    // TACZ scopes mask their lens with the stencil every frame in first person; a throw here ends the game. The owned
+    // targets have no stencil aspect yet, so the mask is dropped and the masked parts draw unclipped.
     @Inject(method={"_stencilFunc","_stencilMask","_stencilOp","_clearStencil"},at=@At("HEAD"),require=1)
-    private static void overhaul$stencil(CallbackInfo c){if(BlazeFrontend.current()!=null)throw new UnsupportedOperationException("Stencil state is not supported by the owned Blaze3D targets");}
+    private static void overhaul$stencil(CallbackInfo c){if(BlazeFrontend.current()!=null)BlazeGlBoundary.reportOnce("stencil","Stencil state is not lowered; stencil-masked draws render unmasked");}
 }
