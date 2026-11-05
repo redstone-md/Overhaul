@@ -28,7 +28,7 @@ record BlazePackConfiguration(Object world, Object dimension, Path pack, String 
     /** A missing file means no pack; an unreadable one is the user's error and is reported as such. */
     static Properties read(Minecraft minecraft) {
         Properties properties = new Properties();
-        Path path = minecraft.gameDirectory.toPath().resolve("config").resolve(FILE);
+        Path path = path(minecraft);
         if (!Files.isRegularFile(path)) return properties;
         try (Reader reader = Files.newBufferedReader(path)) {
             properties.load(reader);
@@ -36,6 +36,10 @@ record BlazePackConfiguration(Object world, Object dimension, Path pack, String 
             throw new IllegalStateException("Cannot read " + path, failure);
         }
         return properties;
+    }
+
+    static Path path(Minecraft minecraft) {
+        return minecraft.gameDirectory.toPath().resolve("config").resolve(FILE);
     }
 
     boolean configured() {

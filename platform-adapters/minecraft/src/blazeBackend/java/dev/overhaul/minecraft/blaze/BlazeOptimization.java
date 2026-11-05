@@ -6,6 +6,10 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +62,54 @@ public enum BlazeOptimization {
 
     public boolean on() {
         return enabled;
+    }
+
+    public String key() {
+        return key;
+    }
+
+    public String description() {
+        return description;
+    }
+
+    /** A launch argument wins over the file, so the settings screen cannot change this one. */
+    public boolean launchOverride() {
+        return System.getProperty("overhaul.opt." + key) != null;
+    }
+
+    /** What the file asks for now, which differs from {@link #on()} until the game restarts. */
+    public boolean saved() {
+        String value = Settings.FILE_VALUES.getProperty(key);
+        return value == null || !value.trim().equalsIgnoreCase("false");
+    }
+
+    /** Rewrites each line in place, so comments and order the player left in the file survive. */
+    public static void save(Map<BlazeOptimization, Boolean> values) {
+        Path path = Settings.PATH;
+        try {
+            List<String> lines = Files.isRegularFile(path) ? new ArrayList<>(Files.readAllLines(path)) : new ArrayList<>();
+            Map<BlazeOptimization, Boolean> missing = new EnumMap<>(values);
+            for (int index = 0; index < lines.size(); index++) {
+                String line = lines.get(index).trim();
+                int separator = line.indexOf('=');
+                if (line.startsWith("#") || separator < 1) continue;
+                String name = line.substring(0, separator).trim();
+                for (var entry : values.entrySet()) {
+                    if (!entry.getKey().key.equals(name)) continue;
+                    lines.set(index, name + "=" + entry.getValue());
+                    missing.remove(entry.getKey());
+                }
+            }
+            for (var entry : missing.entrySet()) {
+                lines.add("# " + entry.getKey().description);
+                lines.add(entry.getKey().key + "=" + entry.getValue());
+            }
+            Files.createDirectories(path.toAbsolutePath().getParent());
+            Files.write(path, lines);
+            values.forEach((option, value) -> Settings.FILE_VALUES.setProperty(option.key, value.toString()));
+        } catch (IOException failure) {
+            LoggerFactory.getLogger(BlazeOptimization.class).warn("Cannot write {}", path, failure);
+        }
     }
 
     private static void writeMissing(Path path) {

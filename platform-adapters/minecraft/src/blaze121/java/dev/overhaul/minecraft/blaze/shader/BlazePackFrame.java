@@ -40,7 +40,7 @@ public final class BlazePackFrame implements AutoCloseable {
     private PackGraphRuntime runtime;
     private BlazePackScene scene;
     private BlazePackShadows shadows;
-    private int width, height;
+    private int width, height, generation;
     private boolean active;
 
     private BlazePackFrame(Minecraft minecraft, BlazeRenderer renderer) {
@@ -58,6 +58,10 @@ public final class BlazePackFrame implements AutoCloseable {
     public void begin(Camera camera, float partial, Matrix4f view, Matrix4f projection, LightTexture light, ViewArea sections) {
         active = false;
         if (minecraft.level == null) return;
+        if (generation != BlazePackRequest.generation()) {
+            generation = BlazePackRequest.generation();
+            invalidate();
+        }
         BlazePackConfiguration configuration;
         try {
             if (file == null) file = BlazePackConfiguration.read(minecraft);
@@ -69,6 +73,7 @@ public final class BlazePackFrame implements AutoCloseable {
         }
         if (!configuration.configured()) {
             release();
+            BlazePackRequest.report("Off");
             return;
         }
         if (configuration.equals(blocked)) return;
@@ -144,6 +149,7 @@ public final class BlazePackFrame implements AutoCloseable {
             width = targetWidth;
             height = targetHeight;
             uniforms.resetHistory();
+            BlazePackRequest.report("Active: " + configuration.pack().getFileName() + ", compiled in " + (System.nanoTime() - started) / 1_000_000 + " ms");
             LOG.info("Shader pack installed: {} ({}x{}) in {} ms", configuration.pack(), targetWidth, targetHeight, (System.nanoTime() - started) / 1_000_000);
         }
     }
@@ -168,6 +174,9 @@ public final class BlazePackFrame implements AutoCloseable {
     private void fail(BlazePackConfiguration configuration, Exception failure) {
         active = false;
         blocked = configuration;
+        Throwable reason = failure;
+        while (reason.getMessage() == null && reason.getCause() != null) reason = reason.getCause();
+        BlazePackRequest.report("Failed: " + (reason.getMessage() == null ? reason.getClass().getSimpleName() : reason.getMessage()));
         LOG.error("Shader pack disabled: {}", configuration == null ? "unknown" : configuration.pack(), failure);
         release();
     }
