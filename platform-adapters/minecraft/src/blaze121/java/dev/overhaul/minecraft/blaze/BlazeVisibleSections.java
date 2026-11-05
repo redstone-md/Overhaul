@@ -13,7 +13,7 @@ import net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection
 public final class BlazeVisibleSections {
     private static final ObjectArrayList<RenderSection> NONE=new ObjectArrayList<>(0);
     private final ObjectArrayList<RenderSection> dirty=new ObjectArrayList<>();
-    private final Object2ObjectOpenHashMap<RenderType,ObjectArrayList<RenderSection>> layers=new Object2ObjectOpenHashMap<>();
+    private final Object2ObjectOpenHashMap<RenderType,Layer> layers=new Object2ObjectOpenHashMap<>();
     private ObjectArrayList<RenderSection> source;
     private int scanned;
 
@@ -28,21 +28,33 @@ public final class BlazeVisibleSections {
 
     /** Runs after pending uploads, so sections finished this frame are already in their layers. */
     public void scan(ObjectArrayList<RenderSection> visible){
-        for(ObjectArrayList<RenderSection> sections:layers.values())sections.clear();
+        for(Layer layer:layers.values())layer.cursor=0;
         for(int index=0,size=visible.size();index<size;index++){
             RenderSection section=visible.get(index);
-            for(RenderType layer:((CompiledSection121Accessor)section.getCompiled()).overhaul$hasBlocks()){
-                layers.computeIfAbsent(layer,key->new ObjectArrayList<>()).add(section);
+            for(RenderType type:((CompiledSection121Accessor)section.getCompiled()).overhaul$hasBlocks()){
+                layers.computeIfAbsent(type,key->new Layer()).put(section);
             }
         }
+        for(Layer layer:layers.values())layer.sections.size(layer.cursor);
         source=visible;
         scanned=visible.size();
     }
 
     /** A list swapped or changed since the scan is walked whole, as vanilla would. */
-    public ObjectArrayList<RenderSection> layer(ObjectArrayList<RenderSection> visible,RenderType layer){
+    public ObjectArrayList<RenderSection> layer(ObjectArrayList<RenderSection> visible,RenderType type){
         if(visible!=source||visible.size()!=scanned)return visible;
-        ObjectArrayList<RenderSection> sections=layers.get(layer);
-        return sections==null?NONE:sections;
+        Layer layer=layers.get(type);
+        return layer==null?NONE:layer.sections;
+    }
+
+    /** Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier. */
+    private static final class Layer {
+        private final ObjectArrayList<RenderSection> sections=new ObjectArrayList<>();
+        private int cursor;
+        private void put(RenderSection section){
+            if(cursor==sections.size())sections.add(section);
+            else if(sections.get(cursor)!=section)sections.set(cursor,section);
+            cursor++;
+        }
     }
 }
