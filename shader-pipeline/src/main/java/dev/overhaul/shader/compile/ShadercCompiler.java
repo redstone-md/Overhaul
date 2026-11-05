@@ -1,9 +1,12 @@
 package dev.overhaul.shader.compile;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import static org.lwjgl.system.MemoryUtil.memFree;
+import static org.lwjgl.system.MemoryUtil.memUTF8;
 import static org.lwjgl.util.shaderc.Shaderc.*;
 
 /** Owns shaderc resources. Serialization makes close/compile races deterministic. */
@@ -29,7 +32,10 @@ public final class ShadercCompiler implements AutoCloseable {
         if (compiler == 0) throw new IllegalStateException("Compiler is closed");
         Objects.requireNonNull(name, "name"); Objects.requireNonNull(source, "source");
         Objects.requireNonNull(stage, "stage");
-        long result = shaderc_compile_into_spv(compiler, source, stage.shadercKind(), name, "main", options);
+        long result;
+        try (NativeText text = new NativeText(source, name)) {
+            result = shaderc_compile_into_spv(compiler, text.source, stage.shadercKind(), text.name, text.entry, options);
+        }
         if (result == 0) throw new ShaderCompilationException(name + ": shaderc returned no result");
         try {
             if (shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
@@ -74,7 +80,10 @@ public final class ShadercCompiler implements AutoCloseable {
                 shaderc_compile_options_add_macro_definition(preprocessing,macro,value);
             });
             shaderc_compile_options_set_include_callbacks(preprocessing,includes.resolve,includes.release,0);
-            long result = shaderc_compile_into_preprocessed_text(compiler,prepared,stage.shadercKind(),name,"main",preprocessing);
+            long result;
+            try (NativeText text = new NativeText(prepared, name)) {
+                result = shaderc_compile_into_preprocessed_text(compiler,text.source,stage.shadercKind(),text.name,text.entry,preprocessing);
+            }
             if (result == 0) throw new ShaderCompilationException(name+": preprocessor returned no result");
             try {
                 if (shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
@@ -92,6 +101,24 @@ public final class ShadercCompiler implements AutoCloseable {
     }
     public record ResolvedInclude(String name, String text) {
         public ResolvedInclude { Objects.requireNonNull(name); Objects.requireNonNull(text); }
+    }
+
+    /**
+     * Shaderc's String overloads encode on LWJGL's thread stack, 64 KiB unless the launcher raises it, and a pack
+     * program's source alone can exceed that. The source therefore lives on the native heap for the call.
+     */
+    private static final class NativeText implements AutoCloseable {
+        final ByteBuffer source, name, entry;
+
+        NativeText(String source, String name) {
+            this.source = memUTF8(source, false);
+            this.name = memUTF8(name, true);
+            this.entry = memUTF8("main", true);
+        }
+
+        @Override public void close() {
+            memFree((Buffer) source); memFree((Buffer) name); memFree((Buffer) entry);
+        }
     }
 
     private static void rejectProfileMacros(String source) {
