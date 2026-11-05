@@ -35,6 +35,7 @@ public enum BlazeOptimization {
     SECTION_BOUNDS("sectionBounds", "Frustum test over flat section bounds instead of the graph's linked nodes"),
     ENTITY_SCANS("entityScans", "Cataclysm and Alex's Caves camera effect entity scans once a tick instead of every frame"),
     DH_CLOUDS("dhClouds", "Distant Horizons cloud movement updated at 60 Hz"),
+    DH_RENDER_LIST("dhRenderList", "Distant Horizons visible buffer list built without hashing each buffer"),
     SECTION_GRID("sectionGrid", "Section grid moves only the columns that wrapped around the camera"),
     PARTICLE_QUADS("particleQuads", "Particle quads written in one go instead of vertex by vertex"),
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
