@@ -33,6 +33,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private ImmediateCommands commands;
     private BlazeQueue queue;
     private BlazeBufferPool hostStorage,geometryStorage;
+    private BlazePackScene packScene;
     private final java.util.Map<BlazeProgramCompiler.Program,BlazeProgramShape> shapes=new java.util.IdentityHashMap<>();
     private BlazeHostArena uniformArena,uploadArena,streamArena;
     private BlazeBufferPool streamStorage;
@@ -148,8 +149,11 @@ public final class BlazeRenderer implements AutoCloseable {
         if(drawingNowhere())return;
         String missing=programs.incompleteActive();
         if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}
-        draw(mesh,programs.activeSnapshot());
+        BlazeTarget target=currentTarget();BlazeShaderSnapshot shader=programs.activeSnapshot();
+        if(packScene!=null&&packScene.routes(target))packScene.draw(mesh,shader);else draw(mesh,target,shader);
     }
+    void packScene(BlazePackScene scene){packScene=scene;}
+    BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
     public void clear(int mask){clear(mask,clearValues());}
     /**
@@ -165,8 +169,8 @@ public final class BlazeRenderer implements AutoCloseable {
     }
     void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
-    private void draw(BlazeMesh mesh,BlazeShaderSnapshot shader){
-        requireOpen();if(mesh.state().indexCount()==0)return;BlazeTarget target=currentTarget();
+    void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){
+        requireOpen();if(mesh.state().indexCount()==0)return;
         try{
             long start=BlazeStats.start();var snapshot=state.snapshot();
             if(queue.last() instanceof BlazePass open&&open.append(this,target,mesh,shader,snapshot)){BlazeStats.capture(start);return;}

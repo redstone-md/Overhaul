@@ -79,6 +79,7 @@ public final class BlazePrograms implements AutoCloseable {
         return BlazeShaderSnapshot.capture(compiled(id),uniforms,textures);
     }
     /** Names the active program when a draw cannot use it, because its shader instance never finished constructing. */
+    int activeId(){return active;}
     public String incompleteActive(){requireOpen();if(active==0)return null;var entry=entry(active);return entry.snapshot==null?entry.name:null;}
     public BlazeShaderSnapshot activeSnapshot(){requireOpen();if(active==0)throw new IllegalStateException("No active Blaze shader");var supplier=entry(active).snapshot;if(supplier==null)throw new IllegalStateException("Shader construction has not completed");return supplier.get();}
     public void release(int id){requireOwner();var entry=programs.remove(id);if(active==id)active=0;if(entry!=null&&entry.program!=null)released.accept(entry.program);}
