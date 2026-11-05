@@ -97,12 +97,12 @@ public final class PackShadowSettings {
             return new PackShadowSettings(this);
         }
         private int integer(String name,int fallback,int min,int max){
-            try{int value=Integer.parseInt(directives.getOrDefault(name,Integer.toString(fallback)));if(value<min||value>max)throw invalid("Shadow resolution exceeds ["+min+","+max+"]");return value;}
-            catch(NumberFormatException failure){throw invalid("Expected literal shadow integer: "+name);}
+            try{int value=PackLiterals.integer(directives.getOrDefault(name,Integer.toString(fallback)));if(value<min||value>max)throw invalid("Shadow resolution exceeds ["+min+","+max+"]");return value;}
+            catch(NumberFormatException failure){throw invalid("Expected literal shadow integer: "+name+" = "+directives.get(name));}
         }
         private float number(String name,float fallback){
-            try{String raw=directives.getOrDefault(name,Float.toString(fallback));float value=Float.parseFloat(raw);if(!Float.isFinite(value))throw invalid("Nonfinite shadow directive: "+name);return value;}
-            catch(NumberFormatException failure){throw invalid("Expected literal shadow float: "+name);}
+            try{String raw=directives.getOrDefault(name,Float.toString(fallback));float value=PackLiterals.decimal(raw);if(!Float.isFinite(value))throw invalid("Nonfinite shadow directive: "+name);return value;}
+            catch(NumberFormatException failure){throw invalid("Expected literal shadow float: "+name+" = "+directives.get(name));}
         }
     }
     private static UnsupportedShaderException invalid(String message){return new UnsupportedShaderException(message);}

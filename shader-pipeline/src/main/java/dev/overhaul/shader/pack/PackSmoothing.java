@@ -30,7 +30,7 @@ public record PackSmoothing(float wetness, float dryness, float eyeBrightness, f
     }
     private static float parse(String name, String text) {
         try {
-            float value = Float.parseFloat(text);
+            float value = PackLiterals.decimal(text);
             if (!Float.isFinite(value) || value < 0) throw new UnsupportedShaderException("Negative halflife: "+name);
             return value;
         } catch (NumberFormatException invalid) {

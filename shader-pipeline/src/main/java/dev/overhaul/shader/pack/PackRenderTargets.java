@@ -113,7 +113,7 @@ public final class PackRenderTargets {
             var matcher=Pattern.compile("vec4\\s*\\(([^()]*)\\)").matcher(value);
             if(!matcher.matches())throw invalid("Clear color must be a literal vec4: "+value);
             String[] parts=matcher.group(1).split(",");if(parts.length!=1&&parts.length!=4)throw invalid("Clear color requires one or four components");
-            float[] components=new float[4];for(int index=0;index<4;index++)try{components[index]=Float.parseFloat(parts[parts.length==1?0:index].trim());}
+            float[] components=new float[4];for(int index=0;index<4;index++)try{components[index]=PackLiterals.decimal(parts[parts.length==1?0:index]);}
             catch(NumberFormatException failure){throw invalid("Nonliteral clear color: "+value);}
             return new Color(components[0],components[1],components[2],components[3]);
         }
