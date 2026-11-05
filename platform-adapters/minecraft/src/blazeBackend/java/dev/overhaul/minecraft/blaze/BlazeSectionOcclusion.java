@@ -115,7 +115,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
         }
         float toTilesX = pixelsWide * .5f / BlazeDepthTiles.TILE_PIXELS, toTilesY = pixelsHigh * .5f / BlazeDepthTiles.TILE_PIXELS;
         // Depth images keep OpenGL's row order and vertex output is not flipped, so row 0 is NDC y -1. Off-screen parts fail open.
-        return depth.occluded((int) Math.floor((minX + 1) * toTilesX), (int) Math.floor((minY + 1) * toTilesY),
+        return depth.quicklyOccluded((int) Math.floor((minX + 1) * toTilesX), (int) Math.floor((minY + 1) * toTilesY),
                 (int) Math.ceil((maxX + 1) * toTilesX), (int) Math.ceil((maxY + 1) * toTilesY), .5f * nearest + .5f);
     }
 

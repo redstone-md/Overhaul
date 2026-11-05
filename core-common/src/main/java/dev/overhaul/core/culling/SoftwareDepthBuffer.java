@@ -133,17 +133,39 @@ public final class SoftwareDepthBuffer {
      * Bounds crossing the viewport/near plane must remain visible until clipped.
      */
     public boolean occluded(int minX, int minY, int maxX, int maxY, float nearestDepth) {
-        if (minX < 0 || minY < 0 || maxX > width || maxY > height
-                || minX >= maxX || minY >= maxY || !Float.isFinite(nearestDepth)
-                || nearestDepth < 0 || nearestDepth > 1) return false;
-        if (dirtyMaxX > 0) rebuild();
+        if (!testable(minX, minY, maxX, maxY, nearestDepth)) return false;
         // A cell holds the farthest depth below it, so a coarse pass proves the rectangle hidden and only level zero proves it visible.
-        int span = Math.max(maxX - minX, maxY - minY), level = Math.min(levels.length - 1, Integer.SIZE - Integer.numberOfLeadingZeros(span - 1));
+        int level = coarsestLevel(minX, minY, maxX, maxY);
         while (!behind(level, minX, minY, maxX, maxY, nearestDepth)) {
             if (level == 0) return false;
             level = Math.max(0, level - 2);
         }
         return true;
+    }
+
+    /**
+     * {@link #occluded} for tests run by the thousand: at most twenty cells are read, so a box only a finer look could
+     * prove hidden counts as visible. It never calls a visible box hidden.
+     */
+    public boolean quicklyOccluded(int minX, int minY, int maxX, int maxY, float nearestDepth) {
+        if (!testable(minX, minY, maxX, maxY, nearestDepth)) return false;
+        int level = coarsestLevel(minX, minY, maxX, maxY);
+        return behind(level, minX, minY, maxX, maxY, nearestDepth)
+                || level > 0 && behind(Math.max(0, level - 2), minX, minY, maxX, maxY, nearestDepth);
+    }
+
+    private boolean testable(int minX, int minY, int maxX, int maxY, float nearestDepth) {
+        if (minX < 0 || minY < 0 || maxX > width || maxY > height
+                || minX >= maxX || minY >= maxY || !Float.isFinite(nearestDepth)
+                || nearestDepth < 0 || nearestDepth > 1) return false;
+        if (dirtyMaxX > 0) rebuild();
+        return true;
+    }
+
+    /** Where the rectangle spans at most two cells each way. */
+    private int coarsestLevel(int minX, int minY, int maxX, int maxY) {
+        int span = Math.max(maxX - minX, maxY - minY);
+        return Math.min(levels.length - 1, Integer.SIZE - Integer.numberOfLeadingZeros(span - 1));
     }
 
     private boolean behind(int level, int minX, int minY, int maxX, int maxY, float near) {
