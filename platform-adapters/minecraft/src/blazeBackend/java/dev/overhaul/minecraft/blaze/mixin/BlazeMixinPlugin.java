@@ -34,7 +34,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("CataclysmScans121Mixin", BlazeOptimization.ENTITY_SCANS),
             Map.entry("AlexsCavesScans121Mixin", BlazeOptimization.ENTITY_SCANS),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
-            Map.entry("ViewAreaColumns121Mixin", BlazeOptimization.SECTION_GRID));
+            Map.entry("ViewAreaColumns121Mixin", BlazeOptimization.SECTION_GRID),
+            Map.entry("BufferBuilderParticles121Mixin", BlazeOptimization.PARTICLE_QUADS),
+            Map.entry("ParticleQuads121Mixin", BlazeOptimization.PARTICLE_QUADS));
 
     @Override public void onLoad(String mixinPackage) {
         BlazeOptimization.describeInFile();

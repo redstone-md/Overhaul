@@ -5,7 +5,7 @@ def tiers = [
         '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
                    tierMixins: ['LevelRendererSections121Mixin', 'ViewAreaColumns121Mixin',
-                                'CompiledContents121Mixin',
+                                'BufferBuilderParticles121Mixin', 'ParticleQuads121Mixin', 'CompiledContents121Mixin',
                                 'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
                                 'ModelCube121Mixin', 'BufferBuilderBulk121Mixin', 'ItemQuads121Mixin',
