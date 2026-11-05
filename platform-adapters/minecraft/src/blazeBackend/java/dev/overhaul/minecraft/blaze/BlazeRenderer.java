@@ -175,7 +175,7 @@ public final class BlazeRenderer implements AutoCloseable {
         requireOpen();if(mesh.state().indexCount()==0)return;
         try{
             long start=BlazeStats.start();
-            if(queue.last() instanceof BlazePass open&&open.append(this,target,mesh,shader,snapshot)){BlazeStats.capture(start);return;}
+            if(BlazeOptimization.DRAW_MERGE.on()&&queue.last() instanceof BlazePass open&&open.append(this,target,mesh,shader,snapshot)){BlazeStats.capture(start);return;}
             BlazePass pass=new BlazePass(this,target,mesh,shader,snapshot);BlazeStats.pass();BlazeStats.capture(start);queue.add(pass,0);
         }
         catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");}

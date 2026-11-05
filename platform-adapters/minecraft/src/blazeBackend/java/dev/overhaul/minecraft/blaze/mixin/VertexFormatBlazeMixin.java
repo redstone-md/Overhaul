@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.overhaul.minecraft.blaze.BlazeFormatAccess;
 import dev.overhaul.minecraft.blaze.BlazeGameMesh;
 import dev.overhaul.minecraft.blaze.BlazeMeshState;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -19,7 +20,7 @@ public abstract class VertexFormatBlazeMixin implements BlazeFormatAccess {
     /** Immediate draws are the game's streaming path; buffers mods create and keep stay in device memory. */
     @Inject(method="getImmediateDrawVertexBuffer",at=@At("RETURN"),require=1)
     private void overhaul$streamImmediate(CallbackInfoReturnable<VertexBuffer> callback) {
-        ((BlazeVertexBufferAccess) callback.getReturnValue()).overhaul$streamUploads();
+        if (BlazeOptimization.STREAM_UPLOADS.on()) ((BlazeVertexBufferAccess) callback.getReturnValue()).overhaul$streamUploads();
     }
 
     @Override public synchronized BlazeMeshState.Layout overhaul$layout() {
