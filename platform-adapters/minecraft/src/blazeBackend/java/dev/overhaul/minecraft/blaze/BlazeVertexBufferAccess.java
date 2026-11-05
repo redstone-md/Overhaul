@@ -5,6 +5,9 @@ public interface BlazeVertexBufferAccess {
     boolean overhaul$owned();
     /** Marks a buffer whose every draw brings new geometry, before its first upload. */
     void overhaul$streamUploads();
+    /** Marks a buffer that holds terrain sections. */
+    void overhaul$markSectionUploads();
+    boolean overhaul$sectionUploads();
     BlazeMesh overhaul$uploadMesh();
     BlazeMesh overhaul$existingMesh();
     /** Null until the first upload; a section can be compiled before its buffer arrives. */

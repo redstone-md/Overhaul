@@ -40,6 +40,7 @@ public abstract class ShaderInstanceBlazeMixin implements BlazeShaderAccess {
     }
 
     @Override public BlazeProgramCompiler.Program overhaul$sectionProgram(){return overhaul$programs==null?null:overhaul$programs.sectionProgram(((ShaderInstance)(Object)this).getId());}
+    @Override public BlazeProgramCompiler.Program overhaul$compactSectionProgram(){return overhaul$programs==null?null:overhaul$programs.compactSectionProgram(((ShaderInstance)(Object)this).getId());}
     @Override public BlazeShaderSnapshot overhaul$sectionSnapshot(){return overhaul$programs.sectionSnapshot(((ShaderInstance)(Object)this).getId(),uniformMap);}
 
     @Inject(method="apply",at=@At("HEAD"),require=1)

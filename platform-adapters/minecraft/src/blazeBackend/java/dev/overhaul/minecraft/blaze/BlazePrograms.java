@@ -30,8 +30,13 @@ public final class BlazePrograms implements AutoCloseable {
         final Map<String,Integer> samplerUnits=new HashMap<>();
         Supplier<BlazeShaderSnapshot> snapshot;
         String name="unlinked";
-        String vertexName,fragmentName,sectionVertex,fragmentSource;
-        BlazeProgramCompiler.Program sections;
+        String vertexName,fragmentName,vertexSource,fragmentSource;
+        BlazeProgramCompiler.Program sections,compact,compactSections;
+        boolean sectionsTried,compactTried,compactSectionsTried;
+        void releaseAll(Consumer<BlazeProgramCompiler.Program> released){
+            if(program!=null)released.accept(program);if(sections!=null)released.accept(sections);
+            if(compact!=null)released.accept(compact);if(compactSections!=null)released.accept(compactSections);
+        }
     }
     private final Thread owner=Thread.currentThread();
     private final BlazeProgramCompiler compiler;
@@ -63,7 +68,7 @@ public final class BlazePrograms implements AutoCloseable {
             Map<String,Integer> locations=new LinkedHashMap<>();var names=new TreeSet<>(entry.program.bindings().uniforms().keySet());names.addAll(entry.program.bindings().samplers().keySet());
             for(String name:names)locations.put(name,locations.size());entry.locations=Map.copyOf(locations);
             for(String name:entry.program.bindings().samplers().keySet()){entry.samplerLocations.put(locations.get(name),name);entry.samplerUnits.put(name,0);}
-            if(SECTION_OFFSET.matcher(vertex.source()).find()){entry.vertexName=vertex.name();entry.fragmentName=fragment.name();entry.fragmentSource=fragment.source();entry.sectionVertex=vertex.source();}
+            if(SECTION_OFFSET.matcher(vertex.source()).find()){entry.vertexName=vertex.name();entry.fragmentName=fragment.name();entry.fragmentSource=fragment.source();entry.vertexSource=vertex.source();}
         }catch(RuntimeException|Error failure){programs.remove(shader.getId());throw failure;}
     }
     private BlazeStageAccess.Stage stage(Program program){
@@ -81,12 +86,42 @@ public final class BlazePrograms implements AutoCloseable {
     public BlazeShaderSnapshot snapshot(int id,Map<String,Uniform> uniforms){return BlazeShaderSnapshot.capture(compiled(id),uniforms,boundTextures(id));}
     /** The shader's own source with its section offset as a vertex input: resource packs that replace the shader keep working. */
     public BlazeProgramCompiler.Program sectionProgram(int id){
-        requireOpen();var entry=entry(id);if(entry.sections!=null||entry.sectionVertex==null)return entry.sections;
-        String source=SECTION_OFFSET.matcher(entry.sectionVertex).replaceFirst("in vec3 "+BlazeSectionShape.OFFSET_ATTRIBUTE+";").replaceAll("\\bChunkOffset\\b",BlazeSectionShape.OFFSET_ATTRIBUTE);
-        entry.sectionVertex=null;
-        try{entry.sections=compiler.compile(entry.vertexName,entry.fragmentName,source,entry.fragmentSource,(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});}
+        requireOpen();var entry=entry(id);if(entry.sectionsTried||entry.vertexSource==null)return entry.sections;
+        entry.sectionsTried=true;
+        try{entry.sections=variant(entry,sectionSource(entry));}
         catch(RuntimeException failure){BlazeGlBoundary.reportOnce("section program "+entry.name,"Terrain shader "+entry.name+" cannot read its section offset per instance, so it draws section by section: "+failure.getMessage());}
         return entry.sections;
+    }
+    private static String sectionSource(Entry entry){return SECTION_OFFSET.matcher(entry.vertexSource).replaceFirst("in vec3 "+BlazeSectionShape.OFFSET_ATTRIBUTE+";").replaceAll("\\bChunkOffset\\b",BlazeSectionShape.OFFSET_ATTRIBUTE);}
+    private BlazeProgramCompiler.Program variant(Entry entry,String vertex){
+        return compiler.compile(entry.vertexName,entry.fragmentName,vertex,entry.fragmentSource,(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
+    }
+    /** The shader as written, reading compact vertices, for code that draws section buffers itself with the section offset uniform. */
+    BlazeProgramCompiler.Program compactProgram(int id){
+        requireOpen();var entry=entry(id);if(entry.compactTried)return entry.compact;
+        entry.compactTried=true;
+        if(entry.vertexSource!=null)entry.compact=compactVariant(entry,entry.vertexSource,entry.program);
+        return entry.compact;
+    }
+    public BlazeProgramCompiler.Program compactSectionProgram(int id){
+        var sections=sectionProgram(id);var entry=entry(id);if(entry.compactSectionsTried||sections==null)return entry.compactSections;
+        entry.compactSectionsTried=true;
+        entry.compactSections=compactVariant(entry,sectionSource(entry),sections);
+        return entry.compactSections;
+    }
+    private BlazeProgramCompiler.Program compactVariant(Entry entry,String vertex,BlazeProgramCompiler.Program original){
+        String why;
+        try{
+            String source=BlazeCompactSection.vertexSource(vertex);
+            if(source==null)why="it declares no position attribute";
+            else{
+                var program=variant(entry,source);
+                if(BlazeCompactSection.replaces(program,original))return program;
+                released.accept(program);why="it reads other vertex data, or its uniforms change";
+            }
+        }catch(RuntimeException failure){why=failure.getMessage();}
+        BlazeGlBoundary.reportOnce("compact program "+entry.name,"Terrain shader "+entry.name+" cannot read compact vertices, so terrain stays in full vertices: "+why);
+        return null;
     }
     public BlazeShaderSnapshot sectionSnapshot(int id,Map<String,Uniform> uniforms){return BlazeShaderSnapshot.capture(entry(id).sections,uniforms,boundTextures(id));}
     private Map<String,Object> boundTextures(int id){
@@ -98,13 +133,13 @@ public final class BlazePrograms implements AutoCloseable {
     int activeId(){return active;}
     public String incompleteActive(){requireOpen();if(active==0)return null;var entry=entry(active);return entry.snapshot==null?entry.name:null;}
     public BlazeShaderSnapshot activeSnapshot(){requireOpen();if(active==0)throw new IllegalStateException("No active Blaze shader");var supplier=entry(active).snapshot;if(supplier==null)throw new IllegalStateException("Shader construction has not completed");return supplier.get();}
-    public void release(int id){requireOwner();var entry=programs.remove(id);if(active==id)active=0;if(entry==null)return;if(entry.program!=null)released.accept(entry.program);if(entry.sections!=null)released.accept(entry.sections);}
+    public void release(int id){requireOwner();var entry=programs.remove(id);if(active==id)active=0;if(entry!=null)entry.releaseAll(released);}
     private Entry entry(int id){var entry=programs.get(id);if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);return entry;}
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Blaze programs belong to another thread");}
     private void requireOpen(){requireOwner();if(closed)throw new IllegalStateException("Blaze programs are closed");}
     @Override public void close(){
         requireOwner();if(closed)return;closed=true;active=0;
-        try{for(var entry:programs.values()){if(entry.program!=null)released.accept(entry.program);if(entry.sections!=null)released.accept(entry.sections);}}
+        try{for(var entry:programs.values())entry.releaseAll(released);}
         finally{programs.clear();compiler.close();}
     }
 }

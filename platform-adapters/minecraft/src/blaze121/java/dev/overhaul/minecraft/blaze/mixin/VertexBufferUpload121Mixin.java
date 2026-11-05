@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import dev.overhaul.minecraft.blaze.BlazeCompactSection;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeGameDrawState;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
@@ -32,11 +33,15 @@ public abstract class VertexBufferUpload121Mixin {
             return;
         }
         try (source) {
-            BlazeFrontend.require();
+            var renderer = BlazeFrontend.require();
             if (vertexBufferId < 0) { callback.cancel(); return; }
             var game = source.drawState();
             var state = BlazeGameDrawState.capture(game.format(), game.vertexCount(), game.indexCount(), game.mode(), game.indexType());
-            access.overhaul$uploadMesh().upload(state, source.vertexBuffer(), source.indexBuffer());
+            var mesh = access.overhaul$uploadMesh();
+            if (!access.overhaul$sectionUploads() || !renderer.compactsSections()
+                    || !BlazeCompactSection.upload(mesh, state, source.vertexBuffer(), source.indexBuffer())) {
+                mesh.upload(state, source.vertexBuffer(), source.indexBuffer());
+            }
             format = game.format(); mode = game.mode(); indexType = game.indexType(); indexCount = game.indexCount();
             callback.cancel();
         }

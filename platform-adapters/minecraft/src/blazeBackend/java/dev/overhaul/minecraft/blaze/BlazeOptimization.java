@@ -19,6 +19,7 @@ public enum BlazeOptimization {
     SECTION_OCCLUSION("sectionOcclusion", "Terrain sections hidden behind recent terrain depth are not drawn; needs sectionBatch"),
     ENTITY_OCCLUSION("entityOcclusion", "Entities hidden behind recent terrain depth are not drawn; needs sectionOcclusion"),
     BLOCK_ENTITY_OCCLUSION("blockEntityOcclusion", "Block entities in sections hidden behind recent terrain depth are not drawn; needs sectionOcclusion"),
+    COMPACT_SECTIONS("compactSections", "Terrain vertices stored in 20 bytes instead of 32; needs sectionBatch"),
     SECTION_LISTS("sectionLists", "Per-layer visible section lists instead of walking every visible section for every layer"),
     DRAW_MERGE("drawMerge", "Consecutive draws with the same pipeline share one pass and descriptor set"),
     STREAM_UPLOADS("streamUploads", "Per-frame geometry written to host memory instead of copied to device memory"),

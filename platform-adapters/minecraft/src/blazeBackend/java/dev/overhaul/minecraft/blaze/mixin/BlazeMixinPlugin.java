@@ -14,6 +14,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("LevelRendererSectionBatch121Mixin", BlazeOptimization.SECTION_BATCH),
             Map.entry("LevelRendererEntityOcclusion121Mixin", BlazeOptimization.ENTITY_OCCLUSION),
             Map.entry("LevelRendererBlockEntityOcclusion121Mixin", BlazeOptimization.BLOCK_ENTITY_OCCLUSION),
+            Map.entry("SectionRenderDispatcherCompact121Mixin", BlazeOptimization.COMPACT_SECTIONS),
             Map.entry("LevelRendererSections121Mixin", BlazeOptimization.SECTION_LISTS),
             Map.entry("BufferBuilderBulk121Mixin", BlazeOptimization.BULK_VERTICES),
             Map.entry("ModelCube121Mixin", BlazeOptimization.CUBE_MESH),

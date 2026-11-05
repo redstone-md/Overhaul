@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -32,6 +33,7 @@ public final class BlazeSectionBatch {
     private int count;
     private BlazeTarget target;
     private BlazeShaderSnapshot shader;
+    private BlazeProgramCompiler.Program compact;
     private BlazeDrawState.Snapshot state;
     private BlazeMeshState first;
     private boolean ordered;
@@ -40,17 +42,21 @@ public final class BlazeSectionBatch {
         this.owner = owner;
     }
 
-    /** @param ordered keep the given draw order exactly, as blending needs; otherwise sections group by buffer */
-    void begin(BlazeShaderSnapshot shader, boolean ordered) {
+    /**
+     * @param compact the shader's program for compact meshes, null when there is none and such meshes wait for their rebuild
+     * @param ordered keep the given draw order exactly, as blending needs; otherwise sections group by buffer
+     */
+    void begin(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, boolean ordered) {
         target = owner.currentTarget();
         state = owner.drawState().snapshot();
         this.shader = shader;
+        this.compact = compact;
         this.ordered = ordered;
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {
         BlazeMeshState next = mesh.stateOrNull();
-        if (next == null || next.indexCount() == 0) return;
+        if (next == null || next.indexCount() == 0 || compact == null && BlazeCompactSection.compact(next)) return;
         if (first != null && (next.topology() != first.topology() || !next.layout().equals(first.layout()))) finish();
         if (first == null) first = next;
         BlazeGeometryRange vertices = mesh.vertexRange(), indices = mesh.indexRange();
@@ -82,6 +88,7 @@ public final class BlazeSectionBatch {
         finish();
         target = null;
         shader = null;
+        compact = null;
         state = null;
     }
 
@@ -107,7 +114,7 @@ public final class BlazeSectionBatch {
             if (positions != null) positions.close();
             throw failure;
         }
-        BlazeShaderSnapshot captured = shader;
+        BlazeShaderSnapshot captured = BlazeCompactSection.compact(mesh) ? shader.withProgram(compact) : shader;
         BlazeTerrainPass pass;
         try {
             pass = new BlazeTerrainPass(owner, target, state, (bytes, width, height) -> bytes.put(captured.uniforms()), captured.program(),

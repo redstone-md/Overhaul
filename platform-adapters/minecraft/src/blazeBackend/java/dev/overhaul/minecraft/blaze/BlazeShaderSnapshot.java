@@ -15,6 +15,8 @@ public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuff
         samplers = Collections.unmodifiableMap(samplers);
     }
     @Override public ByteBuffer uniforms() { return uniforms.duplicate().order(ByteOrder.nativeOrder()); }
+    /** The same values for a program with the same uniform layout. */
+    BlazeShaderSnapshot withProgram(BlazeProgramCompiler.Program replacement) { return new BlazeShaderSnapshot(replacement, uniforms, samplers); }
 
     private static ByteBuffer scratch = ByteBuffer.allocateDirect(4096).order(ByteOrder.nativeOrder());
 

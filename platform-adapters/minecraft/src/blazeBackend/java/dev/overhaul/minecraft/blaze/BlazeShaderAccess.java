@@ -8,4 +8,6 @@ public interface BlazeShaderAccess {
     /** The same shader with its section offset read per instance; null when it has no such offset. */
     BlazeProgramCompiler.Program overhaul$sectionProgram();
     BlazeShaderSnapshot overhaul$sectionSnapshot();
+    /** That program reading compact vertices; null when it cannot. */
+    BlazeProgramCompiler.Program overhaul$compactSectionProgram();
 }

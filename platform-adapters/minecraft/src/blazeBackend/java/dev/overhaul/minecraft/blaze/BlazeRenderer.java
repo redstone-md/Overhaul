@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.client.Minecraft;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK10.*;
@@ -18,6 +19,8 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeRenderer implements AutoCloseable {
     /** Names from this value up are raw OpenGL framebuffers that mods assemble; {@link BlazeRawFramebuffers} owns them. */
     static final int FOREIGN_FRAMEBUFFERS=0x40000000;
+    /** A multiple of both terrain strides, so one indirect draw reaches every section in a page by base vertex alone. */
+    private static final int GEOMETRY_ALIGNMENT=160;
     private final VulkanContext context;
     private final long windowHandle;
     private final BlazeDrawState state=new BlazeDrawState();
@@ -26,7 +29,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazeTerrain terrain;
     private BlazeSectionBatch sections;
     private BlazeSectionOcclusion occlusion;
-    private boolean occlusionFailed;
+    private boolean occlusionFailed,compactFailed;
     private BlazeDh dh;
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
@@ -66,7 +69,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 int alignment=Math.toIntExact(Math.max(4,Math.max(properties.limits().nonCoherentAtomSize(),properties.limits().minUniformBufferOffsetAlignment())));
                 maximumUniformRange=properties.limits().maxUniformBufferRange();
                 hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
-                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,32);
+                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,GEOMETRY_ALIGNMENT);
                 uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
                 streamStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,4*1024*1024,256L*1024*1024,16);
                 streamArena=new BlazeHostArena(streamStorage,16);
@@ -119,12 +122,22 @@ public final class BlazeRenderer implements AutoCloseable {
         BlazeProgramCompiler.Program program=shader.overhaul$sectionProgram();
         if(program==null)return false;
         shapes.computeIfAbsent(program,key->new BlazeSectionShape(key.bindings()));
+        if(compactsSections()){
+            BlazeProgramCompiler.Program compact=shader.overhaul$compactSectionProgram();
+            if(compact==null)compactUnavailable();else shapes.computeIfAbsent(compact,key->new BlazeSectionShape(key.bindings()));
+        }
         return true;
     }
     public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
         requireOpen();if(sections==null)sections=new BlazeSectionBatch(this);
-        sections.begin(shader.overhaul$sectionSnapshot(),ordered);return sections;
+        sections.begin(shader.overhaul$sectionSnapshot(),compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered);return sections;
     }
+    /** Whether a terrain mesh uploaded now may be compact: a pack's programs and the section-by-section path read full vertices. */
+    public boolean compactsSections(){
+        return !compactFailed&&packScene==null&&BlazeOptimization.COMPACT_SECTIONS.on()&&BlazeOptimization.SECTION_BATCH.on()&&context.indirectFirstInstance();
+    }
+    private void compactUnavailable(){compactFailed=true;rebuildSections();}
+    private static void rebuildSections(){Minecraft game=Minecraft.getInstance();game.execute(()->game.levelRenderer.allChanged());}
     /** Null when switched off or when this device cannot build it; terrain then simply draws everything. */
     public BlazeSectionOcclusion occlusion(){
         requireOpen();
@@ -175,9 +188,18 @@ public final class BlazeRenderer implements AutoCloseable {
         String missing=programs.incompleteActive();
         if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}
         BlazeTarget target=currentTarget();BlazeShaderSnapshot shader=programs.activeSnapshot();
-        if(packScene!=null&&packScene.routes(target))packScene.draw(mesh,shader);else draw(mesh,target,shader);
+        boolean routed=packScene!=null&&packScene.routes(target);
+        var uploaded=mesh.stateOrNull();
+        if(uploaded!=null&&BlazeCompactSection.compact(uploaded)){
+            // Mods can draw section buffers themselves with the ordinary shader. A pack's scene waits for the rebuild it asked for.
+            if(routed)return;
+            BlazeProgramCompiler.Program compact=programs.compactProgram(programs.activeId());
+            if(compact==null){if(!compactFailed)compactUnavailable();return;}
+            shader=shader.withProgram(compact);
+        }
+        if(routed)packScene.draw(mesh,shader);else draw(mesh,target,shader);
     }
-    void packScene(BlazePackScene scene){packScene=scene;}
+    void packScene(BlazePackScene scene){boolean compact=scene!=null&&compactsSections();packScene=scene;if(compact)rebuildSections();}
     BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
     public void clear(int mask){clear(mask,clearValues());}
@@ -198,6 +220,7 @@ public final class BlazeRenderer implements AutoCloseable {
     /** A draw whose raster state is not the game's, as the light camera's are. */
     void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader,BlazeDrawState.Snapshot snapshot){
         requireOpen();if(mesh.state().indexCount()==0)return;
+        if(BlazeCompactSection.compact(mesh.state())&&!BlazeCompactSection.reads(shader))return;
         try{
             long start=BlazeStats.start();
             if(BlazeOptimization.DRAW_MERGE.on()&&queue.last() instanceof BlazePass open&&open.append(this,target,mesh,shader,snapshot)){BlazeStats.capture(start);return;}

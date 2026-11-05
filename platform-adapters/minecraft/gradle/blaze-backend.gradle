@@ -12,7 +12,8 @@ def tiers = [
                                 'LevelRendererShaderPack121Mixin', 'TextureAtlas121Accessor',
                                 'LevelRendererSectionBatch121Mixin',
                                 'LevelRendererEntityOcclusion121Mixin',
-                                'LevelRendererBlockEntityOcclusion121Mixin']]
+                                'LevelRendererBlockEntityOcclusion121Mixin',
+                                'SectionRenderDispatcherCompact121Mixin']]
 ]
 ext.blazeTarget = tiers[target.minecraft]
 if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
