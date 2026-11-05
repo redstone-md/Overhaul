@@ -72,8 +72,7 @@ class ClassFile:
         self.name = self.cls(self.u2())
         sup = self.u2()
         self.super = self.cls(sup) if sup else None
-        count = self.u2()
-        self.p += 2 * count
+        self.interfaces = [self.cls(self.u2()) for _ in range(self.u2())]
         self.fields = []
         for _ in range(self.u2()):
             self.u2()
