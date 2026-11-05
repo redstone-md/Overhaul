@@ -49,6 +49,10 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     /** The adapter supplies only program names for which it binds actual geometry draws. */
     public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Set<String> boundScenePrograms){
+        this(context,allocator,pack,width,height,compiler,boundScenePrograms,true);
+    }
+    /** Packs read depth as far=1. {@code reversedSceneDepth} says the game's depth attachment holds far=0 and must be turned over on import. */
+    public PackGraphRuntime(VulkanContext context,GpuAllocator allocator,CompiledShaderPack pack,int width,int height,ShadercCompiler compiler,Set<String> boundScenePrograms,boolean reversedSceneDepth){
         this.context=context;this.pack=pack;this.width=width;this.height=height;context.requireOwner();
         boundScenePrograms=Set.copyOf(boundScenePrograms);
         mipmaps=new PackMipmaps(context);
@@ -80,7 +84,7 @@ public final class PackGraphRuntime implements AutoCloseable {
                 passes.put(program,new PackFullscreenPass(context,allocator,program,formats,passWidth,passHeight));
             }
             boolean needsDepth=pack.programs().stream().anyMatch(program->program.code().descriptors().samplers().keySet().stream().anyMatch(name->PackRenderTargets.depthIndex(name)>=0&&pack.textures().image(program,name)==null));
-            if(needsDepth)depthPass=new PackFullscreenPass(context,allocator,depthProgram(compiler),List.of(VK_FORMAT_R32_SFLOAT),width,height);
+            if(needsDepth)depthPass=new PackFullscreenPass(context,allocator,depthProgram(compiler,reversedSceneDepth),List.of(VK_FORMAT_R32_SFLOAT),width,height);
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
     /** Runs only before world capture; temporal buffers retain their contents unless their clear directive requests it. */
@@ -282,9 +286,9 @@ public final class PackGraphRuntime implements AutoCloseable {
             if((properties.optimalTilingFeatures()&feature)==0)throw new UnsupportedShaderException("Device cannot blit shader-pack image format: "+format);
         }
     }
-    private static CompiledShaderPack.Program depthProgram(ShadercCompiler compiler){
+    private static CompiledShaderPack.Program depthProgram(ShadercCompiler compiler,boolean reversed){
         String vertex="#version 120\nattribute vec2 Position; varying vec2 uv; void main(){uv=Position;gl_Position=vec4(Position*2.0-1.0,0.0,1.0);}";
-        String fragment="#version 120\nuniform sampler2D inputDepth; varying vec2 uv; void main(){gl_FragColor=vec4(1.0-texture2D(inputDepth,uv).r);}";
+        String fragment="#version 120\nuniform sampler2D inputDepth; varying vec2 uv; void main(){gl_FragColor=vec4("+(reversed?"1.0-":"")+"texture2D(inputDepth,uv).r);}";
         var code=ShaderPackProgram.compile("overhaul-depth-import",vertex,fragment,compiler,CoordinateConvention.NATIVE_VULKAN);
         return new CompiledShaderPack.Program("overhaul-depth-import",CompiledShaderPack.Stage.FINAL,0,code,
                 new ShaderPackProperties.ProgramState(true,Map.of(),java.util.Optional.empty(),Map.of()));
