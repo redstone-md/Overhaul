@@ -44,7 +44,5 @@ apply from: 'gradle/blaze-runtime.gradle'
 if (target.loader in ['forge', 'neoforge'] && !providers.gradleProperty('packProfile').isPresent()) apply from: 'gradle/blaze-client-profile.gradle'
 dependencies { implementation blazeRuntimeJars }
 tasks.withType(JavaExec).configureEach {
-    systemProperty 'overhaul.blaze.enabled', 'true'
     if (providers.gradleProperty('blazeStats').isPresent()) systemProperty 'overhaul.blaze.stats', 'true'
-    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }

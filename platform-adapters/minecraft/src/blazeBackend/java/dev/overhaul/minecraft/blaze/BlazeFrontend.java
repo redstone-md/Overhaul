@@ -5,7 +5,7 @@ import net.minecraft.client.Minecraft;
 /** Resolves the actual selected client; no static renderer or world registry exists. */
 public final class BlazeFrontend {
     private BlazeFrontend() {}
-    public static boolean requested() { return Boolean.getBoolean("overhaul.blaze.enabled"); }
+    public static boolean requested() { return Boolean.parseBoolean(System.getProperty("overhaul.blaze.enabled", "true")); }
     public static BlazeRenderer current() {
         Minecraft client = Minecraft.getInstance();
         MinecraftBlazeAccess owner=client==null?null:(MinecraftBlazeAccess)client;
