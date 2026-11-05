@@ -44,6 +44,15 @@ public final class SoftwareDepthBuffer {
         dirtyMaxX = dirtyMaxY = 0;
     }
 
+    /** Replaces every cell with depth measured elsewhere, row by row; the hierarchy follows on the next test. */
+    public void load(java.nio.FloatBuffer cells) {
+        if (cells.remaining() != width * height) throw new IllegalArgumentException("Depth cells differ from this buffer's size");
+        cells.duplicate().get(levels[0]);
+        dirtyMinX = dirtyMinY = 0;
+        dirtyMaxX = width;
+        dirtyMaxY = height;
+    }
+
     public int width(){return width;}
     public int height(){return height;}
 

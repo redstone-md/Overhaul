@@ -25,6 +25,8 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Set<GpuBuffer> glDeviceBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private BlazeTerrain terrain;
     private BlazeSectionBatch sections;
+    private BlazeSectionOcclusion occlusion;
+    private boolean occlusionFailed;
     private BlazeDh dh;
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
@@ -122,6 +124,14 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
         requireOpen();if(sections==null)sections=new BlazeSectionBatch(this);
         sections.begin(shader.overhaul$sectionSnapshot(),ordered);return sections;
+    }
+    /** Null when switched off or when this device cannot build it; terrain then simply draws everything. */
+    public BlazeSectionOcclusion occlusion(){
+        requireOpen();
+        if(occlusion!=null||occlusionFailed||!BlazeOptimization.SECTION_OCCLUSION.on())return occlusion;
+        try{occlusion=new BlazeSectionOcclusion(context,allocator,queue);closeWith(occlusion);}
+        catch(RuntimeException failure){occlusionFailed=true;BlazeGlBoundary.reportOnce("section occlusion","Terrain occlusion is off: "+failure.getMessage());}
+        return occlusion;
     }
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}

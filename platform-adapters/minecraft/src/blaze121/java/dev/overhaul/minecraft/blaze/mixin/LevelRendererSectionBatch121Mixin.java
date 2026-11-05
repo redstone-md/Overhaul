@@ -5,6 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
+import dev.overhaul.minecraft.blaze.BlazeSectionOcclusion;
 import dev.overhaul.minecraft.blaze.BlazeShaderAccess;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
 import it.unimi.dsi.fastutil.objects.ObjectLists;
@@ -44,14 +45,19 @@ abstract class LevelRendererSectionBatch121Mixin {
         boolean forward = layer != RenderType.translucent();
         BlazeRenderer renderer = BlazeFrontend.require();
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
+        BlazeSectionOcclusion occlusion = renderer.occlusion();
+        if (occlusion != null) occlusion.prepare(x, y, z);
         while (forward ? sections.hasNext() : sections.hasPrevious()) {
             RenderSection section = forward ? sections.next() : sections.previous();
             if (section.getCompiled().isEmpty(layer)) continue;
             var mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = section.getOrigin();
+            if (occlusion != null && occlusion.hidden(origin.getX(), origin.getY(), origin.getZ())) continue;
             batch.add(mesh, (float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z));
         }
         batch.end();
+        // After the last opaque terrain layer and before anything that moves: only terrain may hide terrain.
+        if (occlusion != null && layer == RenderType.cutout()) occlusion.capture(renderer.currentTarget(), modelView, projection, x, y, z);
     }
 }

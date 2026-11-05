@@ -5,6 +5,7 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Properties;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
  */
 public enum BlazeOptimization {
     SECTION_BATCH("sectionBatch", "Terrain layers as one indirect multi-draw per geometry page instead of one draw per section"),
+    SECTION_OCCLUSION("sectionOcclusion", "Terrain sections hidden behind recent terrain depth are not drawn; needs sectionBatch"),
     SECTION_LISTS("sectionLists", "Per-layer visible section lists instead of walking every visible section for every layer"),
     DRAW_MERGE("drawMerge", "Consecutive draws with the same pipeline share one pass and descriptor set"),
     STREAM_UPLOADS("streamUploads", "Per-frame geometry written to host memory instead of copied to device memory"),
@@ -43,22 +45,24 @@ public enum BlazeOptimization {
         return enabled;
     }
 
-    private static void writeDefaults(Path path) {
+    private static void writeMissing(Path path) {
         try {
             Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path)) {
-                writer.write("# Set a line to false and restart the game to measure without that optimisation.\n");
-                for (BlazeOptimization option : values()) writer.write("# " + option.description + "\n" + option.key + "=true\n");
+            boolean created = !Files.exists(path);
+            try (Writer writer = Files.newBufferedWriter(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+                if (created) writer.write("# Set a line to false and restart the game to measure without that optimisation.\n");
+                for (BlazeOptimization option : values()) {
+                    if (!Settings.FILE_VALUES.containsKey(option.key)) writer.write("# " + option.description + "\n" + option.key + "=true\n");
+                }
             }
         } catch (IOException failure) {
             LoggerFactory.getLogger(BlazeOptimization.class).warn("Cannot write {}", path, failure);
         }
     }
 
-    /** Written once every constant exists, so the file lists them all. */
-    public static void describeOnFirstRun() {
-        Path path = Settings.PATH;
-        if (!Files.exists(path)) writeDefaults(path);
+    /** Run once every constant exists, so the file lists them all, including ones newer than the file. */
+    public static void describeInFile() {
+        writeMissing(Settings.PATH);
     }
 
     /** Enum constants initialise before the enum's own statics, so what they read lives here. */
