@@ -4,7 +4,6 @@ import dev.overhaul.shader.compile.ShaderStage;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -44,8 +43,9 @@ public final class PackPreprocessor {
         String result = compiler.preprocess(name,text,stage,definitions,(requested,requester,relative) -> {
             String include = requested;
             if (relative && !include.startsWith("/")) {
-                Path parent = Path.of(requester).getParent();
-                if (parent != null) include = parent+"/"+include;
+                // Pack paths always use '/'; Path would turn the parent into "lib\color" on Windows.
+                int slash = requester.lastIndexOf('/');
+                if (slash >= 0) include = requester.substring(0,slash+1)+include;
             }
             include = ShaderPackSource.normalize(include);
             sourceIds.computeIfAbsent(include,ignored -> sourceIds.size());
