@@ -26,6 +26,20 @@ public final class BlazeProgramCompiler implements AutoCloseable {
             ShadercCompiler.IncludeResolver includes) {
         String vs = preprocess(vertexName, vertex, ShaderStage.VERTEX, includes);
         String fs = preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, includes);
+        return lower(vertexName, fragmentName, vs, fs);
+    }
+
+    /** A program written for current OpenGL, with its includes already expanded by its own loader. */
+    public synchronized Program compileModern(String vertexName, String fragmentName, String vertex, String fragment) {
+        ShadercCompiler.IncludeResolver none = (requested, requester, relative) -> {
+            throw new IllegalArgumentException("Unresolved shader include: " + requested);
+        };
+        String vs = BlazeModernSource.normalise(preprocess(vertexName, vertex, ShaderStage.VERTEX, none), true);
+        String fs = BlazeModernSource.normalise(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, none), false);
+        return lower(vertexName, fragmentName, vs, fs);
+    }
+
+    private Program lower(String vertexName, String fragmentName, String vs, String fs) {
         var vertexStage=BlazeSourceLowering.lower(vs,true);
         var fragmentStage=BlazeSourceLowering.lower(fs,false);
         // Translation assigns one stable location schema; linking uses the optimized interfaces below.
