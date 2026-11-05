@@ -8,6 +8,9 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Owns storage/sampling state or a borrowed render-target view, never both. */
 final class BlazeTexture implements AutoCloseable {
+    private static final int LOD_BIAS=34049,WRAP_R=32882,COMPARE_MODE=34892,COMPARE_FUNC=34893,COMPARE_REF_TO_TEXTURE=34894;
+    /** Every Vulkan device allows at least this much bias; asking a sampler for more is invalid. */
+    private static final float MAX_LOD_BIAS=2;
     private final GpuAllocator allocator;
     private final BlazeQueue queue;
     private final BlazeTransfers transfers;
@@ -16,9 +19,9 @@ final class BlazeTexture implements AutoCloseable {
     private GpuImageView view,borrowed;
     private GpuSampler sampler;
     private boolean[] defined;
-    private int min=GL_NEAREST_MIPMAP_LINEAR,mag=GL_LINEAR,wrapS=GL_REPEAT,wrapT=GL_REPEAT;
+    private int min=GL_NEAREST_MIPMAP_LINEAR,mag=GL_LINEAR,wrapS=GL_REPEAT,wrapT=GL_REPEAT,wrapR=GL_REPEAT,compareMode=GL_NONE,compareFunc=GL_LEQUAL;
     private int base,max=1000;
-    private float minLod=-1000,maxLod=1000;
+    private float minLod=-1000,maxLod=1000,lodBias;
     private boolean attached;
     int channels=4,internal=GL_RGBA;
     BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,BlazeSamplers samplers){this.allocator=allocator;this.queue=queue;this.transfers=transfers;this.samplers=samplers;}
@@ -81,6 +84,10 @@ final class BlazeTexture implements AutoCloseable {
             case GL_TEXTURE_MAX_LEVEL->{if(value<0)throw unsupported(name);int selected=integer(value);if(max==selected)return;max=selected;releaseSampling();return;}
             case GL_TEXTURE_MIN_LOD->{if(minLod==value)return;minLod=value;}
             case GL_TEXTURE_MAX_LOD->{if(maxLod==value)return;maxLod=value;}
+            case WRAP_R->{int selected=integer(value);address(selected);if(wrapR==selected)return;wrapR=selected;}
+            case LOD_BIAS->{float selected=Math.max(-MAX_LOD_BIAS,Math.min(MAX_LOD_BIAS,value));if(lodBias==selected)return;lodBias=selected;}
+            case COMPARE_MODE->{int selected=integer(value);if(selected!=GL_NONE&&selected!=COMPARE_REF_TO_TEXTURE)throw unsupported(name);if(compareMode==selected)return;compareMode=selected;}
+            case COMPARE_FUNC->{int selected=integer(value);comparison(selected);if(compareFunc==selected)return;compareFunc=selected;}
             default->{BlazeGlBoundary.reportOnce("parameter "+name,"Texture parameter has no Vulkan sampler state and was ignored: "+name);return;}
         }
         // Only the mip range shapes the view; everything else here is sampler state.
@@ -103,11 +110,12 @@ final class BlazeTexture implements AutoCloseable {
             float highest=mipmapped?view().mipCount()-1:0,low=Math.max(0,Math.min(highest,minLod)),high=Math.max(low,Math.min(highest,maxLod));
             sampler=samplers.get(new SamplerSettings(filter,mag==GL_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST,
                     min==GL_NEAREST_MIPMAP_LINEAR||min==GL_LINEAR_MIPMAP_LINEAR?SamplerSettings.Mipmap.LINEAR:SamplerSettings.Mipmap.NEAREST,
-                    address(wrapS),address(wrapT),SamplerSettings.Address.CLAMP,low,high,1,SamplerSettings.Compare.NONE));
+                    address(wrapS),address(wrapT),address(wrapR),low,high,1,compareMode==GL_NONE?SamplerSettings.Compare.NONE:comparison(compareFunc),lodBias));
         }
         return sampler;
     }
     private static SamplerSettings.Address address(int mode){return switch(mode){case GL_REPEAT->SamplerSettings.Address.REPEAT;case GL_CLAMP_TO_EDGE->SamplerSettings.Address.CLAMP;case GL_MIRRORED_REPEAT,34627->SamplerSettings.Address.MIRROR;case 33069,10496->SamplerSettings.Address.CLAMP;default->throw unsupported(mode);};}
+    private static SamplerSettings.Compare comparison(int function){return switch(function){case GL_NEVER->SamplerSettings.Compare.NEVER;case GL_LESS->SamplerSettings.Compare.LESS;case GL_EQUAL->SamplerSettings.Compare.EQUAL;case GL_LEQUAL->SamplerSettings.Compare.LESS_OR_EQUAL;case GL_GREATER->SamplerSettings.Compare.GREATER;case GL_NOTEQUAL->SamplerSettings.Compare.NOT_EQUAL;case GL_GEQUAL->SamplerSettings.Compare.GREATER_OR_EQUAL;case GL_ALWAYS->SamplerSettings.Compare.ALWAYS;default->throw unsupported(function);};}
     private static int integer(float value){if(value!=(int)value)throw new IllegalArgumentException("Expected integral texture parameter");return (int)value;}
     private static UnsupportedOperationException unsupported(int name){return new UnsupportedOperationException("Unsupported owned texture parameter: "+name);}
     private void retire(AutoCloseable resource){if(queue==null)BlazeQueue.closeResource(resource);else queue.retire(resource);}

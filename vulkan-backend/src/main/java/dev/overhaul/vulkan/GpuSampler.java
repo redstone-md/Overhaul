@@ -17,7 +17,7 @@ public final class GpuSampler implements AutoCloseable {
         try(MemoryStack stack=MemoryStack.stackPush()){
             VkSamplerCreateInfo info=VkSamplerCreateInfo.calloc(stack).sType$Default().minFilter(settings.minFilter().vk).magFilter(settings.magFilter().vk)
                 .mipmapMode(settings.mipmap().vk).addressModeU(settings.u().vk).addressModeV(settings.v().vk).addressModeW(settings.w().vk)
-                .minLod(settings.minLod()).maxLod(settings.maxLod()).anisotropyEnable(settings.anisotropy()>1).maxAnisotropy(settings.anisotropy())
+                .mipLodBias(settings.lodBias()).minLod(settings.minLod()).maxLod(settings.maxLod()).anisotropyEnable(settings.anisotropy()>1).maxAnisotropy(settings.anisotropy())
                 .compareEnable(settings.comparison()!=SamplerSettings.Compare.NONE).compareOp(settings.comparison().vk).borderColor(VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK);
             LongBuffer pointer=stack.mallocLong(1);check(vkCreateSampler(allocator.context().device(),info,null,pointer),"vkCreateSampler");handle=pointer.get(0);
         }
