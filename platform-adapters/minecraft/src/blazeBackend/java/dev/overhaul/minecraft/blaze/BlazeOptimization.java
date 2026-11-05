@@ -39,6 +39,7 @@ public enum BlazeOptimization {
     DH_RENDER_LIST("dhRenderList", "Distant Horizons visible buffer list built without hashing each buffer"),
     SECTION_GRID("sectionGrid", "Section grid moves only the columns that wrapped around the camera"),
     PARTICLE_QUADS("particleQuads", "Particle quads written in one go instead of vertex by vertex"),
+    ENTITY_CLASS_SCANS("entityClassScans", "Client entity scans skipped for classes no loaded entity belongs to"),
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
 
 
