@@ -6,6 +6,7 @@ import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
+import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import dev.overhaul.vulkan.PackGraphRuntime;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 
 /**
  * One pack program as the game's draws use it. Uniforms the frame decides are filled once per phase; the matrices a
@@ -34,6 +36,7 @@ final class BlazePackDraw implements BlazeProgramShape {
     private final int modelView, modelViewInverse, modelViewProjection, normalMatrix, projection, projectionInverse, textureMatrix;
     private final Matrix4f model = new Matrix4f(), perspective = new Matrix4f(), written = new Matrix4f(), scratch = new Matrix4f();
     private final Matrix3f normal = new Matrix3f();
+    private final boolean shadow;
     private BlazeProgramCompiler.Program source;
     private int sourceModelView, sourceProjection, sourceChunkOffset, sourceTextureMatrix;
     private boolean projectionWritten;
@@ -43,6 +46,7 @@ final class BlazePackDraw implements BlazeProgramShape {
     BlazePackDraw(BlazePackScene scene, CompiledShaderPack.Program program) {
         this.scene = scene;
         this.program = program;
+        shadow = program.stage() == CompiledShaderPack.Stage.SHADOW;
         code = new BlazeProgramCompiler.Program(program.code().vertex(), program.code().fragment(), program.code().descriptors());
         ProgramBindings bindings = code.bindings();
         values = new UniformBlock(bindings);
@@ -65,9 +69,9 @@ final class BlazePackDraw implements BlazeProgramShape {
         samplers.clear();
         gameSamplers.clear();
         for (String name : code.bindings().samplers().keySet()) sample(name, runtime);
-        List<GpuImageView> outputs = runtime.sceneTargets(program);
+        List<GpuImageView> outputs = shadow ? runtime.shadowTargets(program) : runtime.sceneTargets(program);
         if (outputs.size() != program.code().framebuffer().colorTargets().size()) throw new UnsupportedShaderException("Program outputs do not match its targets: " + program.name());
-        target = scene.target(outputs);
+        target = shadow ? scene.target(outputs, runtime.shadowDepth(0)) : scene.target(outputs);
         phase = current;
     }
 
@@ -77,9 +81,22 @@ final class BlazePackDraw implements BlazeProgramShape {
 
     BlazeShaderSnapshot snapshot(BlazeShaderSnapshot game) {
         place(game);
+        return bound(game.samplers());
+    }
+
+    /** A light-camera draw: no game shader is involved, so the caller decides the matrices and the textures. */
+    BlazeShaderSnapshot cast(Matrix4fc modelMatrix, Matrix4fc light, Map<String, Object> textures) {
+        model.set(modelMatrix);
+        perspective.set(light);
+        writeMatrices();
+        if (textureMatrix >= 0) scratch.identity().get(textureMatrix, bytes);
+        return bound(textures);
+    }
+
+    private BlazeShaderSnapshot bound(Map<String, Object> textures) {
         for (int index = 0; index < gameSamplers.size(); index++) {
             GameSampler sampler = gameSamplers.get(index);
-            Object value = game.samplers().get(sampler.semantic());
+            Object value = textures.get(sampler.semantic());
             samplers.put(sampler.name(), value == null ? scene.white() : value);
         }
         return new BlazeShaderSnapshot(code, bytes.clear().limit(Math.max(16, code.bindings().uniformBytes())), samplers);
@@ -89,6 +106,17 @@ final class BlazePackDraw implements BlazeProgramShape {
         GpuImageView custom = runtime.customTexture(program, name);
         if (custom != null) {
             samplers.put(name, new BlazeTextures.Sampled(custom, runtime.customSamplerHandle(program, name)));
+            return;
+        }
+        int shadowDepth = PackShadowSettings.depthIndex(name, code.bindings().samplers().keySet());
+        if (shadowDepth >= 0) {
+            boolean comparison = code.bindings().comparisonSampler(name);
+            samplers.put(name, new BlazeTextures.Sampled(runtime.shadowDepthSample(shadowDepth, comparison), runtime.shadowSamplerHandle(shadowDepth, comparison)));
+            return;
+        }
+        int shadowColor = PackShadowSettings.colorIndex(name);
+        if (shadowColor >= 0) {
+            samplers.put(name, new BlazeTextures.Sampled(runtime.shadowColor(shadowColor), runtime.shadowColorSamplerHandle(shadowColor)));
             return;
         }
         int color = PackRenderTargets.colorIndex(name);
@@ -104,6 +132,7 @@ final class BlazePackDraw implements BlazeProgramShape {
         switch (name) {
             case "texture", "tex", "gtexture" -> gameSamplers.add(new GameSampler(name, "Sampler0"));
             case "lightmap" -> gameSamplers.add(new GameSampler(name, "Sampler2"));
+            case "overlay" -> gameSamplers.add(new GameSampler(name, "Sampler1"));
             case "normals" -> samplers.put(name, scene.flatNormal());
             case "specular" -> samplers.put(name, scene.noSpecular());
             default -> throw new UnsupportedShaderException("Unbound scene pack sampler: " + name + " in " + program.name());
@@ -124,6 +153,14 @@ final class BlazePackDraw implements BlazeProgramShape {
         if (sourceModelView >= 0) model.set(sourceModelView, input); else model.identity();
         if (sourceChunkOffset >= 0) model.translate(input.getFloat(sourceChunkOffset), input.getFloat(sourceChunkOffset + 4), input.getFloat(sourceChunkOffset + 8));
         if (sourceProjection >= 0) perspective.set(sourceProjection, input); else perspective.identity();
+        writeMatrices();
+        if (textureMatrix >= 0) {
+            if (sourceTextureMatrix >= 0) scratch.set(sourceTextureMatrix, input); else scratch.identity();
+            scratch.get(textureMatrix, bytes);
+        }
+    }
+
+    private void writeMatrices() {
         if (modelView >= 0) model.get(modelView, bytes);
         if (modelViewInverse >= 0) model.invert(scratch).get(modelViewInverse, bytes);
         if (modelViewProjection >= 0) perspective.mul(model, scratch).get(modelViewProjection, bytes);
@@ -133,10 +170,6 @@ final class BlazePackDraw implements BlazeProgramShape {
             projectionWritten = true;
             if (projection >= 0) perspective.get(projection, bytes);
             if (projectionInverse >= 0) perspective.invert(scratch).get(projectionInverse, bytes);
-        }
-        if (textureMatrix >= 0) {
-            if (sourceTextureMatrix >= 0) scratch.set(sourceTextureMatrix, input); else scratch.identity();
-            scratch.get(textureMatrix, bytes);
         }
     }
 
@@ -158,7 +191,7 @@ final class BlazePackDraw implements BlazeProgramShape {
         var blends = program.state().blends();
         for (int output : program.code().framebuffer().colorTargets()) {
             boolean explicit = blends.containsKey("*") || blends.containsKey("colortex" + output);
-            var chosen = explicit && output >= 0 ? PackGraphRuntime.colorState(program.state(), output) : inherited;
+            var chosen = output < 0 ? inherited : shadow ? PackGraphRuntime.shadowColorState(program.state(), output) : explicit ? PackGraphRuntime.colorState(program.state(), output) : inherited;
             colors.add(new NativeGraphicsPipeline.Color(chosen.blend(), chosen.sourceRgb(), chosen.destinationRgb(), chosen.operationRgb(),
                     chosen.sourceAlpha(), chosen.destinationAlpha(), chosen.operationAlpha(), output < 0 ? 0 : inherited.writeMask()));
         }

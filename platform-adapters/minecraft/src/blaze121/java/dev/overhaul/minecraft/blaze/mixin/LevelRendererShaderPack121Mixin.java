@@ -9,9 +9,11 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.ViewArea;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,13 +22,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** The world's frame boundaries, which are where a shader pack's fullscreen passes belong. */
 @Mixin(LevelRenderer.class)
 abstract class LevelRendererShaderPack121Mixin {
+    @Shadow
+    private ViewArea viewArea;
     @Unique
     private BlazePackFrame overhaul$pack;
 
     @Inject(method = "renderLevel", at = @At("HEAD"))
     private void overhaul$beginPack(DeltaTracker delta, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f view, Matrix4f projection, CallbackInfo callback) {
         if (overhaul$pack == null) overhaul$pack = BlazePackFrame.open(Minecraft.getInstance());
-        if (overhaul$pack != null) overhaul$pack.begin(camera, delta.getGameTimeDeltaPartialTick(false), view, projection);
+        if (overhaul$pack != null) overhaul$pack.begin(camera, delta.getGameTimeDeltaPartialTick(false), view, projection, light, viewArea);
     }
 
     @Inject(method = "renderSectionLayer", at = @At("HEAD"))

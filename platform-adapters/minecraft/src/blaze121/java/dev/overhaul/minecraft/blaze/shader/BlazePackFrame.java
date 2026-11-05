@@ -19,6 +19,8 @@ import java.util.Properties;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.ViewArea;
 import org.joml.Matrix4f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +39,7 @@ public final class BlazePackFrame implements AutoCloseable {
     private CompiledShaderPack pack;
     private PackGraphRuntime runtime;
     private BlazePackScene scene;
+    private BlazePackShadows shadows;
     private int width, height;
     private boolean active;
 
@@ -52,7 +55,7 @@ public final class BlazePackFrame implements AutoCloseable {
         return renderer == null ? null : new BlazePackFrame(minecraft, renderer);
     }
 
-    public void begin(Camera camera, float partial, Matrix4f view, Matrix4f projection) {
+    public void begin(Camera camera, float partial, Matrix4f view, Matrix4f projection, LightTexture light, ViewArea sections) {
         active = false;
         if (minecraft.level == null) return;
         BlazePackConfiguration configuration;
@@ -77,6 +80,10 @@ public final class BlazePackFrame implements AutoCloseable {
             uniforms.capture(new BlazePackCapture(minecraft, camera, partial, view, projection, width, height), pack);
             runtime.beginFrame(renderer.commands(), frame(main), uniforms);
             if (scene != null) scene.begin(renderer.target(main.frameBufferId));
+            if (shadows != null) {
+                shadows.render(minecraft, sections, uniforms, camera, light, frame(main));
+                scene.shadowsDone();
+            }
             active = true;
         } catch (RuntimeException | IOException failure) {
             fail(configuration, failure);
@@ -130,7 +137,8 @@ public final class BlazePackFrame implements AutoCloseable {
             renderer.commands();
             renderer.context().waitIdle();
             runtime = new PackGraphRuntime(renderer.context(), renderer.allocator(), compiled, targetWidth, targetHeight, compiler, BlazePackScene.worldPrograms(compiled), false);
-            if (runtime.hasSceneProgram()) scene = new BlazePackScene(renderer, compiled, runtime, uniforms);
+            if (BlazePackScene.drawsWorld(compiled)) scene = new BlazePackScene(renderer, compiled, runtime, uniforms);
+            if (scene != null && scene.castsShadows()) shadows = new BlazePackShadows(renderer, scene, runtime, compiled.shadow());
             pack = compiled;
             installed = configuration;
             width = targetWidth;
@@ -165,6 +173,7 @@ public final class BlazePackFrame implements AutoCloseable {
     }
 
     private void closeScene() {
+        shadows = null;
         if (scene == null) return;
         scene.close();
         scene = null;

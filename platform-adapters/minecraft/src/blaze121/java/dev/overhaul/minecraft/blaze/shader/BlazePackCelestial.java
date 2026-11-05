@@ -47,6 +47,14 @@ final class BlazePackCelestial {
         matrix.set(frame.view()).rotateY(radians(-90)).transformDirection(0, 100, 0, up);
     }
 
+    Matrix4f shadowView(Matrix4f into) {
+        return into.set(view);
+    }
+
+    Matrix4f shadowProjection(Matrix4f into) {
+        return into.set(projection);
+    }
+
     boolean fill(String name, UniformBlock values) {
         switch (name) {
             case "shadowProjection" -> values.setMatrix(name, 4, projection);

@@ -64,7 +64,8 @@ public final class BlazeTarget implements AutoCloseable {
 
     /**
      * A target over views somebody else owns, for programs writing several colour outputs. A null view leaves its
-     * location unwritten. Colours and depth outlive this target: the owner retires it before closing them.
+     * location unwritten, and a light camera that only writes depth has no colour at all. Colours and depth outlive
+     * this target: the owner retires it before closing them.
      */
     BlazeTarget(VulkanContext context, List<GpuImageView> colors, GpuImageView sharedDepth) {
         this.context=context;level=0;ownsColor=false;ownsDepth=false;borrowsViews=true;
@@ -75,8 +76,8 @@ public final class BlazeTarget implements AutoCloseable {
             if(colorView==null)colorView=view;
             fitWidth=Math.min(fitWidth,view.image().width(view.baseMip()));fitHeight=Math.min(fitHeight,view.image().height(view.baseMip()));
         }
-        if(colorView==null)throw new IllegalArgumentException("Framebuffer without a colour output");
-        color=colorView.image();depthView=sharedDepth;depth=sharedDepth==null?null:sharedDepth.image();
+        if(colorView==null&&sharedDepth==null)throw new IllegalArgumentException("Framebuffer without an output");
+        color=colorView==null?null:colorView.image();depthView=sharedDepth;depth=sharedDepth==null?null:sharedDepth.image();
         if(depth!=null){fitWidth=Math.min(fitWidth,depth.width(sharedDepth.baseMip()));fitHeight=Math.min(fitHeight,depth.height(sharedDepth.baseMip()));}
         width=fitWidth;height=fitHeight;
         try{createPass();}catch(RuntimeException|Error failure){close();throw failure;}

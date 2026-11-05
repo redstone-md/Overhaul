@@ -169,10 +169,12 @@ public final class BlazeRenderer implements AutoCloseable {
     }
     void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
-    void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){
+    void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){draw(mesh,target,shader,state.snapshot());}
+    /** A draw whose raster state is not the game's, as the light camera's are. */
+    void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader,BlazeDrawState.Snapshot snapshot){
         requireOpen();if(mesh.state().indexCount()==0)return;
         try{
-            long start=BlazeStats.start();var snapshot=state.snapshot();
+            long start=BlazeStats.start();
             if(queue.last() instanceof BlazePass open&&open.append(this,target,mesh,shader,snapshot)){BlazeStats.capture(start);return;}
             BlazePass pass=new BlazePass(this,target,mesh,shader,snapshot);BlazeStats.pass();BlazeStats.capture(start);queue.add(pass,0);
         }

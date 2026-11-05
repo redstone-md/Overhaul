@@ -76,6 +76,14 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         return fog;
     }
 
+    org.joml.Matrix4f shadowView(org.joml.Matrix4f into) {
+        return celestial.shadowView(into);
+    }
+
+    org.joml.Matrix4f shadowProjection(org.joml.Matrix4f into) {
+        return celestial.shadowProjection(into);
+    }
+
     @Override
     public double read(String name, int component) {
         return switch (name) {
