@@ -52,13 +52,12 @@ abstract class LevelRendererSectionBatch121Mixin {
         int layerId = layer.getChunkLayerId();
         if (occlusion != null) occlusion.prepare(x, y, z);
         while (forward ? sections.hasNext() : sections.hasPrevious()) {
-            int place = forward ? sections.nextIndex() : sections.previousIndex();
             RenderSection section = forward ? sections.next() : sections.previous();
             if (!listed && section.getCompiled().isEmpty(layer)) continue;
             var mesh = ((BlazeVertexBufferAccess) ((BlazeSectionBuffers) (Object) section).overhaul$buffer(layerId)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = section.getOrigin();
-            if (occlusion != null && occlusion.hidden(place, origin.getX(), origin.getY(), origin.getZ())) continue;
+            if (occlusion != null && occlusion.hidden(origin.getX(), origin.getY(), origin.getZ())) continue;
             batch.add(mesh, (float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z));
         }
         batch.end();
