@@ -130,7 +130,7 @@ public final class BlazeRenderer implements AutoCloseable {
         return true;
     }
     public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
-        requireOpen();if(sections==null)sections=new BlazeSectionBatch(this);
+        requireOpen();if(sections==null){sections=new BlazeSectionBatch(this);closeWith(sections);}
         sections.begin(shader.overhaul$sectionSnapshot(),compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered);return sections;
     }
     /** Whether a terrain mesh uploaded now may be compact: a pack's programs and the section-by-section path read full vertices. */

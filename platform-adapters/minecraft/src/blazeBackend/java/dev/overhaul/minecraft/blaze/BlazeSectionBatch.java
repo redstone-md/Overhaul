@@ -3,7 +3,6 @@ package dev.overhaul.minecraft.blaze;
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -17,7 +16,7 @@ import static org.lwjgl.vulkan.VK10.*;
  * share buffers, each section's offset read per instance. Sections hold no pin: a replaced mesh retires through the
  * queue after this pass, so its fence covers the draw. Owner-thread only, and reused between layers.
  */
-public final class BlazeSectionBatch {
+public final class BlazeSectionBatch implements AutoCloseable {
     private static final int COMMAND_BYTES = 20;
 
     private record Run(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
@@ -37,6 +36,8 @@ public final class BlazeSectionBatch {
     private BlazeDrawState.Snapshot state;
     private BlazeMeshState first;
     private boolean ordered;
+    /** Written out of order and then copied whole, since the mapped memory behind a slice is slow to touch piecemeal. */
+    private ByteBuffer commandBytes, positionBytes;
 
     BlazeSectionBatch(BlazeRenderer owner) {
         this.owner = owner;
@@ -133,24 +134,36 @@ public final class BlazeSectionBatch {
         for (int index = 0; index < count; index++) lengths[sections[index * 4 + 3]]++;
         for (int index = 1; index < starts.length; index++) starts[index] = starts[index - 1] + lengths[index - 1];
         int[] cursors = starts.clone();
-        ByteBuffer commandBytes = MemoryUtil.memAlloc(count * COMMAND_BYTES).order(ByteOrder.nativeOrder());
-        ByteBuffer positionBytes = MemoryUtil.memAlloc(count * BlazeSectionShape.OFFSET_BYTES).order(ByteOrder.nativeOrder());
-        try {
-            for (int index = 0; index < count; index++) {
-                int at = index * 4, slot = cursors[sections[at + 3]]++, command = slot * COMMAND_BYTES;
-                commandBytes.putInt(command, sections[at]).putInt(command + 4, 1).putInt(command + 8, sections[at + 1])
-                        .putInt(command + 12, sections[at + 2]).putInt(command + 16, slot);
-                int position = slot * BlazeSectionShape.OFFSET_BYTES;
-                positionBytes.putFloat(position, offsets[index * 3]).putFloat(position + 4, offsets[index * 3 + 1]).putFloat(position + 8, offsets[index * 3 + 2]);
-            }
-            commands.write(commandBytes);
-            positions.write(positionBytes);
-        } finally {
-            MemoryUtil.memFree(commandBytes);
-            MemoryUtil.memFree(positionBytes);
+        commandBytes = scratch(commandBytes, count * COMMAND_BYTES);
+        positionBytes = scratch(positionBytes, count * BlazeSectionShape.OFFSET_BYTES);
+        long commandStart = MemoryUtil.memAddress(commandBytes), positionStart = MemoryUtil.memAddress(positionBytes);
+        for (int index = 0; index < count; index++) {
+            int at = index * 4, place = index * 3, slot = cursors[sections[at + 3]]++;
+            long command = commandStart + (long) slot * COMMAND_BYTES, position = positionStart + (long) slot * BlazeSectionShape.OFFSET_BYTES;
+            MemoryUtil.memPutInt(command, sections[at]);
+            MemoryUtil.memPutInt(command + 4, 1);
+            MemoryUtil.memPutInt(command + 8, sections[at + 1]);
+            MemoryUtil.memPutInt(command + 12, sections[at + 2]);
+            MemoryUtil.memPutInt(command + 16, slot);
+            MemoryUtil.memPutFloat(position, offsets[place]);
+            MemoryUtil.memPutFloat(position + 4, offsets[place + 1]);
+            MemoryUtil.memPutFloat(position + 8, offsets[place + 2]);
         }
+        commands.write(commandBytes);
+        positions.write(positionBytes);
         BlazeStats.sections(count, runs.size());
         return new Draw(runs.toArray(new Run[0]), starts, lengths, commands, positions);
+    }
+
+    private static ByteBuffer scratch(ByteBuffer held, int bytes) {
+        ByteBuffer buffer = held == null || held.capacity() < bytes ? MemoryUtil.memRealloc(held, bytes + bytes / 2) : held;
+        return buffer.clear().limit(bytes);
+    }
+
+    @Override public void close() {
+        MemoryUtil.memFree(commandBytes);
+        MemoryUtil.memFree(positionBytes);
+        commandBytes = positionBytes = null;
     }
 
     private record Draw(Run[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions) implements BlazeTerrainPass.Draw {
