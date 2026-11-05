@@ -7,6 +7,7 @@ import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compile.ShaderStage;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
+import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Draws Distant Horizons' LOD buffers on Vulkan and puts the result on the frame; the mod keeps its section lists, uploads and targets. */
 public final class BlazeDh implements AutoCloseable {
-    private static final int TERRAIN_BYTES = 96, COMPOSITE_BYTES = 160, BOX_BYTES = 64, PUSH_BYTES = 16, BOX_PUSH_BYTES = 56, VERTEX_BYTES = 16, BOX_INDICES = 36;
+    private static final int TERRAIN_BYTES = 96, COMPOSITE_BYTES = 224, BOX_BYTES = 64, PUSH_BYTES = 16, BOX_PUSH_BYTES = 56, VERTEX_BYTES = 16, BOX_INDICES = 36;
     private static final int WRITE_RGBA = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     private static final List<NativeGraphicsPipeline.Attribute> ATTRIBUTES = List.of(
             new NativeGraphicsPipeline.Attribute(0, 0, VK_FORMAT_R16G16B16A16_UINT, 0),
@@ -78,11 +79,15 @@ public final class BlazeDh implements AutoCloseable {
     }
 
     private final BlazeRenderer owner;
-    private final BlazeProgramCompiler.Program terrain, boxes, composite;
+    private final BlazeProgramCompiler.Program terrain, boxes, composite, vanillaFade;
     private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
     private BlazeTerrainPass pending;
     private TerrainSettings settings;
-    private FogSettings fog;
+    private FogSettings fog, frameFog;
+    private int frameColor, frameDepth;
+    private long compositeFrame = -1;
+    private BlazeTarget fadeTarget;
+    private GpuImageView fadeColorView;
 
     BlazeDh(BlazeRenderer owner) {
         this.owner = owner;
@@ -96,6 +101,9 @@ public final class BlazeDh implements AutoCloseable {
             composite = new BlazeProgramCompiler.Program(compiler.compile("dh_composite.vsh", BlazeDhShaders.COMPOSITE_VERTEX, ShaderStage.VERTEX),
                     compiler.compile("dh_composite.fsh", BlazeDhShaders.COMPOSITE_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2), Map.of(), Map.of(), Map.of()));
+            vanillaFade = new BlazeProgramCompiler.Program(composite.vertex(),
+                    compiler.compile("dh_vanilla_fade.fsh", BlazeDhShaders.VANILLA_FADE_FRAGMENT, ShaderStage.FRAGMENT),
+                    new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2, "uMcDepth", 3), Map.of(), Map.of(), Map.of()));
         }
     }
 
@@ -148,18 +156,57 @@ public final class BlazeDh implements AutoCloseable {
     public void composite(int colorTexture, int depthTexture, float[] inverseMvmProjection, float fadeStart, float fadeEnd) {
         BlazeTarget target = owner.currentTarget();
         if (target == null || colorTexture <= 0 || depthTexture <= 0) return;
-        FogSettings frameFog = fog;
+        frameFog = fog;
         fog = null;
-        var state = new BlazeDrawState.Snapshot(new NativeGraphicsPipeline.Depth(false, false, VK_COMPARE_OP_ALWAYS, 0, 0),
+        frameColor = colorTexture;
+        frameDepth = depthTexture;
+        compositeFrame = owner.frame();
+        var textures = owner.textures();
+        var pass = new BlazeTerrainPass(owner, target, overlay(target), (bytes, width, height) -> compositeUniforms(bytes, inverseMvmProjection, fadeStart, fadeEnd),
+                composite, this::pipeline, name -> textures.resolve(name.equals("uDhColor") ? colorTexture : depthTexture), "uDhColor");
+        pass.add((command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0));
+        owner.enqueue(pass);
+    }
+
+    /**
+     * Blends this frame's LOD colour over vanilla pixels by their own distance. The frame's depth is sampled here, so
+     * the pass draws to its colour alone; a frame without a composite has no LOD colour of its own to fade to.
+     */
+    public void vanillaFade(int mcDepthTexture, float[] dhInverse, float[] mcInverse, float fadeStart, float fadeEnd, float maxLevelHeight) {
+        BlazeTarget frame = owner.currentTarget();
+        if (frame == null || frame.colorView() == null || compositeFrame != owner.frame()) return;
+        var textures = owner.textures();
+        var mcDepth = textures.resolve(mcDepthTexture);
+        if (frame.depth() != mcDepth.view().image()) return;
+        BlazeTarget target = fadeTarget(frame.colorView());
+        var pass = new BlazeTerrainPass(owner, target, overlay(target), (bytes, width, height) -> {
+            compositeUniforms(bytes, dhInverse, fadeStart, fadeEnd);
+            bytes.putFloat(148, maxLevelHeight);
+            bytes.position(160);
+            for (float value : mcInverse) bytes.putFloat(value);
+        }, vanillaFade, this::pipeline, name -> switch (name) {
+            case "uDhColor" -> textures.resolve(frameColor);
+            case "uDhDepth" -> textures.resolve(frameDepth);
+            default -> mcDepth;
+        }, "uDhColor");
+        pass.add((command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0));
+        owner.enqueue(pass);
+    }
+
+    private BlazeTarget fadeTarget(GpuImageView color) {
+        if (fadeTarget != null && fadeColorView == color) return fadeTarget;
+        if (fadeTarget != null) fadeTarget.close();
+        fadeTarget = owner.packTarget(List.of(color), null);
+        fadeColorView = color;
+        return fadeTarget;
+    }
+
+    private static BlazeDrawState.Snapshot overlay(BlazeTarget target) {
+        return new BlazeDrawState.Snapshot(new NativeGraphicsPipeline.Depth(false, false, VK_COMPARE_OP_ALWAYS, 0, 0),
                 new NativeGraphicsPipeline.Color(true, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD,
                         VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, WRITE_RGBA),
                 NativeGraphicsPipeline.ColorLogic.disabled(), VK_CULL_MODE_NONE, VK_POLYGON_MODE_FILL, 1,
                 0, 0, target.width(), target.height(), false, 0, 0, 0, 0);
-        var textures = owner.textures();
-        var pass = new BlazeTerrainPass(owner, target, state, (bytes, width, height) -> compositeUniforms(bytes, inverseMvmProjection, frameFog, fadeStart, fadeEnd),
-                composite, this::pipeline, name -> textures.resolve(name.equals("uDhColor") ? colorTexture : depthTexture), "uDhColor");
-        pass.add((command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0));
-        owner.enqueue(pass);
     }
 
     private void terrainUniforms(ByteBuffer target, float atlasWidth, float atlasHeight) {
@@ -169,11 +216,11 @@ public final class BlazeDh implements AutoCloseable {
         target.putInt(values.noiseSteps()).putFloat(values.noiseIntensity()).putInt(values.noiseDropoff()).putInt(values.flags());
     }
 
-    private static void compositeUniforms(ByteBuffer target, float[] inverse, FogSettings fog, float fadeStart, float fadeEnd) {
+    private void compositeUniforms(ByteBuffer target, float[] inverse, float fadeStart, float fadeEnd) {
+        FogSettings fog = frameFog;
         for (float value : inverse) target.putFloat(value);
         if (fog == null) {
-            target.position(target.position() + 64);
-            target.putFloat(fadeStart).putFloat(fadeEnd).putInt(0);
+            target.putFloat(136, fadeStart).putFloat(140, fadeEnd);
             return;
         }
         for (float value : fog.color()) target.putFloat(value);
@@ -202,6 +249,7 @@ public final class BlazeDh implements AutoCloseable {
 
     @Override public void close() {
         if (pending != null) { pending.close(); pending = null; }
+        if (fadeTarget != null) { fadeTarget.close(); fadeTarget = null; }
         for (NativeGraphicsPipeline pipeline : new ArrayList<>(pipelines.values())) pipeline.close();
         pipelines.clear();
     }

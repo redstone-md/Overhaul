@@ -140,6 +140,14 @@ public final class BlazeDhFrame {
         renderer.dh().composite(colorTexture, depthTexture, columns(params.dhInverseMvmProjectionMatrix), far * 0.5F, far * 0.9F);
     }
 
+    /** DH's own distances: the band starts past the clip plane its LODs are cut at, so what fades in is always there. */
+    public static void vanillaFade(BlazeRenderer renderer, RenderParams params) {
+        if (Debugging.lodOnlyMode.get()) return;
+        float near = RenderUtil.getNearClipPlaneInBlocks() + 16;
+        renderer.dh().vanillaFade(Minecraft.getInstance().getMainRenderTarget().getDepthTextureId(), columns(params.dhInverseMvmProjectionMatrix),
+                columns(params.mcInverseMvmProjectionMatrix), near * 1.5F, near * 1.9F, params.clientLevelWrapper.getMaxHeight());
+    }
+
     /** GL's column order of DH's row-major matrix. */
     private static float[] columns(DhApiMat4f m) {
         return new float[]{m.m00, m.m10, m.m20, m.m30, m.m01, m.m11, m.m21, m.m31, m.m02, m.m12, m.m22, m.m32, m.m03, m.m13, m.m23, m.m33};

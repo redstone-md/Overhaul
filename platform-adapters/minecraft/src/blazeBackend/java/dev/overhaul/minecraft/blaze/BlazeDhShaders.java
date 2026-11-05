@@ -157,8 +157,8 @@ final class BlazeDhShaders {
             }
             """;
 
-    /** DH's fog pass and far fade folded into the pass that puts LODs on the frame, which is all their render targets were for. */
-    static final String COMPOSITE_FRAGMENT = """
+    /** DH's fog pass, shared by the two passes that put LOD colour on the frame: its render target was only ever read by them. */
+    private static final String COMPOSITE_HEAD = """
             #version 450
             layout(set=0,binding=0,std140) uniform Composite {
                 mat4 uInvMvmProj;
@@ -168,6 +168,8 @@ final class BlazeDhShaders {
                 float uHeightFogStart, uHeightFogLength; int uHeightFogFalloffType, uHeightFogMixingMode;
                 float uHeightFogBaseHeight, uCameraBlockYPos, uFadeStart, uFadeEnd;
                 int uFlags;
+                float uMaxLevelHeight;
+                mat4 uMcInvMvmProj;
             };
             layout(set=0,binding=1) uniform sampler2D uDhColor;
             layout(set=0,binding=2) uniform sampler2D uDhDepth;
@@ -199,18 +201,43 @@ final class BlazeDhShaders {
                     default: return far;
                 }
             }
+            vec3 unproject(mat4 inverse, float depth) {
+                vec4 eye = inverse * (vec4(texCoord, depth, 1.0) * vec4(2.0, 2.0, 2.0, 1.0) - vec4(1.0, 1.0, 1.0, 0.0));
+                return eye.xyz / eye.w;
+            }
+            vec3 fogged(vec3 color, vec3 position) {
+                if ((uFlags & FOG) == 0) return color;
+                float distance = ((uFlags & SPHERICAL) != 0 ? length(position) : length(position.xz)) * uFogScale;
+                float far = falloff(uFogFalloffType, distance, uFarFogStart, uFarFogLength);
+                float height = (uFlags & HEIGHT) != 0 ? falloff(uHeightFogFalloffType, heightDepth(position.y), uHeightFogStart, uHeightFogLength) : 0.0;
+                return mix(color, uFogColor.rgb, clamp(mixFog(far, height), 0.0, 1.0));
+            }
+            """;
+
+    /** DH's far fade folded into the pass that puts LODs behind the frame's terrain. */
+    static final String COMPOSITE_FRAGMENT = COMPOSITE_HEAD + """
             void main() {
                 vec4 color = texture(uDhColor, texCoord);
                 if (color.a == 0.0) discard;
-                vec4 eye = uInvMvmProj * (vec4(texCoord, texture(uDhDepth, texCoord).r, 1.0) * vec4(2.0, 2.0, 2.0, 1.0) - vec4(1.0, 1.0, 1.0, 0.0));
-                vec3 position = eye.xyz / eye.w;
-                if ((uFlags & FOG) != 0) {
-                    float distance = ((uFlags & SPHERICAL) != 0 ? length(position) : length(position.xz)) * uFogScale;
-                    float far = falloff(uFogFalloffType, distance, uFarFogStart, uFarFogLength);
-                    float height = (uFlags & HEIGHT) != 0 ? falloff(uHeightFogFalloffType, heightDepth(position.y), uHeightFogStart, uHeightFogLength) : 0.0;
-                    color.rgb = mix(color.rgb, uFogColor.rgb, clamp(mixFog(far, height), 0.0, 1.0));
-                }
-                fragColor = vec4(color.rgb, color.a * (1.0 - smoothstep(uFadeStart, uFadeEnd, length(position))));
+                vec3 position = unproject(uInvMvmProj, texture(uDhDepth, texCoord).r);
+                fragColor = vec4(fogged(color.rgb, position), color.a * (1.0 - smoothstep(uFadeStart, uFadeEnd, length(position))));
+            }
+            """;
+
+    /**
+     * DH's vanilla fade: vanilla pixels past the fade start give way to the LOD behind them. The blend does the mix
+     * DH's shader did by hand, so the frame needs no copy to read itself.
+     */
+    static final String VANILLA_FADE_FRAGMENT = COMPOSITE_HEAD + """
+            layout(set=0,binding=3) uniform sampler2D uMcDepth;
+            void main() {
+                vec4 color = texture(uDhColor, texCoord);
+                if (color.a == 0.0) discard;
+                float mcDepth = texture(uMcDepth, texCoord).r;
+                if (mcDepth >= 1.0) discard;
+                vec3 position = unproject(uInvMvmProj, texture(uDhDepth, texCoord).r);
+                if (position.y > uMaxLevelHeight) discard;
+                fragColor = vec4(fogged(color.rgb, position), smoothstep(uFadeStart, uFadeEnd, length(unproject(uMcInvMvmProj, mcDepth))));
             }
             """;
 
