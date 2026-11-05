@@ -137,7 +137,14 @@ public final class SoftwareDepthBuffer {
                 || minX >= maxX || minY >= maxY || !Float.isFinite(nearestDepth)
                 || nearestDepth < 0 || nearestDepth > 1) return false;
         if (dirtyMaxX > 0) rebuild();
-        return test(levels.length - 1, 0, 0, minX, minY, maxX, maxY, nearestDepth);
+        // A parent can only prove what its children prove too, so start where the rectangle spans at most two cells each way.
+        int span = Math.max(maxX - minX, maxY - minY), level = Math.min(levels.length - 1, Integer.SIZE - Integer.numberOfLeadingZeros(span - 1));
+        for (int y = minY >> level; y <= (maxY - 1) >> level; y++) {
+            for (int x = minX >> level; x <= (maxX - 1) >> level; x++) {
+                if (!test(level, x, y, minX, minY, maxX, maxY, nearestDepth)) return false;
+            }
+        }
+        return true;
     }
 
     /** Occluders arrive between tests, so only the parents of changed cells are recomputed. */

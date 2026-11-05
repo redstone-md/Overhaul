@@ -48,12 +48,13 @@ abstract class LevelRendererSectionBatch121Mixin {
         BlazeSectionOcclusion occlusion = renderer.occlusion();
         if (occlusion != null) occlusion.prepare(x, y, z);
         while (forward ? sections.hasNext() : sections.hasPrevious()) {
+            int place = forward ? sections.nextIndex() : sections.previousIndex();
             RenderSection section = forward ? sections.next() : sections.previous();
             if (section.getCompiled().isEmpty(layer)) continue;
             var mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = section.getOrigin();
-            if (occlusion != null && occlusion.hidden(origin.getX(), origin.getY(), origin.getZ())) continue;
+            if (occlusion != null && occlusion.hidden(place, origin.getX(), origin.getY(), origin.getZ())) continue;
             batch.add(mesh, (float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z));
         }
         batch.end();

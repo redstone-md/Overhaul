@@ -24,6 +24,12 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
 
     private final BlazeDepthTiles tiles;
     private final float[] viewProjection = new float[16];
+    /** Verdicts per place in the section list: layers walk the same list, and only the camera or new depth can change one. */
+    private long[] verdictOrigins = new long[2048];
+    private int[] verdictStamps = new int[2048];
+    private boolean[] verdicts = new boolean[2048];
+    private int stamp = 1;
+    private double preparedX, preparedY, preparedZ;
     private SoftwareDepthBuffer depth;
     private int pixelsWide, pixelsHigh;
     private double cameraX, cameraY, cameraZ;
@@ -38,17 +44,41 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     /** Called for each layer with the camera now; decides whether this layer's tests can mean anything. */
     public void prepare(double x, double y, double z) {
         usable = false;
+        if (x != preparedX || y != preparedY || z != preparedZ) {
+            preparedX = x;
+            preparedY = y;
+            preparedZ = z;
+            stamp++;
+        }
         if (depth == null || System.nanoTime() - capturedAt > MAX_AGE_NANOS) return;
         double dx = x - cameraX, dy = y - cameraY, dz = z - cameraZ, move = Math.sqrt(dx * dx + dy * dy + dz * dz);
         usable = move <= MAX_MOVE;
         grow = (float) move + MARGIN;
     }
 
-    /** Whether the section whose lowest corner is at this block position was entirely behind captured terrain. */
-    public boolean hidden(int originX, int originY, int originZ) {
-        if (!usable || !behindTerrain(originX, originY, originZ, originX + SECTION, originY + SECTION, originZ + SECTION)) return false;
-        BlazeStats.hiddenSection();
-        return true;
+    /**
+     * Whether the section whose lowest corner is at this block position was entirely behind captured terrain.
+     *
+     * @param place the section's index in the list being walked, under which its verdict is remembered
+     */
+    public boolean hidden(int place, int originX, int originY, int originZ) {
+        if (!usable) return false;
+        if (place >= verdicts.length) growVerdicts(place);
+        long origin = ((long) originX & 0x3FFFFFFL) << 38 | ((long) originZ & 0x3FFFFFFL) << 12 | originY & 0xFFFL;
+        if (verdictStamps[place] != stamp || verdictOrigins[place] != origin) {
+            verdictStamps[place] = stamp;
+            verdictOrigins[place] = origin;
+            verdicts[place] = behindTerrain(originX, originY, originZ, originX + SECTION, originY + SECTION, originZ + SECTION);
+        }
+        if (verdicts[place]) BlazeStats.hiddenSection();
+        return verdicts[place];
+    }
+
+    private void growVerdicts(int place) {
+        int size = Math.max(place + 1, verdicts.length * 2);
+        verdictOrigins = java.util.Arrays.copyOf(verdictOrigins, size);
+        verdictStamps = java.util.Arrays.copyOf(verdictStamps, size);
+        verdicts = java.util.Arrays.copyOf(verdicts, size);
     }
 
     /** Whether everything the block entities of this section draw was entirely behind captured terrain. */
@@ -105,6 +135,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
             cameraY = y;
             cameraZ = z;
             capturedAt = System.nanoTime();
+            stamp++;
         });
     }
 
