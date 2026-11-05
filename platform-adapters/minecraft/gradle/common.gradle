@@ -17,7 +17,7 @@ def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
 def blazeBackend = providers.gradleProperty('blazeBackend').isPresent()
 if (blazeBackend && overhaulBackend) throw new GradleException('Select one owned renderer frontend')
-def hudCache = target.loader == 'neoforge' && target.minecraft == '1.21.1' && !blazeBackend && !overhaulBackend
+def hudCache = target.loader == 'neoforge' && target.minecraft == '1.21.1' && !overhaulBackend
 def querySmoke = providers.gradleProperty('querySmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
 if (querySmoke && (!worldSmoke || modelSmoke || overhaulBackend)) throw new GradleException('Query smoke requires only -PworldSmoke -PquerySmoke')

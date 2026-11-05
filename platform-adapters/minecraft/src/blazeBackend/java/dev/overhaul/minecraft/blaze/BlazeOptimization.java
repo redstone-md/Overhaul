@@ -29,7 +29,8 @@ public enum BlazeOptimization {
     ENTITY_RENDERER_CACHE("entityRendererCache", "Entity renderer lookup stored on the entity type"),
     BIOME_CACHE("biomeCache", "Sky and fog biome samples cached per tick"),
     SPRITE_INTERPOLATION("spriteInterpolation", "Interpolated texture animation blended on raw memory"),
-    XAERO_LIMITS("xaeroLimits", "Xaero map writing and radar updates limited per frame");
+    XAERO_LIMITS("xaeroLimits", "Xaero map writing and radar updates limited per frame"),
+    HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
 
 
     private final String key, description;

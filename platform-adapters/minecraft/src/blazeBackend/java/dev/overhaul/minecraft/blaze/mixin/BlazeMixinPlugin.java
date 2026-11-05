@@ -28,7 +28,11 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("XaeroMapWriter121Mixin", BlazeOptimization.XAERO_LIMITS),
             Map.entry("XaeroRadar121Mixin", BlazeOptimization.XAERO_LIMITS));
 
-    @Override public void onLoad(String mixinPackage) { BlazeOptimization.describeInFile(); }
+    @Override public void onLoad(String mixinPackage) {
+        BlazeOptimization.describeInFile();
+        // The cache also serves builds without this frontend, so it reads a property rather than this enum.
+        if (!BlazeOptimization.HUD_CACHE.on()) System.setProperty("overhaul.hudCache", "false");
+    }
     @Override public String getRefMapperConfig() { return null; }
 
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
