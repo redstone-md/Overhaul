@@ -47,6 +47,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private SwapchainPresentMode mode=SwapchainPresentMode.FIFO;
     private Runnable windowConstructionCleanup;
     private boolean windowReady;
+    private final List<AutoCloseable> closeWith=new ArrayList<>();
     private int maximumUniformRange;
 
     public BlazeRenderer(long glfwNoApiWindow,int width,int height){
@@ -95,6 +96,8 @@ public final class BlazeRenderer implements AutoCloseable {
         if(windowReady||windowConstructionCleanup!=null)throw new IllegalStateException("Window cleanup is already configured");
         windowConstructionCleanup=cleanup;
     }
+    /** Tier code holding native resources of this device closes with it, once nothing is in flight. */
+    public void closeWith(AutoCloseable resource){requireOpen();closeWith.add(resource);}
     public void windowReady(){requireOpen();windowConstructionCleanup=null;windowReady=true;}
     public void abortWindowConstruction(){
         Runnable cleanup=windowConstructionCleanup;windowConstructionCleanup=null;
@@ -124,7 +127,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeTarget readTarget(){return target(readTarget);}
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
     /** Null only for a raw framebuffer with nothing renderable attached. */
-    private BlazeTarget target(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
+    public BlazeTarget target(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
     public void bindFramebuffer(int kind,int id){
         if(id<FOREIGN_FRAMEBUFFERS)target(id);
         switch(kind){
@@ -214,6 +217,7 @@ public final class BlazeRenderer implements AutoCloseable {
         Throwable failure=null;
         if(queue!=null)failure=release(queue::drain,failure);
         failure=release(context::waitIdle,failure);
+        for(AutoCloseable resource:closeWith)failure=release(()->{try{resource.close();}catch(Exception problem){throw new IllegalStateException(problem);}},failure);closeWith.clear();
         for(BlazeMesh mesh:new ArrayList<>(meshes))failure=release(mesh::close,failure);
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);
