@@ -44,7 +44,8 @@ public final class BlazeMesh implements AutoCloseable {
         requireOpen();
         if (state == null) throw new IllegalStateException("Index replacement before vertex upload");
         int expected=Math.multiplyExact(state.indexCount(),state.indexBytes());
-        if (bytes!=null&&bytes.remaining()!=expected) throw new IllegalArgumentException("Sorted index byte count changed");
+        // A resort is queued against the mesh it read; a rebuild may have replaced that mesh first, and the new one came sorted.
+        if (bytes!=null&&bytes.remaining()!=expected) return;
         BlazeGeometryRange next=expected==0?null:bytes==null?sequences.range(state):geometry(bytes);
         if (indices != null) indices.retire(queue);
         indices = next;
