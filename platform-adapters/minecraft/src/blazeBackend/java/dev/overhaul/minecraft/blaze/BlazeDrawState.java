@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.minecraft.hud.HudCacheTarget;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -23,9 +24,17 @@ public final class BlazeDrawState {
 
     public Snapshot snapshot() {
         return new Snapshot(new NativeGraphicsPipeline.Depth(depth, depthWrite, compare, polygonOffset?offsetUnits:0, polygonOffset?offsetFactor:0),
-                new NativeGraphicsPipeline.Color(blend, sourceRgb, destinationRgb, equation, sourceAlpha, destinationAlpha, equation, colorMask),
+                HudCacheTarget.isActive(drawFramebuffer) ? cachedHudColor() : new NativeGraphicsPipeline.Color(blend, sourceRgb, destinationRgb, equation, sourceAlpha, destinationAlpha, equation, colorMask),
                 new NativeGraphicsPipeline.ColorLogic(logic, logicOp), cull ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE,
                 polygonMode,lineWidth,x, y, width, height, scissor, sx, sy, sw, sh);
+    }
+
+    /** Alpha holds the visible share of the world, see {@link HudCacheTarget}, so it follows the color result. */
+    private NativeGraphicsPipeline.Color cachedHudColor() {
+        int mask = (colorMask & 7) == 0 ? 0 : colorMask | 8;
+        if (!blend) return new NativeGraphicsPipeline.Color(true, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, mask);
+        int kept = equation == VK_BLEND_OP_ADD ? destinationRgb : VK_BLEND_FACTOR_ONE;
+        return new NativeGraphicsPipeline.Color(true, sourceRgb, destinationRgb, equation, VK_BLEND_FACTOR_ZERO, kept, VK_BLEND_OP_ADD, mask);
     }
 
     public void depth(boolean value) { depth = value; }

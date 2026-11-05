@@ -3,12 +3,7 @@ package dev.overhaul.minecraft.hud;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.overhaul.minecraft.mixin.HudCacheGuiAccessor;
 import dev.overhaul.minecraft.mixin.HudCacheGuiLayerManagerAccessor;
 import dev.overhaul.minecraft.mixin.HudCacheMinecraftAccessor;
@@ -17,7 +12,6 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
@@ -67,7 +61,7 @@ public final class HudFrameCache {
             refresh(minecraft, main, graphics, sizeChanged, original);
             lastRefresh = now;
         }
-        composite(minecraft);
+        composite(main);
     }
 
     private static void skipLiveLayer(RenderGuiLayerEvent.Pre event) {
@@ -99,7 +93,7 @@ public final class HudFrameCache {
     private static void refresh(Minecraft minecraft, RenderTarget main, GuiGraphics graphics, boolean sizeChanged, Runnable original) {
         if (target == null) {
             target = new TextureTarget(main.width, main.height, true, Minecraft.ON_OSX);
-            target.setClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+            target.setClearColor(0.0F, 0.0F, 0.0F, HudCacheTarget.tracksWorldVisibility() ? 1.0F : 0.0F);
         } else if (sizeChanged) {
             target.resize(main.width, main.height, Minecraft.ON_OSX);
         }
@@ -112,32 +106,25 @@ public final class HudFrameCache {
         HudCacheMinecraftAccessor targets = (HudCacheMinecraftAccessor) minecraft;
         targets.overhaul$setMainRenderTarget(target);
         cachedPass = true;
+        HudCacheTarget.begin(target.frameBufferId);
         try {
             original.run();
             graphics.flush();
         } finally {
+            HudCacheTarget.end();
             cachedPass = false;
             targets.overhaul$setMainRenderTarget(main);
             main.bindWrite(true);
         }
     }
 
-    private static void composite(Minecraft minecraft) {
-        float width = minecraft.getWindow().getGuiScaledWidth();
-        float height = minecraft.getWindow().getGuiScaledHeight();
+    private static void composite(RenderTarget main) {
         RenderSystem.disableDepthTest();
         RenderSystem.enableBlend();
-        // The cached pass blends onto transparent black, which leaves premultiplied color in the buffer.
-        RenderSystem.blendFunc(GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0, target.getColorTextureId());
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        BufferBuilder quad = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        quad.addVertex(0.0F, height, 0.0F).setUv(0.0F, 0.0F);
-        quad.addVertex(width, height, 0.0F).setUv(1.0F, 0.0F);
-        quad.addVertex(width, 0.0F, 0.0F).setUv(1.0F, 1.0F);
-        quad.addVertex(0.0F, 0.0F, 0.0F).setUv(0.0F, 1.0F);
-        BufferUploader.drawWithShader(quad.buildOrThrow());
+        // The cached pass blends onto black, which leaves premultiplied color in the buffer.
+        RenderSystem.blendFunc(GL11.GL_ONE, HudCacheTarget.tracksWorldVisibility() ? GL11.GL_SRC_ALPHA : GL11.GL_ONE_MINUS_SRC_ALPHA);
+        // The GUI textured shader discards zero alpha, which here can mean a fully opaque HUD pixel.
+        target.blitToScreen(main.width, main.height, false);
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableBlend();
     }
