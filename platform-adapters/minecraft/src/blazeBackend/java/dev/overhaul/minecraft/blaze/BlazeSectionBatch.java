@@ -35,6 +35,8 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private BlazeProgramCompiler.Program compact;
     private BlazeDrawState.Snapshot state;
     private BlazeMeshState first;
+    private BlazeMeshState.Layout firstLayout;
+    private int firstTopology;
     private boolean ordered;
     /** Written out of order and then copied whole, since the mapped memory behind a slice is slow to touch piecemeal. */
     private ByteBuffer commandBytes, positionBytes;
@@ -56,21 +58,24 @@ public final class BlazeSectionBatch implements AutoCloseable {
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {
-        BlazeMeshState next = mesh.stateOrNull();
-        if (next == null || next.indexCount() == 0 || compact == null && BlazeCompactSection.compact(next)) return;
-        if (first != null && (next.topology() != first.topology() || !next.layout().equals(first.layout()))) finish();
-        if (first == null) first = next;
-        BlazeGeometryRange vertices = mesh.vertexRange(), indices = mesh.indexRange();
-        int stride = next.layout().stride(), remainder = vertices.offset() % stride;
+        int indexCount = mesh.drawIndexCount;
+        BlazeMeshState.Layout layout = mesh.drawLayout;
+        if (indexCount == 0 || compact == null && BlazeCompactSection.compact(layout)) return;
+        if (first != null && (mesh.drawTopology != firstTopology || layout != firstLayout && !layout.equals(firstLayout))) finish();
+        if (first == null) {
+            first = mesh.stateOrNull();
+            firstLayout = layout;
+            firstTopology = mesh.drawTopology;
+        }
         if (count * 4 == sections.length) {
             sections = Arrays.copyOf(sections, sections.length * 2);
             offsets = Arrays.copyOf(offsets, offsets.length * 2);
         }
         int at = count * 4, position = count * 3;
-        sections[at] = next.indexCount();
-        sections[at + 1] = indices.offset() / next.indexBytes();
-        sections[at + 2] = (vertices.offset() - remainder) / stride;
-        sections[at + 3] = run(vertices.buffer(), remainder, indices.buffer(), next.indexBytes());
+        sections[at] = indexCount;
+        sections[at + 1] = mesh.drawFirstIndex;
+        sections[at + 2] = mesh.drawBaseVertex;
+        sections[at + 3] = run(mesh.drawVertices, mesh.drawRemainder, mesh.drawIndices, mesh.drawIndexBytes);
         offsets[position] = x;
         offsets[position + 1] = y;
         offsets[position + 2] = z;
@@ -96,6 +101,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private void finish() {
         BlazeMeshState mesh = first;
         first = null;
+        firstLayout = null;
         try {
             if (count != 0) enqueue(mesh);
         } finally {

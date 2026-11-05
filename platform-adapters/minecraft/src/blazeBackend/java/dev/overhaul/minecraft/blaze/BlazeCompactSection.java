@@ -106,6 +106,10 @@ public final class BlazeCompactSection {
         return state.layout() == LAYOUT;
     }
 
+    static boolean compact(BlazeMeshState.Layout layout) {
+        return layout == LAYOUT;
+    }
+
     static boolean reads(BlazeShaderSnapshot shader) {
         return shader.program().bindings().attributes().containsKey(VERTEX_ATTRIBUTE);
     }

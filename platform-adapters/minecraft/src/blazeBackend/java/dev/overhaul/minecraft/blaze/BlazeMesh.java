@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 import org.lwjgl.vulkan.VkCommandBuffer;
@@ -15,6 +16,10 @@ public final class BlazeMesh implements AutoCloseable {
     private BlazeGeometryRange vertices, indices;
     private BlazeMeshState state;
     private boolean closed;
+    /** What a terrain draw reads, held here because a walk through state, layout and ranges misses the cache once per object. Zero count: nothing to draw. */
+    int drawIndexCount, drawFirstIndex, drawBaseVertex, drawRemainder, drawIndexBytes, drawTopology;
+    GpuBuffer drawVertices, drawIndices;
+    BlazeMeshState.Layout drawLayout;
 
     BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, BlazeSequenceIndices sequences, boolean stream, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.sequences=sequences;this.stream=stream;this.onClose=onClose; }
 
@@ -33,6 +38,7 @@ public final class BlazeMesh implements AutoCloseable {
             if(expected>0)index=originalIndices==null?sequences.range(next):geometry(originalIndices);
             release();
             vertices = vertex; indices = index; state = next;
+            flatten();
             vertex = null; index = null;
         } finally {
             if (vertex != null) vertex.retire(queue);
@@ -49,6 +55,27 @@ public final class BlazeMesh implements AutoCloseable {
         BlazeGeometryRange next=expected==0?null:bytes==null?sequences.range(state):geometry(bytes);
         if (indices != null) indices.retire(queue);
         indices = next;
+        flatten();
+    }
+
+    private void flatten() {
+        BlazeMeshState current = state;
+        if (current == null || current.indexCount() == 0 || vertices == null || indices == null) {
+            drawIndexCount = 0;
+            drawVertices = drawIndices = null;
+            drawLayout = null;
+            return;
+        }
+        int stride = current.layout().stride();
+        drawRemainder = vertices.offset() % stride;
+        drawBaseVertex = (vertices.offset() - drawRemainder) / stride;
+        drawFirstIndex = indices.offset() / current.indexBytes();
+        drawIndexBytes = current.indexBytes();
+        drawTopology = current.topology();
+        drawVertices = vertices.buffer();
+        drawIndices = indices.buffer();
+        drawLayout = current.layout();
+        drawIndexCount = current.indexCount();
     }
 
     BlazeMeshState stateOrNull() { return state; }
@@ -81,6 +108,6 @@ public final class BlazeMesh implements AutoCloseable {
 
     private void requireOpen() { if (closed) throw new IllegalStateException("Blaze mesh is closed"); }
     private BlazeGeometryRange geometry(ByteBuffer bytes) { return stream?transfers.stream(bytes):transfers.geometry(bytes); }
-    private void release() { if (vertices != null) vertices.retire(queue); if (indices != null) indices.retire(queue); vertices = indices = null; }
-    @Override public void close() { if (!closed) { release(); state = null; closed = true; onClose.accept(this); } }
+    private void release() { if (vertices != null) vertices.retire(queue); if (indices != null) indices.retire(queue); vertices = indices = null; flatten(); }
+    @Override public void close() { if (!closed) { state = null; release(); closed = true; onClose.accept(this); } }
 }
