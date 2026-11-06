@@ -152,6 +152,13 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     public BlazeDh dhIfUsed(){return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
+    /** Pack graphs take their place in the frame queue and never wait for the GPU. */
+    public PackRecording.Recorder packRecorder(){requireOpen();return recording->enqueue(new BlazePackRecording(recording));}
+    /**
+     * The lane a shader pack phase builds its graph against. Once pack graphs are queued they take their place behind
+     * the queued draws by themselves, so the frame queue is not flushed for them.
+     */
+    public ImmediateCommands packCommands(){requireOpen();if(!BlazeOptimization.PACK_FRAME_QUEUE.on())queue.flush();return commands;}
     GpuBuffer newGlDeviceBuffer(long size){
         requireOpen();
         GpuBuffer buffer=allocator.deviceBuffer(Math.max(size,4),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);

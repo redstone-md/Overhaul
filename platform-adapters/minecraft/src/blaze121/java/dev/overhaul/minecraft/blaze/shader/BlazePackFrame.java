@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze.shader;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeTarget;
@@ -83,7 +84,7 @@ public final class BlazePackFrame implements AutoCloseable {
                 install(configuration, main.width, main.height);
             }
             uniforms.capture(new BlazePackCapture(minecraft, camera, partial, view, projection, width, height), pack);
-            runtime.beginFrame(renderer.commands(), frame(main), uniforms);
+            runtime.beginFrame(renderer.packCommands(), frame(main), uniforms);
             if (scene != null) scene.begin(renderer.target(main.frameBufferId));
             if (shadows != null) {
                 shadows.render(minecraft, sections, uniforms, camera, light, frame(main));
@@ -109,7 +110,7 @@ public final class BlazePackFrame implements AutoCloseable {
     public void afterOpaque() {
         if (!active) return;
         try {
-            runtime.afterOpaque(renderer.commands(), frame(minecraft.getMainRenderTarget()), uniforms);
+            runtime.afterOpaque(renderer.packCommands(), frame(minecraft.getMainRenderTarget()), uniforms);
             if (scene != null) scene.afterOpaque();
         } catch (RuntimeException failure) {
             fail(installed, failure);
@@ -134,7 +135,7 @@ public final class BlazePackFrame implements AutoCloseable {
         active = false;
         if (scene != null) scene.end();
         try {
-            runtime.render(renderer.commands(), frame(minecraft.getMainRenderTarget()), uniforms);
+            runtime.render(renderer.packCommands(), frame(minecraft.getMainRenderTarget()), uniforms);
             if (scene != null) scene.drawOnTop();
             uniforms.complete();
         } catch (RuntimeException failure) {
@@ -166,6 +167,7 @@ public final class BlazePackFrame implements AutoCloseable {
             renderer.commands();
             renderer.context().waitIdle();
             runtime = new PackGraphRuntime(renderer.context(), renderer.allocator(), compiled, targetWidth, targetHeight, compiler, BlazePackScene.worldPrograms(compiled), false);
+            if (BlazeOptimization.PACK_FRAME_QUEUE.on()) runtime.recordInto(renderer.packRecorder());
             if (BlazePackScene.drawsWorld(compiled)) scene = new BlazePackScene(renderer, compiled, runtime, uniforms);
             if (scene != null && scene.castsShadows()) shadows = new BlazePackShadows(renderer, scene, runtime, compiled.shadow());
             pack = compiled;

@@ -38,6 +38,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     private final PackMipmaps mipmaps;
     private PackFullscreenPass depthPass;
     private ImmediateCommands frameLane;
+    private PackRecording.Recorder recorder;
     private boolean initialized,closed,frameBegun,opaqueComplete,shadowsPrepared,shadowsComplete,shadowOpaque;
     private final boolean scene;
 
@@ -144,7 +145,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         boolean finalWritten=false;
         for(var entry:passes.entrySet()){
             var program=entry.getKey();if(!stages.contains(program.stage()))continue;
-            uniforms.fill(program,entry.getValue().values);entry.getValue().upload();boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE;
+            uniforms.fill(program,entry.getValue().values);int uniformOffset=entry.getValue().upload();boolean shadow=program.stage()==CompiledShaderPack.Stage.SHADOWCOMPOSITE;
             var routing=shadow?null:route(program);
             for(int index:new java.util.TreeSet<>(program.mipmaps()))if(program.code().descriptors().samplers().keySet().stream()
                     .anyMatch(name->PackRenderTargets.colorIndex(name)==index&&!customTextures.overrides(program,name)))
@@ -176,14 +177,21 @@ public final class PackGraphRuntime implements AutoCloseable {
             List<String> outputs=new ArrayList<>();for(GpuImageView image:shadow?shadows.targets(program):outputs(routing)){
                 String name=image==null?null:plan.write(image);outputs.add(name);if(name!=null)uses.put(name,VulkanRenderGraph.Usage.COLOR_WRITE);
             }
-            PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampleModes,sampler.handle()));
+            PackFullscreenPass pass=entry.getValue();plan.pass(program.name(),uses,scope->pass.record(scope,outputs,samples,sampleModes,sampler.handle(),uniformOffset));
             if(shadow)shadows.complete(program);else{swaps.complete(program);finalWritten|=routing.finalOutput();}
         }
         return finalWritten;
     }
     private void execute(PackFrameGraph plan,ImmediateCommands lane){
-        if(!plan.operations.isEmpty())try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}
+        if(plan.operations.isEmpty())return;
+        if(recorder==null){try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}return;}
+        recorder.add(new PackRecording(plan.create(context,lane)));
     }
+    /**
+     * Hands every later graph to the caller's ordered frame lane instead of a submission that waits for the GPU. The
+     * lane records each one after the work queued before it, and before the next.
+     */
+    public void recordInto(PackRecording.Recorder recorder){requireOpen();this.recorder=recorder;}
     public boolean hasSceneProgram(){return scene;}
     public long samplerHandle(){requireOpen();return sampler.handle();}
     public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}

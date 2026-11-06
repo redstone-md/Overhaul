@@ -21,6 +21,11 @@ final class PackFullscreenPass implements AutoCloseable {
     private record Sample(Object identity,long view,long sampler){}
     private record Attachment(Object identity,long view){}
     private static final int MAX_DESCRIPTOR_SETS=32;
+    /**
+     * A pass runs once a frame and may be queued behind frames still on the GPU, so each run writes its values into
+     * the next of these copies. The frame ring keeps three submissions in flight and every frame submits at least once.
+     */
+    private static final int UNIFORM_COPIES=8;
     private final VulkanContext context;
     private final CompiledShaderPack.Program program;
     private final Map<List<Attachment>,Long> framebuffers=new LinkedHashMap<>();
@@ -31,6 +36,7 @@ final class PackFullscreenPass implements AutoCloseable {
     private GpuBuffer uniforms,vertices,indices;
     private NativeGraphicsPipeline pipeline;
     private final ByteBuffer upload;
+    private int uniformStride,uniformCopy;
     final UniformBlock values;
 
     PackFullscreenPass(VulkanContext context,GpuAllocator allocator,CompiledShaderPack.Program program,List<Integer> formats,int width,int height){
@@ -77,21 +83,30 @@ final class PackFullscreenPass implements AutoCloseable {
         ProgramBindings bindings=program.code().descriptors();int count=bindings.samplers().size()+(bindings.uniformBytes()>0?1:0);
         try(MemoryStack stack=VulkanStack.push()){
             var entries=VkDescriptorSetLayoutBinding.calloc(count,stack);int slot=0;
-            if(bindings.uniformBytes()>0){uniforms=allocator.hostBuffer(bindings.uniformBytes(),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-                entries.get(slot++).binding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);}
+            if(bindings.uniformBytes()>0){
+                var properties=VkPhysicalDeviceProperties.malloc(stack);vkGetPhysicalDeviceProperties(context.physicalDevice(),properties);
+                int alignment=(int)Math.max(properties.limits().minUniformBufferOffsetAlignment(),properties.limits().nonCoherentAtomSize());
+                uniformStride=(bindings.uniformBytes()+alignment-1)/alignment*alignment;
+                uniforms=allocator.hostBuffer(uniformStride*UNIFORM_COPIES,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+                entries.get(slot++).binding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);}
             for(int binding:bindings.samplers().values())entries.get(slot++).binding(binding).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
             LongBuffer pointer=stack.mallocLong(1);check(vkCreateDescriptorSetLayout(context.device(),VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(entries),null,pointer),"pack graph descriptor layout");descriptorLayout=pointer.get(0);
             var sizes=VkDescriptorPoolSize.calloc((uniforms==null?0:1)+(bindings.samplers().isEmpty()?0:1),stack);int index=0;
-            if(uniforms!=null)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(MAX_DESCRIPTOR_SETS);
+            if(uniforms!=null)sizes.get(index++).type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(MAX_DESCRIPTOR_SETS);
             if(!bindings.samplers().isEmpty())sizes.get(index).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(bindings.samplers().size()*MAX_DESCRIPTOR_SETS);
             check(vkCreateDescriptorPool(context.device(),VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(MAX_DESCRIPTOR_SETS).pPoolSizes(sizes),null,pointer),"pack graph descriptor pool");pool=pointer.get(0);
         }
     }
-    void upload(){if(uniforms!=null){upload.clear();values.copyTo(upload);upload.flip();uniforms.write(upload);}}
-    void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,long sampler){
-        record(pass,outputs,samples,Map.of(),sampler);
+    /** Writes the current values into the next copy and returns where it starts, for the matching record. */
+    int upload(){
+        if(uniforms==null)return 0;
+        int offset=uniformCopy*uniformStride;uniformCopy=(uniformCopy+1)%UNIFORM_COPIES;
+        upload.clear();values.copyTo(upload);upload.flip();uniforms.write(offset,upload);return offset;
     }
-    void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,Map<String,Long> samplers,long sampler){
+    void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,long sampler){
+        record(pass,outputs,samples,Map.of(),sampler,upload());
+    }
+    void record(VulkanRenderGraph.PassContext pass,List<String> outputs,Map<String,String> samples,Map<String,Long> samplers,long sampler,int uniformOffset){
         long set=descriptorSet(pass,samples,samplers,sampler);
         try(MemoryStack stack=VulkanStack.push()){
             List<Attachment> views=new ArrayList<>();for(String output:outputs)if(output!=null){
@@ -106,7 +121,7 @@ final class PackFullscreenPass implements AutoCloseable {
             }
             var begin=VkRenderPassBeginInfo.calloc(stack).sType$Default().renderPass(renderPass).framebuffer(framebuffer);begin.renderArea().extent().set(width,height);
             vkCmdBeginRenderPass(pass.command(),begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdBindPipeline(pass.command(),VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.handle());
-            vkCmdBindDescriptorSets(pass.command(),VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(set),null);
+            vkCmdBindDescriptorSets(pass.command(),VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline.layout(),0,stack.longs(set),uniforms==null?null:stack.ints(uniformOffset));
             if(vertices!=null)vkCmdBindVertexBuffers(pass.command(),0,stack.longs(vertices.handle()),stack.longs(0));
             vkCmdBindIndexBuffer(pass.command(),indices.handle(),0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(pass.command(),6,1,0,0,0);vkCmdEndRenderPass(pass.command());
         }
@@ -120,8 +135,8 @@ final class PackFullscreenPass implements AutoCloseable {
         try(MemoryStack stack=VulkanStack.push()){
             LongBuffer pointer=stack.mallocLong(1);check(vkAllocateDescriptorSets(context.device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool).pSetLayouts(stack.longs(descriptorLayout)),pointer),"pack graph descriptor allocation");long set=pointer.get(0);
             var writes=VkWriteDescriptorSet.calloc(samples.size()+(uniforms==null?0:1),stack);int slot=0;
-            if(uniforms!=null)writes.get(slot++).sType$Default().dstSet(set).dstBinding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.handle()).range(uniforms.size()));
+            if(uniforms!=null)writes.get(slot++).sType$Default().dstSet(set).dstBinding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1,stack).buffer(uniforms.handle()).range(program.code().descriptors().uniformBytes()));
             for(var sample:proposed.entrySet())writes.get(slot++).sType$Default().dstSet(set).dstBinding(program.code().descriptors().samplers().get(sample.getKey())).descriptorCount(1)
                     .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).pImageInfo(VkDescriptorImageInfo.calloc(1,stack).sampler(sample.getValue().sampler()).imageView(sample.getValue().view()).imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
             vkUpdateDescriptorSets(context.device(),writes,null);descriptors.put(Map.copyOf(proposed),set);return set;

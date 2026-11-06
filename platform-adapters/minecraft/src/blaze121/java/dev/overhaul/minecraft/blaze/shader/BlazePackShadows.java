@@ -50,13 +50,13 @@ final class BlazePackShadows {
         collect(sections, position.x, position.y, position.z);
         light.turnOnLightLayer();
         scene.beginShadows(minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getId(), RenderSystem.getShaderTexture(2), settings.resolution());
-        runtime.prepareShadows(renderer.commands());
+        runtime.prepareShadows(renderer.packCommands());
         cast(RenderType.solid(), "shadow_solid", position.x, position.y, position.z);
         cast(RenderType.cutoutMipped(), "shadow_cutout", position.x, position.y, position.z);
         cast(RenderType.cutout(), "shadow_cutout", position.x, position.y, position.z);
-        runtime.snapshotOpaqueShadow(renderer.commands());
+        runtime.snapshotOpaqueShadow(renderer.packCommands());
         cast(RenderType.translucent(), "shadow_water", position.x, position.y, position.z);
-        runtime.finishShadows(renderer.commands(), frame, uniforms);
+        runtime.finishShadows(renderer.packCommands(), frame, uniforms);
     }
 
     /** The bounds test runs over a flat copy of the origins: reaching each section object for them cost most of the frame. */
