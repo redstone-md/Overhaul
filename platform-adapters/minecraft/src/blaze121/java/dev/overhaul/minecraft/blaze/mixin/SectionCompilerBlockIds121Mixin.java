@@ -25,6 +25,9 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
  */
 @Mixin(SectionCompiler.class)
 abstract class SectionCompilerBlockIds121Mixin {
+    /** Vanilla's compile, and NeoForge's overload that adds section geometry; the vanilla one only delegates there. */
+    private static final String VANILLA = "compile(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderChunkRegion;Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;";
+    private static final String NEOFORGE = "compile(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderChunkRegion;Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;Ljava/util/List;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;";
     private static final String LAYER = "Lnet/minecraft/client/renderer/chunk/SectionCompiler;getOrBeginLayer(Ljava/util/Map;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/BufferBuilder;";
 
     @ModifyArg(method = "getOrBeginLayer", require = 1, index = 2, at = @At(value = "INVOKE",
@@ -33,7 +36,7 @@ abstract class SectionCompilerBlockIds121Mixin {
         return BlazePackBlockIds.active() == null ? format : BlazePackBlockFormat.FORMAT;
     }
 
-    @WrapOperation(method = "compile", require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 0))
+    @WrapOperation(method = {VANILLA, NEOFORGE}, require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 0))
     private BufferBuilder overhaul$fluidLayer(SectionCompiler compiler, Map<RenderType, BufferBuilder> layers, SectionBufferBuilderPack pack,
                                               RenderType type, Operation<BufferBuilder> original, @Local FluidState fluid) {
         BufferBuilder buffer = original.call(compiler, layers, pack, type);
@@ -41,7 +44,7 @@ abstract class SectionCompilerBlockIds121Mixin {
         return buffer;
     }
 
-    @WrapOperation(method = "compile", require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 1))
+    @WrapOperation(method = {VANILLA, NEOFORGE}, require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 1))
     private BufferBuilder overhaul$blockLayer(SectionCompiler compiler, Map<RenderType, BufferBuilder> layers, SectionBufferBuilderPack pack,
                                               RenderType type, Operation<BufferBuilder> original, @Local BlockState state) {
         BufferBuilder buffer = original.call(compiler, layers, pack, type);
