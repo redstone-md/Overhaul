@@ -5,7 +5,6 @@ import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
 import java.util.TreeMap;
 
 /** Bounded buffer pages with fence-retired, coalescing suballocations. Owner-thread only. */
@@ -73,12 +72,14 @@ final class BlazeBufferPool implements AutoCloseable {
     private final class Page {
         private final GpuBuffer buffer;
         private final TreeMap<Integer,Integer> free=new TreeMap<>();
-        private final LongRBTreeSet bySize=new LongRBTreeSet();
+        /** Sorted size<<32|offset keys: a binary search finds the best fit with no allocation, and pages hold few fragments. */
+        private long[] bySize=new long[16];
+        private int fragments;
         private int active;
         private Page(GpuBuffer buffer){this.buffer=buffer;add(0,buffer.size());}
         private Slice acquire(int bytes,int reserved){
-            if(bySize.isEmpty()||bySize.lastLong()>>>32<reserved)return null;
-            long fit=bySize.tailSet((long)reserved<<32).firstLong();
+            if(fragments==0||bySize[fragments-1]>>>32<reserved)return null;
+            long fit=bySize[slot((long)reserved<<32)];
             int offset=(int)fit,size=(int)(fit>>>32);
             remove(offset,size);
             if(size!=reserved)add(offset+reserved,size-reserved);
@@ -91,7 +92,22 @@ final class BlazeBufferPool implements AutoCloseable {
             if(after!=null&&offset+size==after.getKey()){size+=after.getValue();remove(after.getKey(),after.getValue());}
             add(offset,size);active--;
         }
-        private void add(int offset,int size){free.put(offset,size);bySize.add((long)size<<32|offset);}
-        private void remove(int offset,int size){free.remove(offset);bySize.remove((long)size<<32|offset);}
+        private void add(int offset,int size){
+            free.put(offset,size);
+            long key=(long)size<<32|offset;int at=slot(key);
+            if(fragments==bySize.length)bySize=java.util.Arrays.copyOf(bySize,fragments*2);
+            System.arraycopy(bySize,at,bySize,at+1,fragments-at);bySize[at]=key;fragments++;
+        }
+        private void remove(int offset,int size){
+            free.remove(offset);
+            int at=slot((long)size<<32|offset);
+            System.arraycopy(bySize,at+1,bySize,at,fragments-at-1);fragments--;
+        }
+        /** First index whose key is at least the one given. */
+        private int slot(long key){
+            int low=0,high=fragments;
+            while(low<high){int mid=(low+high)>>>1;if(bySize[mid]<key)low=mid+1;else high=mid;}
+            return low;
+        }
     }
 }
