@@ -104,26 +104,44 @@ public final class BlazeDhFrame {
     private static void add(BlazeRenderer renderer, BlazeGlBuffers buffers, BlazeSectionBatch batch, GLVertexBuffer vertices, float x, float y, float z) {
         GlQuadIndexBuffer indices = vertices.getQuadIBO();
         if (indices == null) return;
-        long vertexStamp = vertices.renderStampLock.readLock(), indexStamp = indices.renderStampLock.readLock();
+        // The locks only make the name and count a consistent pair; the draw records after they are released either way.
+        long vertexState = consistent(vertices.renderStampLock, () -> pair(vertices.getId(), vertices.getVertexCount()));
+        int vertexName = (int) (vertexState >>> 32), count = (int) vertexState;
+        int indexName = (int) consistent(indices.renderStampLock, () -> indices.getId());
+        if (count == 0 || vertexName == 0 || indexName == 0) return;
+        // DH grows the shared buffer in place, so a new generation means a cached device buffer may be retired.
+        int generation = buffers.generation();
+        var vertexBuffer = vertices instanceof BlazeDhDeviceSlot.Holder holder
+                ? holder.overhaul$deviceSlot().resolve(renderer, buffers, vertexName, generation)
+                : buffers.device(renderer, vertexName);
+        if (indexName != lastIndexName || generation != lastIndexGeneration || lastIndexBuffer == null) {
+            lastIndexBuffer = buffers.device(renderer, indexName);
+            lastIndexName = indexName;
+            lastIndexGeneration = generation;
+        }
+        var indexBuffer = lastIndexBuffer;
+        if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);
+    }
+
+    private static long pair(int high, int low) {
+        return (long) high << 32 | low & 0xFFFFFFFFL;
+    }
+
+    /**
+     * Reads under an optimistic stamp, which writes nothing to the lock; only a read that raced an upload takes the
+     * read lock. Taking it for every buffer cost a compare-and-set and a waiter check on each of thousands of locks.
+     */
+    private static long consistent(java.util.concurrent.locks.StampedLock lock, java.util.function.LongSupplier read) {
+        long stamp = lock.tryOptimisticRead();
+        if (stamp != 0) {
+            long value = read.getAsLong();
+            if (lock.validate(stamp)) return value;
+        }
+        stamp = lock.readLock();
         try {
-            int count = vertices.getVertexCount();
-            if (count == 0 || vertices.getId() == 0 || indices.getId() == 0) return;
-            // DH grows the shared buffer in place, so a new generation means a cached device buffer may be retired.
-            int generation = buffers.generation();
-            var vertexBuffer = vertices instanceof BlazeDhDeviceSlot.Holder holder
-                    ? holder.overhaul$deviceSlot().resolve(renderer, buffers, vertices.getId(), generation)
-                    : buffers.device(renderer, vertices.getId());
-            int indexName = indices.getId();
-            if (indexName != lastIndexName || generation != lastIndexGeneration || lastIndexBuffer == null) {
-                lastIndexBuffer = buffers.device(renderer, indexName);
-                lastIndexName = indexName;
-                lastIndexGeneration = generation;
-            }
-            var indexBuffer = lastIndexBuffer;
-            if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);
+            return read.getAsLong();
         } finally {
-            vertices.renderStampLock.unlock(vertexStamp);
-            indices.renderStampLock.unlock(indexStamp);
+            lock.unlockRead(stamp);
         }
     }
 
