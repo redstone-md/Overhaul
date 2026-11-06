@@ -75,8 +75,11 @@ The fairest comparison reads the F3 counter in both, runs interleaved, two runs 
 
 | View | Overhaul | Iris with Sodium | Ratio |
 | --- | --- | --- | --- |
-| Horizon | about 277 fps | about 135 fps | 2.05x |
-| Looking down | about 254 fps | about 127 fps | 2.0x |
+| Horizon | about 255 fps | about 123 fps | 2.07x |
+| Looking down | about 248 fps | about 117 fps | 2.12x |
+
+These are with F3 open, Complementary and Distant Horizons, measured on 2026-11-06. An earlier
+pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
 3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
@@ -114,17 +117,20 @@ Experiments that did not help, all reverted:
 
 The percentages are self time.
 
-- `BlazeSectionBatch.run` and `BlazeSectionRun.holds`, about 11%: cache misses chasing each
+- `BlazeSectionBatch.run`, `write` and `end`, about 10 to 15%: cache misses chasing each
   section's mesh and then its draw run.
-- `PalettedContainer.get`, about 5%: vanilla block lookups.
+- `PalettedContainer.get`, about 2 to 5%: vanilla block lookups.
 - `BlazePackShadows.tighten`, about 3%: kept casters tested against the light frustum.
-- `Int2ObjectOpenHashMap.get` in `BlazeGlBuffers.device`, about 2.5%: lookups per Distant Horizons container.
+- `BlazeDhFrame.drawThroughPack`, about 4%: the walk over Distant Horizons containers and their stamp locks.
 
 Fixed since the previous profile: the buffer pool keeps free ranges in sorted long arrays
 instead of a TreeMap (`poolRanges`), each uniform block remembers which source answers each
 name (`uniformPlans`), kept shadow casters are tested a column at a time (`shadowColumns`),
 pass graph shapes are validated once (`packGraphShapes`), F3 text is gathered at 10 Hz,
-and sections find their draw run through a key their mesh shares.
+and sections find their draw run through a key their mesh shares. Distant Horizons vertex
+buffers keep their device buffer (`dhDeviceCache`), planned uniforms are found by identity
+through interned names, and pack draws are looked up without building key strings or hashing
+program records.
 
 The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
 own debug string.
@@ -141,4 +147,5 @@ own debug string.
 - GPU occlusion (`gpuOcclusion`) is in but off by default: a compute pass tests each section against the newest
   queued depth tiles and zeroes its instance count. With Complementary and F3 it measured on par with the CPU test
   (horizon about 238 fps both ways, looking down 218 on vs 228 off), so terrain stays on the CPU readback test.
-- With F3 open the 2x target is reached (2.05x horizon, 2.0x looking down) but with little margin; GPU clock modes still swing runs by about 5%.
+- With F3 open the 2x target is reached (2.07x horizon, 2.12x looking down). The run is GPU-bound, so GPU clock
+  modes still swing single runs by about 5 to 10%.
