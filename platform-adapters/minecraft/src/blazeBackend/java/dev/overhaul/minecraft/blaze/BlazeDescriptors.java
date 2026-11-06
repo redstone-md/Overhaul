@@ -83,8 +83,9 @@ final class BlazeDescriptors implements AutoCloseable {
             bufferCount=(int)program.bindings().samplers().keySet().stream().filter(program.bindings()::storageBuffer).count();
             try(MemoryStack stack=VulkanStack.push()){
                 var bindings=VkDescriptorSetLayoutBinding.calloc(samplerCount+1,stack);
-                bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
-                int index=1;for(var entry:program.bindings().samplers().entrySet())bindings.get(index++).binding(entry.getValue()).descriptorType(type(program,entry.getKey())).descriptorCount(1).stageFlags(VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT);
+                int stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|(program.geometry()!=null?VK_SHADER_STAGE_GEOMETRY_BIT:0);
+                bindings.get(0).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC).descriptorCount(1).stageFlags(stages);
+                int index=1;for(var entry:program.bindings().samplers().entrySet())bindings.get(index++).binding(entry.getValue()).descriptorType(type(program,entry.getKey())).descriptorCount(1).stageFlags(stages);
                 var pointer=stack.mallocLong(1);
                 check(vkCreateDescriptorSetLayout(context.device(),VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(bindings),null,pointer),"Blaze descriptor layout");handle=pointer.get(0);
             }

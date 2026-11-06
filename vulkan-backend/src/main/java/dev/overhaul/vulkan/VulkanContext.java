@@ -37,7 +37,7 @@ public final class VulkanContext implements AutoCloseable {
     private String deviceName;
     private boolean multiDrawIndirect;
     private boolean indirectFirstInstance;
-    private boolean vertexStores,fragmentStores,storageFormats;
+    private boolean vertexStores,fragmentStores,storageFormats,geometryShaders;
     private int maxIndirectDrawCount;
     private long maxStorageBufferRange;
     private DeviceCapabilities capabilities;
@@ -137,12 +137,12 @@ public final class VulkanContext implements AutoCloseable {
             VkPhysicalDeviceFeatures supported = features.features();
             multiDrawIndirect = supported.multiDrawIndirect();
             indirectFirstInstance = supported.drawIndirectFirstInstance();
-            vertexStores = supported.vertexPipelineStoresAndAtomics();fragmentStores = supported.fragmentStoresAndAtomics();storageFormats = supported.shaderStorageImageExtendedFormats();
+            vertexStores = supported.vertexPipelineStoresAndAtomics();fragmentStores = supported.fragmentStoresAndAtomics();storageFormats = supported.shaderStorageImageExtendedFormats();geometryShaders = supported.geometryShader();
             deviceInfo.pEnabledFeatures(VkPhysicalDeviceFeatures.calloc(stack)
                 .multiDrawIndirect(multiDrawIndirect).drawIndirectFirstInstance(indirectFirstInstance)
                 .samplerAnisotropy(supported.samplerAnisotropy()).fillModeNonSolid(supported.fillModeNonSolid())
                 .independentBlend(supported.independentBlend()).logicOp(supported.logicOp())
-                .vertexPipelineStoresAndAtomics(vertexStores).fragmentStoresAndAtomics(fragmentStores).shaderStorageImageExtendedFormats(storageFormats));
+                .vertexPipelineStoresAndAtomics(vertexStores).fragmentStoresAndAtomics(fragmentStores).shaderStorageImageExtendedFormats(storageFormats).geometryShader(geometryShaders));
             var enabledDraw=VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default().shaderDrawParameters(draw.shaderDrawParameters());
             if(subset)enabledDraw.pNext(portability.enabled(stack).address());
             deviceInfo.pNext(enabledDraw.address());
@@ -250,6 +250,8 @@ public final class VulkanContext implements AutoCloseable {
     public boolean fragmentStores() { requireOwner(); return fragmentStores; }
     /** Storage images may use the small and packed formats, such as r8ui and r11f_g11f_b10f. */
     public boolean storageFormats() { requireOwner(); return storageFormats; }
+    /** Shader packs' geometry programs need the stage; without it their draws are dropped. */
+    public boolean geometryShaders() { requireOwner(); return geometryShaders; }
     public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
     /** Largest storage buffer range one descriptor may bind. */
     public long maxStorageBufferRange() { requireOwner(); return maxStorageBufferRange; }

@@ -58,7 +58,7 @@ final class BlazePackDraw implements BlazeProgramShape {
         this.program = program;
         this.sectioned = sectioned;
         shadow = program.stage() == CompiledShaderPack.Stage.SHADOW;
-        code = new BlazeProgramCompiler.Program(compiled.vertex(), compiled.fragment(), compiled.descriptors());
+        code = new BlazeProgramCompiler.Program(compiled.vertex(), compiled.geometry(), compiled.fragment(), compiled.descriptors(), compiled.primitive());
         ProgramBindings bindings = code.bindings();
         values = new UniformBlock(bindings);
         bytes = ByteBuffer.allocateDirect(Math.max(16, bindings.uniformBytes())).order(ByteOrder.nativeOrder());

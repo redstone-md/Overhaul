@@ -281,6 +281,7 @@ public final class BlazeRenderer implements AutoCloseable {
         requireOpen();if(mesh.state().indexCount()==0)return null;
         try{return new BlazePass(this,target,mesh,shader,state.snapshot());}
         catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");return null;}
+        catch(GeometryMismatch failure){BlazeGlBoundary.reportOnce("geometry "+failure.getMessage(),"A geometry program's draw was dropped: "+failure.getMessage());return null;}
     }
     void queue(BlazePass pass){requireOpen();BlazeStats.pass();queue.add(pass,0);}
     /** A draw whose raster state is not the game's, as the light camera's are. */
@@ -293,11 +294,13 @@ public final class BlazeRenderer implements AutoCloseable {
             BlazePass pass=new BlazePass(this,target,mesh,shader,snapshot);BlazeStats.pass();BlazeStats.capture(start);queue.add(pass,0);
         }
         catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");}
+        catch(GeometryMismatch failure){BlazeGlBoundary.reportOnce("geometry "+failure.getMessage(),"A geometry program's draw was dropped: "+failure.getMessage());}
     }
 
     NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program,BlazeMeshState mesh,
             BlazeDrawState.Snapshot draw,BlazeTarget target,long descriptorLayout){
         int topology=mesh.topology();
+        if(program.geometry()!=null)checkGeometry(program,topology);
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
         // Consecutive draws mostly repeat the same inputs; the same objects give the same key, so skip building and hashing it.
         if(lastPipeline!=null&&program==lastProgram&&mesh.layout()==lastLayout&&topology==lastTopology&&draw==lastDraw&&target==lastTarget)return lastPipeline;
@@ -306,9 +309,7 @@ public final class BlazeRenderer implements AutoCloseable {
         lastPipeline=null;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
         BlazeProgramShape shape=shapes.get(program);
-        var description=new NativeGraphicsPipeline.Description(List.of(
-                new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",program.vertex().directBuffer()),
-                new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",program.fragment().directBuffer())),
+        var description=new NativeGraphicsPipeline.Description(stages(program),
                 shape!=null?shape.bindings(mesh.layout()):List.of(new NativeGraphicsPipeline.Binding(0,mesh.layout().stride(),0)),
                 shape!=null?shape.attributes(mesh.layout()):new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
@@ -317,6 +318,26 @@ public final class BlazeRenderer implements AutoCloseable {
         try{pipelines.put(key,pipeline);}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
         return remember(program,mesh,topology,draw,target,pipeline);
     }
+    private static List<NativeGraphicsPipeline.Shader> stages(BlazeProgramCompiler.Program program){
+        var vertex=new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT,"main",program.vertex().directBuffer());
+        var fragment=new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT,"main",program.fragment().directBuffer());
+        if(program.geometry()==null)return List.of(vertex,fragment);
+        return List.of(vertex,new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_GEOMETRY_BIT,"main",program.geometry().directBuffer()),fragment);
+    }
+    /** A geometry stage reads whole primitives of one kind; the draw has to assemble that kind. */
+    private void checkGeometry(BlazeProgramCompiler.Program program,int topology){
+        if(!context.geometryShaders())throw new GeometryMismatch("the device has no geometry shaders");
+        var wanted=program.primitive();
+        boolean fits=switch(wanted){
+            case TRIANGLES->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP||topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+            case LINES->topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+            case POINTS->topology==VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+            case LINES_ADJACENCY,TRIANGLES_ADJACENCY->false;
+        };
+        if(!fits)throw new GeometryMismatch(wanted.name().toLowerCase(java.util.Locale.ROOT)+" input for topology "+topology);
+    }
+    /** A draw a geometry program cannot run; the draw is dropped and reported once. */
+    static final class GeometryMismatch extends UnsupportedOperationException{GeometryMismatch(String message){super(message);}}
     private NativeGraphicsPipeline remember(BlazeProgramCompiler.Program program,BlazeMeshState mesh,int topology,
             BlazeDrawState.Snapshot draw,BlazeTarget target,NativeGraphicsPipeline pipeline){
         lastProgram=program;lastLayout=mesh.layout();lastTopology=topology;lastDraw=draw;lastTarget=target;lastPipeline=pipeline;

@@ -15,12 +15,20 @@ public final class BlazeProgramCompiler implements AutoCloseable {
     private final ShadercCompiler compiler = new ShadercCompiler();
     private final PackProgramTranslator translator = new PackProgramTranslator();
 
-    public record Program(SpirvBinary vertex, SpirvBinary fragment, ProgramBindings bindings) {
+    /** {@code geometry} is null for the usual two-stage program; {@code primitive} is then null too. */
+    public record Program(SpirvBinary vertex, SpirvBinary geometry, SpirvBinary fragment, ProgramBindings bindings,
+                          dev.overhaul.shader.compat.PackGeometryInterface.Primitive primitive) {
+        public Program(SpirvBinary vertex, SpirvBinary fragment, ProgramBindings bindings) {
+            this(vertex, null, fragment, bindings, null);
+        }
+
         /**
-         * Pipeline caches hash a program per draw. Binaries compare by identity, so equal programs share both binaries
+         * Pipeline caches hash a program per draw. Binaries compare by identity, so equal programs share their binaries
          * and this agrees with equals without walking every binding map.
          */
-        @Override public int hashCode() { return 31 * vertex.hashCode() + fragment.hashCode(); }
+        @Override public int hashCode() {
+            return 31 * (31 * vertex.hashCode() + java.util.Objects.hashCode(geometry)) + fragment.hashCode();
+        }
     }
 
     public synchronized Program compile(String name, String vertex, String fragment,
