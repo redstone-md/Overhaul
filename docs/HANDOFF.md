@@ -68,15 +68,15 @@ key that is off.
 | --- | --- | --- |
 | Spectator inside a hill, 0 110 0 | 7.0 ms to about 5.9 ms over the CPU commits | About 8050 sections in about 2455 indirect draws |
 | Horizon view, Iris with Sodium | 7.7 ms | Baseline for the 2x target, so the target is 3.85 ms |
-| Horizon view, Overhaul | about 4.16 ms | 4213 sections in about 1250 indirect draws, 40 passes; 1.85x |
+| Horizon view, Overhaul | about 3.6 ms (F3 counter) | 4213 sections in about 1250 indirect draws, 40 passes; 2.05x |
 
 The fairest comparison reads the F3 counter in both, runs interleaved, two runs each
 (`fpsbench.ps1`, see below). Latest numbers:
 
 | View | Overhaul | Iris with Sodium | Ratio |
 | --- | --- | --- | --- |
-| Horizon | about 259 fps | about 135 fps | 1.92x |
-| Looking down | about 244 to 251 fps | about 132 fps | 1.85x to 1.90x |
+| Horizon | about 277 fps | about 135 fps | 2.05x |
+| Looking down | about 254 fps | about 127 fps | 2.0x |
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
 3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
@@ -114,17 +114,17 @@ Experiments that did not help, all reverted:
 
 The percentages are self time.
 
-- `BlazeSectionBatch.append`, about 6%: cache misses on mesh fields per section.
-- `Int2ObjectOpenHashMap.get` in `BlazeGlBuffers.device`, about 3.5%: two lookups per Distant Horizons container.
-- `BlazePackUniforms.fill`, about 4% plus string hashing: uniforms are found by name.
-- `PackFrameGraph.create` / `VulkanRenderGraph`, about 6%: the graph is rebuilt every frame.
-  A timing probe puts it at about 27 µs for each of five builds, about 0.14 ms per frame.
+- `BlazeSectionBatch.run` and `BlazeSectionRun.holds`, about 11%: cache misses chasing each
+  section's mesh and then its draw run.
+- `PalettedContainer.get`, about 5%: vanilla block lookups.
+- `BlazePackShadows.tighten`, about 3%: kept casters tested against the light frustum.
+- `Int2ObjectOpenHashMap.get` in `BlazeGlBuffers.device`, about 2.5%: lookups per Distant Horizons container.
 
-Fixed since the previous profile: the buffer pool picks the best fit by binary search over a
-sorted array, section runs are hashed by all four keys (the chain by vertex buffer was
-quadratic within a page, `run` fell from 11% to 3.5%), F3 counts rendered sections from the
-layer scan instead of walking every section, the GL buffer maps are unboxed, and each shadow
-layer keeps its own caster list and draws through the tight frustum.
+Fixed since the previous profile: the buffer pool keeps free ranges in sorted long arrays
+instead of a TreeMap (`poolRanges`), each uniform block remembers which source answers each
+name (`uniformPlans`), kept shadow casters are tested a column at a time (`shadowColumns`),
+pass graph shapes are validated once (`packGraphShapes`), F3 text is gathered at 10 Hz,
+and sections find their draw run through a key their mesh shares.
 
 The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
 own debug string.
@@ -136,4 +136,4 @@ own debug string.
 - Sky mapping.
 - A crash in OpenAL.
 - Hi-Z occlusion on the GPU.
-- With F3 open, about 0.1 to 0.2 ms of GPU time stands between 1.9x and the 2x target. Without F3 it is past 2x.
+- With F3 open the 2x target is reached (2.05x horizon, 2.0x looking down) but with little margin; GPU clock modes still swing runs by about 5%.
