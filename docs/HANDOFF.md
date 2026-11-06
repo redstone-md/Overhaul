@@ -17,7 +17,15 @@ gradlew -p platform-adapters/minecraft -Ptarget=neoforge-1.21.1 -PblazeBackend \
 
 The jar is
 `platform-adapters/minecraft/build/neoforge-1.21.1-blaze/libs/overhaul-neoforge-1.21.1-blaze-client-windows-0.1.0-SNAPSHOT.jar`.
-`-Ptarget=forge-1.20.1 -PblazeBackend compileJava` checks the 1.20.1 sources (`blaze120`).
+Every Blaze target compiles: `neoforge-1.21.1`, `forge-1.21.1`, `fabric-1.21.1`,
+`fabric-1.20.1` and `forge-1.20.1`. For Fabric, run `-Ptarget=fabric-1.21.1 -PblazeBackend assemble`.
+The remapped jar is in `build/fabric-1.21.1-blaze/libs/` and needs Fabric Loader 0.20.1 or later.
+
+| Target | Checked at runtime |
+| --- | --- |
+| NeoForge 1.21.1 | Yes, with Complementary, BSL and Distant Horizons |
+| Fabric 1.21.1 | Yes, vanilla and Complementary, in the Prism instance `Overhaul Fabric Test` |
+| Forge 1.21.1, Fabric 1.20.1, Forge 1.20.1 | Compile only, no test instance yet |
 
 ## Source layout
 
@@ -25,6 +33,12 @@ The jar is
 | --- | --- |
 | `blazeBackend` | Version-neutral renderer: section batches, buffer pool, mesh state, DH depth, mixins on Blaze3D |
 | `blaze121` / `blaze120` | Version-specific mixins and the pack frame (`blaze/shader`: uniforms, shadows, frame graph) |
+| `blaze121Neoforge` / `blaze121Forge` / `blaze121Fabric` | `BlazeLoader121`, the few calls that differ by loader, and loader-only mixins such as the NeoForge early window |
+
+The build adds a `<tier><Loader>` source set when its folder exists. Loader-only mixins go under
+`loaderMixins` in `gradle/blaze-backend.gradle`. Forge runs the mixin annotation processor, so
+`@At` INVOKE targets need full descriptors and one injector may not name two methods with the same name.
+A mixin class cannot be called from other code; put shared logic in a plain class.
 
 Each optimisation is a `BlazeOptimization` key. You can switch one off in
 `config/overhaul-optimizations.properties` (`key=false`) or with
@@ -97,6 +111,7 @@ The percentages are self time.
 - `Int2ObjectOpenHashMap.get` in `BlazeGlBuffers.device`, about 3.5%: two lookups per Distant Horizons container.
 - `BlazePackUniforms.fill`, about 4% plus string hashing: uniforms are found by name.
 - `PackFrameGraph.create` / `VulkanRenderGraph`, about 6%: the graph is rebuilt every frame.
+  A timing probe puts it at about 27 µs for each of five builds, about 0.14 ms per frame.
 
 Fixed since the previous profile: the buffer pool picks the best fit by binary search over a
 sorted array, section runs are hashed by all four keys (the chain by vertex buffer was
@@ -114,5 +129,5 @@ own debug string.
 - Sky mapping.
 - A crash in OpenAL.
 - Hi-Z occlusion on the GPU.
-- Running the remaining versions and loaders, beyond NeoForge 1.21.1 and a compile of Forge 1.20.1.
+- Runtime checks of Forge 1.21.1, Fabric 1.20.1 and Forge 1.20.1. All three compile.
 - With F3 open, about 0.1 to 0.2 ms of GPU time stands between 1.9x and the 2x target. Without F3 it is past 2x.
