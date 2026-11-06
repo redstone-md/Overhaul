@@ -75,11 +75,12 @@ The fairest comparison reads the F3 counter in both, runs interleaved, two runs 
 
 | View | Overhaul | Iris with Sodium | Ratio |
 | --- | --- | --- | --- |
-| Horizon | about 266 fps | about 123 fps | 2.16x |
-| Looking down | about 262 fps | about 117 fps | 2.24x |
+| Horizon | about 274 fps | about 130 fps | 2.11x |
+| Looking down | about 256 fps | about 127 fps | 2.02x |
 
-These are with F3 open, Complementary and Distant Horizons, measured on 2026-11-06 after the
-optimistic DH stamp reads; the Iris column is from the same day. An earlier
+These are with F3 open, Complementary and Distant Horizons, run back to back on 2026-11-06
+(Iris in `Overhaul Baseline`, then Overhaul). One looking-down sample of five dropped to 232;
+without it that view is 262, 2.06x. An earlier
 pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
@@ -134,6 +135,13 @@ through interned names, pack draws are looked up without building key strings, p
 by their binaries, and Distant Horizons buffer state is read under optimistic stamps instead of
 two read locks per container.
 
+Pack blits cache their format features, free descriptor sets are a primitive stack, and repeated
+draw inputs reuse the last pipeline without building its key.
+
+The render thread is no longer the limit. In a 20 s JFR at the horizon it had about 185 Java
+samples against 92 native ones, and 62% of the native samples are `vkWaitForFences` in
+`FrameRing.awaitSlot`, the CPU waiting for the GPU. More FPS has to come from GPU time.
+
 The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
 own debug string.
 
@@ -149,5 +157,5 @@ own debug string.
 - GPU occlusion (`gpuOcclusion`) is in but off by default: a compute pass tests each section against the newest
   queued depth tiles and zeroes its instance count. With Complementary and F3 it measured on par with the CPU test
   (horizon about 238 fps both ways, looking down 218 on vs 228 off), so terrain stays on the CPU readback test.
-- With F3 open the 2x target is reached (2.16x horizon, 2.24x looking down). The run is GPU-bound, so GPU clock
+- With F3 open the 2x target is reached (2.11x horizon, 2.02x looking down, back to back). The run is GPU-bound, so GPU clock
   modes still swing single runs by about 5 to 10%.
