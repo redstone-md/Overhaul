@@ -106,6 +106,7 @@ final class BlazePackShadows {
         cast(0, "shadow_solid", position.x, position.y, position.z);
         cast(1, "shadow_cutout", position.x, position.y, position.z);
         cast(2, "shadow_cutout", position.x, position.y, position.z);
+        renderer.gpuMark("shadowOpaque");
         runtime.snapshotOpaqueShadow(renderer.packCommands());
         cast(3, "shadow_water", position.x, position.y, position.z);
         runtime.finishShadows(renderer.packCommands(), frame, uniforms);
