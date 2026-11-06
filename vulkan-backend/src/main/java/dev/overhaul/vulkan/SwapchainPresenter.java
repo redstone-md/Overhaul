@@ -346,6 +346,8 @@ public final class SwapchainPresenter implements AutoCloseable {
         requireOpen();if(swapchain==VK_NULL_HANDLE)throw new IllegalStateException("Surface has no active swapchain");return activePresentMode;
     }
     public boolean needsResize() { requireOpen(); return needsResize; }
+    /** True while nothing can be presented until {@link #configure} builds a new swapchain. */
+    public boolean suspended() { requireOpen(); return suspended; }
     /** Nonzero-timeout native frame-fence wait invocations, not a duration or a count of actual stalls. */
     public long blockingWaitCalls(){context.requireOwner();return frames.blockingWaitCalls();}
 
