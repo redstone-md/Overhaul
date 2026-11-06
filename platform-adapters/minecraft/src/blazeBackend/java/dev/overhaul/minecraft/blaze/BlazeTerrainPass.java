@@ -102,6 +102,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
         int[] clip = BlazePass.clip(state, target);
         if (clip == null || draws.isEmpty()) return;
         for (BlazeTextures.Sampled sample : samples) {
+            if (sample.general()) continue;
             GpuImageView view = sample.view();
             images.transition(command, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }

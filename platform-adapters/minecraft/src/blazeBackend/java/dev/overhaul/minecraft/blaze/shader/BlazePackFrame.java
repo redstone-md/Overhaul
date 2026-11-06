@@ -201,7 +201,8 @@ public final class BlazePackFrame implements AutoCloseable {
             height = targetHeight;
             uniforms.resetHistory();
             BlazePackRequest.report("Active: " + configuration.pack().getFileName() + ", compiled in " + (System.nanoTime() - started) / 1_000_000 + " ms");
-            LOG.info("Shader pack installed: {} ({}x{}) in {} ms", configuration.pack(), targetWidth, targetHeight, (System.nanoTime() - started) / 1_000_000);
+            LOG.info("Shader pack installed: {} ({}x{}) in {} ms; {} compute programs, {} images", configuration.pack(), targetWidth, targetHeight,
+                    (System.nanoTime() - started) / 1_000_000, compiled.computes().size(), compiled.images().images().size());
         }
     }
 
