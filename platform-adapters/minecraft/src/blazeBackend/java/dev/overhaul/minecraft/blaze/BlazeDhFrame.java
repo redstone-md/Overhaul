@@ -98,7 +98,7 @@ public final class BlazeDhFrame {
     }
 
     /** DH shares one quad index buffer between containers: looked up once per pass instead of once per container. */
-    private static int lastIndexName;
+    private static int lastIndexName, lastIndexGeneration;
     private static dev.overhaul.vulkan.GpuBuffer lastIndexBuffer;
 
     private static void add(BlazeRenderer renderer, BlazeGlBuffers buffers, BlazeSectionBatch batch, GLVertexBuffer vertices, float x, float y, float z) {
@@ -110,9 +110,12 @@ public final class BlazeDhFrame {
             if (count == 0 || vertices.getId() == 0 || indices.getId() == 0) return;
             var vertexBuffer = buffers.device(renderer, vertices.getId());
             int indexName = indices.getId();
-            if (indexName != lastIndexName) {
+            // DH grows the shared buffer in place, so a new generation means the cached device buffer may be retired.
+            int generation = buffers.generation();
+            if (indexName != lastIndexName || generation != lastIndexGeneration || lastIndexBuffer == null) {
                 lastIndexBuffer = buffers.device(renderer, indexName);
                 lastIndexName = indexName;
+                lastIndexGeneration = generation;
             }
             var indexBuffer = lastIndexBuffer;
             if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);

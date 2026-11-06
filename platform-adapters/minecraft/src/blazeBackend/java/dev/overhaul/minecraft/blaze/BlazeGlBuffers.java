@@ -27,6 +27,10 @@ final class BlazeGlBuffers {
 
     private final Int2ObjectOpenHashMap<Store> stores = new Int2ObjectOpenHashMap<>();
     private final Int2IntOpenHashMap bindings = new Int2IntOpenHashMap();
+    /** Bumped whenever a buffer's device storage may be replaced, so callers can cache a {@link #device} result. */
+    private volatile int generation;
+
+    int generation() { return generation; }
 
     /** A name argument that selects the buffer: either the target's current binding or the object itself. */
     private interface Selector { int name(Arguments arguments); }
@@ -128,8 +132,9 @@ final class BlazeGlBuffers {
         store.address = 0;
     }
 
-    private static void releaseDevice(Store store) {
+    private void releaseDevice(Store store) {
         if (store.device == null) return;
+        generation++;
         store.owner.retireGlDeviceBuffer(store.device);
         store.device = null;
         store.owner = null;
