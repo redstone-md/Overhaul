@@ -34,7 +34,7 @@ final class PackBooleanOptions {
         return result.append(source, copied, source.length()).toString();
     }
 
-    private static boolean blockBefore(String source, int from, int end, boolean block) {
+    static boolean blockBefore(String source, int from, int end, boolean block) {
         for (int index = from; index < end; index++) {
             char value = source.charAt(index);
             char next = index + 1 < end ? source.charAt(index + 1) : '\0';
