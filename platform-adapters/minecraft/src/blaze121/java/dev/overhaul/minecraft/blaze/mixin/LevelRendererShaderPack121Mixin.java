@@ -55,7 +55,9 @@ abstract class LevelRendererShaderPack121Mixin {
 
     @Inject(method = "renderLevel", at = @At("RETURN"))
     private void overhaul$finishPack(DeltaTracker delta, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f view, Matrix4f projection, CallbackInfo callback) {
-        if (overhaul$pack != null) overhaul$pack.finish();
+        if (overhaul$pack == null) return;
+        overhaul$pack.hand(game, camera, delta.getGameTimeDeltaPartialTick(true), view);
+        overhaul$pack.finish();
     }
 
     @Inject(method = "onResourceManagerReload", at = @At("TAIL"))

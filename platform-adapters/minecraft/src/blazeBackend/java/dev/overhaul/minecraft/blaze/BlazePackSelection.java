@@ -19,6 +19,13 @@ final class BlazePackSelection {
         };
     }
 
+    /** The first-person hand's stand-in: translucent layers go to the hand's water program, as Iris sorts them. */
+    static String handProgram(String shader) {
+        String world = program(shader);
+        if (world == null) return null;
+        return world.equals("gbuffers_water") || world.equals("gbuffers_entities_translucent") ? "gbuffers_hand_water" : "gbuffers_hand";
+    }
+
     /** The block outline and debug lines: no pack program draws them, and the pack's passes would paint over them. */
     static boolean onTop(String shader) {
         return "rendertype_lines".equals(shader);

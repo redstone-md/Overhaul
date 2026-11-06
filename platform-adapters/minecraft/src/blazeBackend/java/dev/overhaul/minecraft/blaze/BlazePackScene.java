@@ -47,7 +47,7 @@ public final class BlazePackScene implements AutoCloseable {
     private BlazePackDraw caster;
     private BlazeDrawState.Snapshot shadowRaster;
     private int phase;
-    private boolean open, opaqueDone, weather;
+    private boolean open, opaqueDone, weather, hand;
 
     public BlazePackScene(BlazeRenderer renderer, CompiledShaderPack pack, PackGraphRuntime runtime, PackGraphRuntime.Uniforms uniforms) {
         this.renderer = renderer;
@@ -105,6 +105,7 @@ public final class BlazePackScene implements AutoCloseable {
     public void end() {
         open = false;
         weather = false;
+        hand = false;
     }
 
     /** Queues the draws held back while the frame was open, over the image the pack's last pass left in the main target. */
@@ -119,6 +120,11 @@ public final class BlazePackScene implements AutoCloseable {
     /** Brackets the game's rain and snow, which the pack draws with gbuffers_weather. */
     public void weather(boolean drawing) {
         weather = drawing;
+    }
+
+    /** Brackets the first-person hand, which the pack draws with gbuffers_hand and gbuffers_hand_water. */
+    public void hand(boolean drawing) {
+        hand = drawing;
     }
 
     public boolean castsShadows() {
@@ -168,7 +174,7 @@ public final class BlazePackScene implements AutoCloseable {
                 return;
             } catch (RuntimeException failure) {
                 BlazeGlBoundary.reportOnce("pack program " + draw.program.name(), "Pack program " + draw.program.name() + " cannot draw " + shader + ", which keeps the game's shader: " + failure);
-                forget(shader);
+                forget(hand ? "hand:" + shader : shader);
             }
         }
         renderer.draw(mesh, plain(), game);
@@ -191,12 +197,13 @@ public final class BlazePackScene implements AutoCloseable {
     }
 
     private BlazePackDraw select(String shader) {
-        BlazePackDraw draw = byShader.get(shader);
-        if (draw != null || byShader.containsKey(shader)) return draw;
-        String wanted = BlazePackSelection.program(shader);
+        String key = hand ? "hand:" + shader : shader;
+        BlazePackDraw draw = byShader.get(key);
+        if (draw != null || byShader.containsKey(key)) return draw;
+        String wanted = hand ? BlazePackSelection.handProgram(shader) : BlazePackSelection.program(shader);
         var program = wanted == null ? null : PackProgramFallbacks.resolve(wanted, programs.keySet()).map(programs::get).orElse(null);
         if (program != null) draw = draw(program);
-        byShader.put(shader, draw);
+        byShader.put(key, draw);
         return draw;
     }
 

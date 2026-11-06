@@ -9,7 +9,9 @@ import java.util.Map;
  * PBR maps are stitched, and IS_IRIS stays undefined because that branch reads uniforms only Iris supplies.
  */
 public final class PackBuiltinMacros {
-    private static final String GLSL_VERSION = "450", HAND_DEPTH = "0.125";
+    private static final String GLSL_VERSION = "450";
+    /** How far a loader squeezes the hand's depth around the middle of the range, which packs read to find the hand. */
+    public static final String HAND_DEPTH = "0.125";
 
     private PackBuiltinMacros() {}
 

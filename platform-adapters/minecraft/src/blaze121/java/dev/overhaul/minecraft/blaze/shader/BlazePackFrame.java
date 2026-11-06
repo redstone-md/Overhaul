@@ -116,6 +116,19 @@ public final class BlazePackFrame implements AutoCloseable {
         }
     }
 
+    /** Draws the first-person hand through the pack's hand programs, before its composites run over the frame. */
+    public void hand(net.minecraft.client.renderer.GameRenderer game, Camera camera, float partial, Matrix4f viewRotation) {
+        if (!active || scene == null || !BlazePackHand.wanted(minecraft, game)) return;
+        scene.hand(true);
+        try {
+            BlazePackHand.draw(minecraft, game, camera, partial, viewRotation);
+        } catch (RuntimeException failure) {
+            fail(installed, failure);
+        } finally {
+            if (scene != null) scene.hand(false);
+        }
+    }
+
     public void finish() {
         if (!active) return;
         active = false;
