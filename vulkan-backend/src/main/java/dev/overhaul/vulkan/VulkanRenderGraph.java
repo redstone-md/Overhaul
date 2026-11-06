@@ -96,9 +96,10 @@ public final class VulkanRenderGraph implements AutoCloseable {
         try {
             commands=ownsCommands?new ImmediateCommands(context):borrowedCommands;
             Set<String> expectedImports=new HashSet<>();
+            Map<String,Integer> usages=requiredUsages();
             for (RenderGraph.Resource resource:graph.resources().values()) {
                 GpuImageView view;
-                int flags=requiredUsage(resource.name());
+                int flags=usages.getOrDefault(resource.name(),0);
                 if(resource.imported()){
                     expectedImports.add(resource.name());view=imports.get(resource.name());
                     if(view==null)throw new IllegalArgumentException("Missing imported graph view: "+resource.name());
@@ -115,11 +116,11 @@ public final class VulkanRenderGraph implements AutoCloseable {
         } catch (RuntimeException | Error failure) { close(); throw failure; }
     }
 
-    private int requiredUsage(String name){
-        int flags=0;
-        for(Operation operation:operations.values()){
-            Usage usage=operation.uses().get(name);if(usage!=null)flags|=usage.creationFlag;
-        }
+    /** Creation flags per resource in one sweep over the passes; graphs are built every frame. */
+    private Map<String,Integer> requiredUsages(){
+        Map<String,Integer> flags=new HashMap<>();
+        for(Operation operation:operations.values())
+            for(Map.Entry<String,Usage> use:operation.uses().entrySet())flags.merge(use.getKey(),use.getValue().creationFlag,(a,b)->a|b);
         return flags;
     }
     private void bind(RenderGraph.Resource resource,GpuImageView view,int flags){
