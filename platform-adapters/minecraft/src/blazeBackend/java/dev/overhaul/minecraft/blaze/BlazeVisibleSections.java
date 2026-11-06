@@ -3,22 +3,22 @@ package dev.overhaul.minecraft.blaze;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import java.util.Arrays;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection;
 
 /**
  * Per-frame views of the visible section list, so its long scans run once instead of once per layer.
  * Layer lists hold only sections with geometry in that layer, in visible order. The vanilla per-section checks still run on them.
+ * Each game version names its list entries differently; a subclass says how to read one.
  */
-public final class BlazeVisibleSections {
-    private static final ObjectArrayList<RenderSection> NONE=new ObjectArrayList<>(0);
-    private final ObjectArrayList<RenderSection> dirty=new ObjectArrayList<>();
+public abstract class BlazeVisibleSections<T> {
+    private static final ObjectArrayList<Object> NONE=new ObjectArrayList<>(0);
+    private final ObjectArrayList<T> dirty=new ObjectArrayList<>();
     /** By chunk layer id: this is asked several thousand times a frame. */
     private Layer[] layers=new Layer[8];
     private final Layer withBlockEntities=new Layer();
-    private ObjectArrayList<RenderSection> source;
+    private ObjectArrayList<T> source;
     private int scanned,rendered;
     private boolean tables;
-    private ObjectArrayList<RenderSection> dirtySource;
+    private ObjectArrayList<T> dirtySource;
     private int dirtySize;
     private long dirtyAt=-1,scannedAt=-1;
     private boolean missingMesh;
@@ -26,15 +26,21 @@ public final class BlazeVisibleSections {
     public static void changed(){BlazeSectionChanges.changed();}
     public static long changes(){return BlazeSectionChanges.changes();}
 
+    protected abstract boolean isDirty(T entry);
+    /** The entry's section, with its flat layer data. */
+    protected abstract BlazeSectionBuffers buffers(T entry);
+    /** The entry's layers as its compile reads now, for when no flat tables are kept. */
+    protected abstract long compiledContents(T entry);
+
     private static boolean reuse(){return BlazeOptimization.SECTION_SCAN_REUSE.on()&&BlazeOptimization.SECTION_BATCH.on();}
 
-    public ObjectArrayList<RenderSection> dirty(ObjectArrayList<RenderSection> visible){
+    public ObjectArrayList<T> dirty(ObjectArrayList<T> visible){
         long now=BlazeSectionChanges.changes();
         if(reuse()&&visible==dirtySource&&visible.size()==dirtySize&&now==dirtyAt)return dirty;
         dirty.clear();
         for(int index=0,size=visible.size();index<size;index++){
-            RenderSection section=visible.get(index);
-            if(section.isDirty())dirty.add(section);
+            T entry=visible.get(index);
+            if(isDirty(entry))dirty.add(entry);
         }
         dirtySource=visible;
         dirtySize=visible.size();
@@ -43,7 +49,7 @@ public final class BlazeVisibleSections {
     }
 
     /** Runs after pending uploads, so sections finished this frame are already in their layers. */
-    public void scan(ObjectArrayList<RenderSection> visible){
+    public void scan(ObjectArrayList<T> visible){
         boolean tables=BlazeOptimization.SECTION_TABLE.on()&&BlazeOptimization.SECTION_BATCH.on();
         long now=BlazeSectionChanges.changes();
         if(reuse()&&tables==this.tables&&now==scannedAt&&!missingMesh&&scanned(visible))return;
@@ -53,10 +59,10 @@ public final class BlazeVisibleSections {
         withBlockEntities.cursor=0;
         int rendered=0;
         for(int index=0,size=visible.size();index<size;index++){
-            RenderSection section=visible.get(index);
-            BlazeSectionBuffers flat=tables?(BlazeSectionBuffers)(Object)section:null;
-            long contents=tables?flat.overhaul$contents():((BlazeCompiledContents)section.getCompiled()).overhaul$contents();
-            if((contents&BlazeCompiledContents.BLOCK_ENTITIES)!=0)withBlockEntities.put(section);
+            T entry=visible.get(index);
+            BlazeSectionBuffers flat=tables?buffers(entry):null;
+            long contents=tables?flat.overhaul$contents():compiledContents(entry);
+            if((contents&BlazeCompiledContents.BLOCK_ENTITIES)!=0)withBlockEntities.put(entry);
             contents&=~(BlazeCompiledContents.BLOCK_ENTITIES|BlazeCompiledContents.KNOWN);
             if(contents==0)continue;
             rendered++;
@@ -65,9 +71,9 @@ public final class BlazeVisibleSections {
                 if(tables){
                     BlazeMesh mesh=flat.overhaul$mesh(id);
                     if(mesh==null)missingMesh=true;
-                    layerOf(id).put(section,mesh,flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
+                    layerOf(id).put(entry,mesh,flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
                 }
-                else layerOf(id).put(section);
+                else layerOf(id).put(entry);
             }
         }
         for(Layer layer:layers)if(layer!=null)layer.sections.size(layer.cursor);
@@ -79,55 +85,57 @@ public final class BlazeVisibleSections {
     }
 
     /** A list swapped or changed since the scan is walked whole, as vanilla would. */
-    public ObjectArrayList<RenderSection> layer(ObjectArrayList<RenderSection> visible,RenderType type){
+    @SuppressWarnings("unchecked")
+    public ObjectArrayList<T> layer(ObjectArrayList<T> visible,RenderType type){
         if(!scanned(visible))return visible;
         int id=BlazeChunkLayers.id(type);
         Layer layer=id<0||id>=layers.length?null:layers[id];
-        return layer==null?NONE:layer.sections;
+        return (ObjectArrayList<T>)(layer==null?NONE:layer.sections);
     }
 
     /** A section compiled after the scan shows its block entities a frame later, as its mesh does. */
-    public ObjectArrayList<RenderSection> blockEntitySections(ObjectArrayList<RenderSection> visible){
-        return scanned(visible)?withBlockEntities.sections:visible;
+    @SuppressWarnings("unchecked")
+    public ObjectArrayList<T> blockEntitySections(ObjectArrayList<T> visible){
+        return scanned(visible)?(ObjectArrayList<T>)withBlockEntities.sections:visible;
     }
 
     /** The scan's flat view of a layer, or null when it has none or its list no longer stands. */
-    public Layer table(ObjectArrayList<RenderSection> visible,RenderType type){
+    public Layer table(ObjectArrayList<T> visible,RenderType type){
         if(!tables||!scanned(visible))return null;
         int id=BlazeChunkLayers.id(type);
         return id<0||id>=layers.length||layers[id]==null?Layer.EMPTY:layers[id];
     }
 
     /** Sections with geometry in any layer, as the debug screen counts them every frame; -1 when the list no longer stands. */
-    public int rendered(ObjectArrayList<RenderSection> visible){
+    public int rendered(ObjectArrayList<T> visible){
         return scanned(visible)?rendered:-1;
     }
 
     private Layer layerOf(int id){
-        if(id>=layers.length)layers=java.util.Arrays.copyOf(layers,id+1);
+        if(id>=layers.length)layers=Arrays.copyOf(layers,id+1);
         Layer layer=layers[id];
         if(layer==null)layers[id]=layer=new Layer();
         return layer;
     }
 
     /** Whether {@link #layer} would answer from a scan, so its sections are known to have geometry in the layer asked about. */
-    public boolean scanned(ObjectArrayList<RenderSection> visible){
+    public boolean scanned(ObjectArrayList<T> visible){
         return visible==source&&visible.size()==scanned;
     }
 
     /** Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier. */
     public static final class Layer {
         private static final Layer EMPTY=new Layer();
-        private final ObjectArrayList<RenderSection> sections=new ObjectArrayList<>();
+        private final ObjectArrayList<Object> sections=new ObjectArrayList<>();
         private int cursor;
         private BlazeMesh[] meshes=new BlazeMesh[256];
         private int[] origins=new int[3*256];
-        private void put(RenderSection section){
+        private void put(Object section){
             if(cursor==sections.size())sections.add(section);
             else if(sections.get(cursor)!=section)sections.set(cursor,section);
             cursor++;
         }
-        private void put(RenderSection section,BlazeMesh mesh,int x,int y,int z){
+        private void put(Object section,BlazeMesh mesh,int x,int y,int z){
             int at=cursor;
             put(section);
             if(at==meshes.length){

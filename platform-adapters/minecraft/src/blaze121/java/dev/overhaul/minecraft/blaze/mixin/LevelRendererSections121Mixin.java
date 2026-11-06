@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
 import dev.overhaul.minecraft.blaze.BlazeLayerLists;
 import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
+import dev.overhaul.minecraft.blaze.BlazeVisibleSections121;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -21,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(LevelRenderer.class)
 abstract class LevelRendererSections121Mixin implements BlazeLayerLists {
     @Shadow private ObjectArrayList<RenderSection> visibleSections;
-    @Unique private final BlazeVisibleSections overhaul$sections=new BlazeVisibleSections();
+    @Unique private final BlazeVisibleSections<RenderSection> overhaul$sections=new BlazeVisibleSections121();
 
     @Override public boolean overhaul$layerListed(){
         return overhaul$sections.scanned(visibleSections);

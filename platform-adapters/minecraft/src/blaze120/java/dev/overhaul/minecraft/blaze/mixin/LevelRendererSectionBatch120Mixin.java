@@ -4,6 +4,8 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
+import dev.overhaul.minecraft.blaze.BlazeLayerLists;
+import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
@@ -49,9 +51,20 @@ abstract class LevelRendererSectionBatch120Mixin {
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
         BlazeSectionOcclusion occlusion = renderer.occlusion();
         if (occlusion != null) occlusion.prepare(x, y, z);
-        while (forward ? chunks.hasNext() : chunks.hasPrevious()) {
+        BlazeVisibleSections.Layer table = (Object) this instanceof BlazeLayerLists lists ? lists.overhaul$layerTable(layer) : null;
+        boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
+        if (table != null) {
+            for (int size = table.size(), at = 0; at < size; at++) {
+                int index = forward ? at : size - 1 - at;
+                BlazeMesh mesh = table.mesh(index);
+                if (mesh == null) continue;
+                int originX = table.originX(index), originY = table.originY(index), originZ = table.originZ(index);
+                if (occlusion != null && occlusion.hidden(originX, originY, originZ)) continue;
+                batch.add(mesh, (float) (originX - x), (float) (originY - y), (float) (originZ - z));
+            }
+        } else while (forward ? chunks.hasNext() : chunks.hasPrevious()) {
             RenderChunk chunk = (forward ? chunks.next() : chunks.previous()).overhaul$chunk();
-            if (chunk.getCompiledChunk().isEmpty(layer)) continue;
+            if (!listed && chunk.getCompiledChunk().isEmpty(layer)) continue;
             BlazeMesh mesh = ((BlazeVertexBufferAccess) chunk.getBuffer(layer)).overhaul$meshOrNull();
             if (mesh == null) continue;
             var origin = chunk.getOrigin();
