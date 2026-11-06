@@ -12,14 +12,24 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
         this(uniforms,uniformBytes,samplers,attributes,varyings,attributeTypes,ordinarySamplers(samplers));
     }
     public ProgramBindings {
-        uniforms = Map.copyOf(uniforms); samplers = Map.copyOf(samplers);
+        uniforms = interned(uniforms, uniform -> new Uniform(uniform.type().intern(), uniform.byteOffset(), uniform.byteSize()));
+        samplers = interned(samplers, value -> value);
         attributes = Map.copyOf(attributes); varyings = Map.copyOf(varyings);
         attributeTypes = Map.copyOf(attributeTypes);
-        samplerTypes=Map.copyOf(samplerTypes);
+        samplerTypes = interned(samplerTypes, String::intern);
         if(!samplerTypes.keySet().equals(samplers.keySet()))throw new IllegalArgumentException("Every sampler requires its declared type");
         for(String type:samplerTypes.values())if(!type.equals("sampler2D")&&!type.equals("sampler2DShadow"))throw new IllegalArgumentException("Unsupported sampler type: "+type);
     }
     public boolean comparisonSampler(String name){String type=samplerTypes.get(name);if(type==null)throw new IllegalArgumentException("Unknown sampler: "+name);return type.equals("sampler2DShadow");}
     private static Map<String,String> ordinarySamplers(Map<String,Integer> samplers){Map<String,String> result=new java.util.LinkedHashMap<>();for(String name:samplers.keySet())result.put(name,"sampler2D");return result;}
+    /**
+     * Names and types are looked up every frame with string literals as keys; interned, each key comparison is an
+     * identity check instead of a character compare.
+     */
+    private static <V> Map<String,V> interned(Map<String,V> source, java.util.function.UnaryOperator<V> value){
+        Map<String,V> result=new java.util.HashMap<>(source.size()*2);
+        source.forEach((name,entry)->result.put(name.intern(),value.apply(entry)));
+        return Map.copyOf(result);
+    }
     public record Uniform(String type, int byteOffset, int byteSize) {}
 }

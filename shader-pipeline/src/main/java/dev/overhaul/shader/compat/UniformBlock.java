@@ -11,10 +11,22 @@ public final class UniformBlock {
             MAT = {null, null, "mat2", "mat3", "mat4"};
     private final ProgramBindings bindings;
     private final ByteBuffer data;
+    private final String[] names;
+    private final ProgramBindings.Uniform[] ordered;
+    private int hint;
 
     public UniformBlock(ProgramBindings bindings) {
         this.bindings = Objects.requireNonNull(bindings,"bindings");
         data = ByteBuffer.allocateDirect(bindings.uniformBytes()).order(ByteOrder.nativeOrder());
+        // One spare slot keeps hint 0 valid for a block without uniforms.
+        int count = bindings.uniforms().size();
+        names = new String[Math.max(1, count)];
+        ordered = new ProgramBindings.Uniform[names.length];
+        int index = 0;
+        for (var entry : bindings.uniforms().entrySet()) {
+            names[index] = entry.getKey();
+            ordered[index++] = entry.getValue();
+        }
     }
 
     public ProgramBindings bindings() { return bindings; }
@@ -62,8 +74,17 @@ public final class UniformBlock {
         target.put(data.duplicate().clear());
     }
 
+    /** The uniform names in {@link ProgramBindings#uniforms()} key order, which callers walking that order can hint at. */
+    public String[] names() { return java.util.Arrays.copyOf(names, bindings.uniforms().size()); }
+
+    /**
+     * The next setter most likely names {@code names()[index]}: it is then found by identity instead of a map lookup.
+     * Any other name still resolves through the map.
+     */
+    public void hint(int index) { hint = index >= 0 && index < names.length ? index : 0; }
+
     private ProgramBindings.Uniform require(String name, String expectedType) {
-        ProgramBindings.Uniform uniform = bindings.uniforms().get(name);
+        ProgramBindings.Uniform uniform = names[hint] == name ? ordered[hint] : bindings.uniforms().get(name);
         if (uniform == null || !expectedType.equals(uniform.type())) throw new IllegalArgumentException("Uniform " + name + " is not " + expectedType);
         return uniform;
     }

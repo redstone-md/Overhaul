@@ -149,6 +149,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         byte[] sources = plan.sources;
         for (int index = 0; index < names.length; index++) {
             String name = names[index];
+            values.hint(index);
             switch (sources[index]) {
                 case CUSTOM -> custom.fill(plan.bound[index], values);
                 case FRAME -> frame(name, program, values);
@@ -163,7 +164,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
 
     /** Fills the block the slow way, noting which source answered each name. */
     private Plan plan(CompiledShaderPack.Program program, UniformBlock values) {
-        String[] names = values.bindings().uniforms().keySet().toArray(new String[0]);
+        String[] names = values.names();
         byte[] sources = new byte[names.length];
         PackCustomUniforms.Bound[] bound = new PackCustomUniforms.Bound[names.length];
         for (int index = 0; index < names.length; index++) {
