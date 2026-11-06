@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.shader;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
+import dev.overhaul.minecraft.blaze.BlazeSectionBounds;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
 import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.PackGraphRuntime;
@@ -31,6 +32,9 @@ final class BlazePackShadows {
     private final List<SectionRenderDispatcher.RenderSection> casters = new ArrayList<>();
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
+    private SectionRenderDispatcher.RenderSection[] indexed = new SectionRenderDispatcher.RenderSection[0];
+    private int[] origins = new int[0];
+    private int seenMoves = -1;
 
     BlazePackShadows(BlazeRenderer renderer, BlazePackScene scene, PackGraphRuntime runtime, PackShadowSettings settings) {
         this.renderer = renderer;
@@ -55,21 +59,36 @@ final class BlazePackShadows {
         runtime.finishShadows(renderer.commands(), frame, uniforms);
     }
 
+    /** The bounds test runs over a flat copy of the origins: reaching each section object for them cost most of the frame. */
     private void collect(ViewArea sections, double x, double y, double z) {
         casters.clear();
         if (sections == null) return;
+        index(sections.sections);
         // The Iris field-of-view matrix has an unusual m33, so planes taken from it would not bound what it draws.
         boolean bounded = settings.fov() == null;
         if (bounded) frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
         double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
-        for (var section : sections.sections) {
-            if (section.getCompiled() == SectionRenderDispatcher.CompiledSection.UNCOMPILED) continue;
-            var origin = section.getOrigin();
-            float minX = (float) (origin.getX() - x), minY = (float) (origin.getY() - y), minZ = (float) (origin.getZ() - z);
+        int[] origins = this.origins;
+        for (int index = 0, at = 0; index < indexed.length; index++, at += 3) {
+            float minX = (float) (origins[at] - x), minY = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
             if (Math.abs(minX + 8) > limit || Math.abs(minY + 8) > limit || Math.abs(minZ + 8) > limit) continue;
             if (bounded && !frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16)) continue;
-            casters.add(section);
+            var section = indexed[index];
+            if (section.getCompiled() != SectionRenderDispatcher.CompiledSection.UNCOMPILED) casters.add(section);
+        }
+    }
+
+    private void index(SectionRenderDispatcher.RenderSection[] all) {
+        if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return;
+        indexed = all;
+        seenMoves = BlazeSectionBounds.originMoves();
+        if (origins.length != all.length * 3) origins = new int[all.length * 3];
+        for (int index = 0; index < all.length; index++) {
+            var origin = all[index].getOrigin();
+            origins[index * 3] = origin.getX();
+            origins[index * 3 + 1] = origin.getY();
+            origins[index * 3 + 2] = origin.getZ();
         }
     }
 

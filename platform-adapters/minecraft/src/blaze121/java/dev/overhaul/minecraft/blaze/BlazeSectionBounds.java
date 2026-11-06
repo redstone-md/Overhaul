@@ -24,6 +24,11 @@ public final class BlazeSectionBounds {
         originMoves++;
     }
 
+    /** Changes whenever any section takes another place, so a copy of the origins taken at another value is stale. */
+    public static int originMoves() {
+        return originMoves;
+    }
+
     public void invalidate() {
         stale = true;
     }
