@@ -82,6 +82,8 @@ These are with F3 open, Complementary and Distant Horizons, run back to back on 
 (Iris in `Overhaul Baseline`, then Overhaul). One looking-down sample of five dropped to 232;
 without it that view is 262, 2.06x. An earlier
 pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
+A later back to back pair, after `shadowReach`, gave horizon 259 against 134 (1.93x) and looking
+down 273 against 121 (2.26x): the horizon run landed in the slow clock mode.
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
 3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
@@ -93,11 +95,11 @@ At the horizon the GPU is the limit now: about 4.0 ms of GPU work per frame and
 
 | Phase | GPU ms |
 | --- | --- |
-| Shadow | 0.69 |
-| Distant Horizons terrain | 1.0 |
-| Opaque terrain | 0.75 |
-| Deferred | 0.44 |
-| Composite | 0.83 |
+| Shadow | 0.42 (0.69 before `shadowReach`) |
+| Distant Horizons terrain | 0.99 |
+| Opaque terrain | 0.93 (0.75 in the fast clock mode) |
+| Deferred | 0.47 |
+| Composite | 0.86 |
 | Translucent | 0.08 |
 | GUI | 0.07 |
 
@@ -130,8 +132,14 @@ The percentages are self time.
 - `BlazeSectionBatch.run`, `write` and `end`, about 10 to 15%: cache misses chasing each
   section's mesh and then its draw run.
 - `PalettedContainer.get`, about 2 to 5%: vanilla block lookups.
-- `BlazePackShadows.tighten`, about 3%: kept casters tested against the light frustum.
+- `BlazeSectionOcclusion.hidden`, about 10% inclusive: eight corners projected per section.
+- Shadow caster `batch.add`, about 9% inclusive.
 - `SoftwareDepthBuffer.behind`, about 3%: the CPU occlusion test.
+
+`BlazePackShadows.tighten` is gone from the profile: the light frustum test is widened by four
+blocks and reused while the camera moves under half a block (`shadowTightReuse`). Shadow casters
+whose shadow, swept along the light, cannot reach the player's side planes are dropped from the
+shadow map (`shadowReach`), which took the shadow phase from 0.69 to 0.42 GPU ms.
 
 Fixed since the previous profile: the buffer pool keeps free ranges in sorted long arrays
 instead of a TreeMap (`poolRanges`), each uniform block remembers which source answers each
@@ -148,7 +156,8 @@ draw inputs reuse the last pipeline without building its key.
 
 The render thread is no longer the limit. In a 20 s JFR at the horizon it had about 185 Java
 samples against 92 native ones, and 62% of the native samples are `vkWaitForFences` in
-`FrameRing.awaitSlot`, the CPU waiting for the GPU. More FPS has to come from GPU time.
+`FrameRing.awaitSlot`, the CPU waiting for the GPU; the latest profile has the fence wait at about
+36% of all render thread time. More FPS has to come from GPU time.
 
 The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
 own debug string.
