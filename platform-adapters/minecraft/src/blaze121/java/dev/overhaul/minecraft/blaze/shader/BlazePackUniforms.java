@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.blaze.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.overhaul.shader.compat.FragmentAlphaTest;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -147,7 +148,8 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
                 case "overhaulTextureMatrix1" -> values.setMatrix(name, 4, program.scene() ? LIGHTMAP_MATRIX : IDENTITY);
                 case "overhaulNormalMatrix" -> values.setMatrix(name, 3, program.scene() ? normal : NORMAL_IDENTITY);
                 case "alphaTestRef" -> values.setFloat(name, program.state().alphaTest().map(test -> test.reference()).orElse(0f));
-                case "renderStage" -> values.setInt(name, PackRenderStages.of(program.name()));
+                case FragmentAlphaTest.CUTOFF -> values.setFloat(name, 0f); // each draw overwrites it
+                case "renderStage" ->values.setInt(name, PackRenderStages.of(program.name()));
                 default -> {
                     if (!celestial.fill(name, values) && !environment.fill(name, values) && !presence.fill(name, values) && !player.fill(name, values)) {
                         throw new UnsupportedShaderException("Unbound shader-pack uniform: " + name + " in " + program.name());

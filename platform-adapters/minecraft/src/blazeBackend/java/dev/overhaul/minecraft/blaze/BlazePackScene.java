@@ -140,7 +140,7 @@ public final class BlazePackScene implements AutoCloseable {
         if (draw != null) {
             try {
                 draw.prepare(phase, runtime, uniforms);
-                renderer.draw(mesh, draw.target(), draw.snapshot(game));
+                renderer.draw(mesh, draw.target(), draw.snapshot(game, BlazePackSelection.alphaCutoff(shader)));
                 return;
             } catch (RuntimeException failure) {
                 BlazeGlBoundary.reportOnce("pack program " + draw.program.name(), "Pack program " + draw.program.name() + " cannot draw " + shader + ", which keeps the game's shader: " + failure);

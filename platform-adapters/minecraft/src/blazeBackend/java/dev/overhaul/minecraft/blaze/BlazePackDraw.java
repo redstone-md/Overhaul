@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.blaze;
 
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
+import dev.overhaul.shader.compat.FragmentAlphaTest;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
@@ -33,7 +34,7 @@ final class BlazePackDraw implements BlazeProgramShape {
     private final ByteBuffer bytes;
     private final Map<String, Object> samplers = new HashMap<>();
     private final List<GameSampler> gameSamplers = new ArrayList<>();
-    private final int modelView, modelViewInverse, modelViewProjection, normalMatrix, projection, projectionInverse, textureMatrix;
+    private final int modelView, modelViewInverse, modelViewProjection, normalMatrix, projection, projectionInverse, textureMatrix, alphaCutoff;
     private final Matrix4f model = new Matrix4f(), perspective = new Matrix4f(), written = new Matrix4f(), scratch = new Matrix4f();
     private final Matrix3f normal = new Matrix3f();
     private final boolean shadow;
@@ -58,6 +59,7 @@ final class BlazePackDraw implements BlazeProgramShape {
         projection = offset(bindings, "overhaulProjection");
         projectionInverse = offset(bindings, "overhaulProjectionInverse");
         textureMatrix = offset(bindings, "overhaulTextureMatrix0");
+        alphaCutoff = offset(bindings, FragmentAlphaTest.CUTOFF);
     }
 
     /** Takes what the frame decided: swaps change targets and samples between the opaque and translucent phases. */
@@ -79,8 +81,9 @@ final class BlazePackDraw implements BlazeProgramShape {
         return target;
     }
 
-    BlazeShaderSnapshot snapshot(BlazeShaderSnapshot game) {
+    BlazeShaderSnapshot snapshot(BlazeShaderSnapshot game, float cutoff) {
         place(game);
+        if (alphaCutoff >= 0) bytes.putFloat(alphaCutoff, cutoff);
         return bound(game.samplers());
     }
 

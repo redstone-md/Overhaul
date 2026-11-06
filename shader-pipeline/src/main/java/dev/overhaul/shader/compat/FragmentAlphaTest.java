@@ -11,7 +11,26 @@ public final class FragmentAlphaTest {
     private static final Pattern OUTPUT = Pattern.compile("\\bout\\s+\\w+\\s+\\w+\\s*;");
     private static final Pattern REFERENCE=Pattern.compile("\\buniform\\s+float\\s+alphaTestRef\\s*;");
 
+    /** Per-draw cutoff for programs whose pack leaves the alpha test to the loader, as Iris does for cutout geometry. */
+    public static final String CUTOFF = "overhaulAlphaCutoff";
+    private static final String CUTOFF_ENTRY = "overhaulAlphaCutoffEntry";
+    private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version[^\\r\\n]*\\R?");
+
     private FragmentAlphaTest() {}
+
+    /** Declared before translation, so the cutoff joins the pack uniform block like any pack uniform. */
+    public static String declareCutoff(String fragment) {
+        var version = VERSION.matcher(fragment);
+        int at = version.find() ? version.end() : 0;
+        return fragment.substring(0, at) + "uniform float " + CUTOFF + ";\n" + fragment.substring(at);
+    }
+
+    /** Discards below the cutoff on the first color output; a fragment without one has nothing to test. */
+    public static String lowerCutoff(String translated) {
+        var color = COLOR.matcher(translated);
+        if (!color.find()) return translated;
+        return ShaderMainWrapper.wrap(translated, CUTOFF_ENTRY, "", "if (" + color.group(1) + ".a < " + CUTOFF + ") discard;");
+    }
     /** This value belongs to the selected material variant, not the frame-wide uniform buffer. */
     public static String lowerReference(String source,ShaderPackProperties.AlphaTest state){
         if(!REFERENCE.matcher(source).find())return source;

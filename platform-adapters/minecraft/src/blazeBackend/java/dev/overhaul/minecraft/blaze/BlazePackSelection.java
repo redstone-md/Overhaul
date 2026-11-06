@@ -16,4 +16,15 @@ final class BlazePackSelection {
             default -> shader.startsWith("rendertype_entity_") || shader.startsWith("rendertype_armor_cutout") ? "gbuffers_entities" : null;
         };
     }
+
+    /**
+     * The alpha test a pack without its own expects from the loader: the game's shaders discard below a tenth except
+     * for solid and translucent terrain, and Iris keeps that cutoff for the programs standing in for them.
+     */
+    static float alphaCutoff(String shader) {
+        return switch (shader) {
+            case "rendertype_solid", "rendertype_translucent", "rendertype_translucent_moving_block" -> 0f;
+            default -> 0.1f;
+        };
+    }
 }

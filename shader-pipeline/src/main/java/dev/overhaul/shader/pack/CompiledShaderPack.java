@@ -89,8 +89,9 @@ public final class CompiledShaderPack {
         targets.scan(fragment);
         shadow.scan(vertex);shadow.scan(fragment);
         textures.scan(vertex);textures.scan(fragment);
+        var alphaTest=discovered.state().alphaTest();
         ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
-                discovered.state().alphaTest().orElse(null));
+                alphaTest.orElse(null),stage==Stage.GBUFFER&&alphaTest.isEmpty());
         boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
         for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)
             throw new UnsupportedShaderException("Buffer flip uses the wrong output namespace: "+discovered.name()+"."+target);

@@ -42,10 +42,20 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
 
     public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,
                                              CoordinateConvention coordinates,ShaderPackProperties.AlphaTest alphaTest) {
+        return compile(name,vertex,fragment,compiler,coordinates,alphaTest,false);
+    }
+
+    /** With a dynamic cutoff the fragment also discards below {@link FragmentAlphaTest#CUTOFF}, set by each draw. */
+    public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,
+                                             CoordinateConvention coordinates,ShaderPackProperties.AlphaTest alphaTest,boolean dynamicCutoff) {
         var framebuffer = FramebufferBindings.parse(fragment);
-        var translated = new PackProgramTranslator().translate(PackShadowSettings.stripDirectives(vertex),PackShadowSettings.stripDirectives(fragment), coordinates);
+        String source=PackShadowSettings.stripDirectives(fragment);
+        if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
+        var translated = new PackProgramTranslator().translate(PackShadowSettings.stripDirectives(vertex),source, coordinates);
+        String lowered=FragmentAlphaTest.lower(translated.fragment(),alphaTest);
+        if(dynamicCutoff)lowered=FragmentAlphaTest.lowerCutoff(lowered);
         SpirvBinary compiledVertex=compiler.compile(name+".vsh",translated.vertex(),ShaderStage.VERTEX);
-        SpirvBinary compiledFragment=compiler.compile(name+".fsh",FragmentAlphaTest.lower(translated.fragment(),alphaTest),ShaderStage.FRAGMENT);
+        SpirvBinary compiledFragment=compiler.compile(name+".fsh",lowered,ShaderStage.FRAGMENT);
         return new ShaderPackProgram(compiledVertex,compiledFragment,SpirvInterface.active(translated.bindings(),compiledVertex,compiledFragment),framebuffer,coordinates,alphaTest);
     }
 

@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.shader;
 
+import dev.overhaul.shader.compat.FragmentAlphaTest;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
@@ -122,6 +123,7 @@ final class ShaderPackFrameUniforms implements PackGraphRuntime.Uniforms,PackCus
             case "overhaulTextureMatrix0"->values.setMatrix(name,4,IDENTITY);
             case "overhaulTextureMatrix1"->values.setMatrix(name,4,program.scene()?LIGHTMAP_MATRIX:IDENTITY);
             case "overhaulNormalMatrix"->values.setMatrix(name,3,program.scene()?normal:NORMAL_IDENTITY);
+            case FragmentAlphaTest.CUTOFF->values.setFloat(name,0f); // no cutoff unless a draw sets one
             case "alphaTestRef"->values.setFloat(name,program.state().alphaTest().map(test->test.reference()).orElse(0f));
             case "renderStage"->values.setInt(name,PackRenderStages.of(program.name()));
             default->{if(!shadow.fill(name,values)&&!environment.fill(name,values)&&!presence.fill(name,values)&&!player.fill(name,values))throw new UnsupportedShaderException("Unbound shader-pack uniform: "+name+" in "+program.name());}
