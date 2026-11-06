@@ -32,6 +32,7 @@ public final class HudFrameCache {
     public static volatile boolean enabled = !"false".equals(System.getProperty("overhaul.hudCache"));
 
     private static final long REFRESH_NANOS = 1_000_000_000L / Math.max(1L, Long.getLong("overhaul.hudCache.hz", 30L));
+    private static final boolean CACHES_DEBUG = Boolean.getBoolean("overhaul.hudCache.debug");
     private static final Set<ResourceLocation> LIVE_LAYERS = Set.of(VanillaGuiLayers.CAMERA_OVERLAYS, VanillaGuiLayers.CROSSHAIR);
 
     private static List<GuiLayerManager.NamedLayer> liveSource;
@@ -48,8 +49,8 @@ public final class HudFrameCache {
 
     public static void render(Gui gui, GuiGraphics graphics, DeltaTracker delta, Runnable original) {
         Minecraft minecraft = Minecraft.getInstance();
-        // The debug overlay is read as a live measurement, so it must not show stale numbers.
-        if (!enabled || minecraft.getDebugOverlay().showDebugScreen()) {
+        // The debug overlay is read as a live measurement, so it stays live unless its text refreshes slower than the cache.
+        if (!enabled || !CACHES_DEBUG && minecraft.getDebugOverlay().showDebugScreen()) {
             original.run();
             return;
         }

@@ -51,6 +51,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         BlazeOptimization.describeInFile();
         // The cache also serves builds without this frontend, so it reads a property rather than this enum.
         if (!BlazeOptimization.HUD_CACHE.on()) System.setProperty("overhaul.hudCache", "false");
+        // F3 text already refreshes at 10 Hz here, so a 30 Hz HUD shows nothing staler.
+        if (BlazeOptimization.DEBUG_TEXT.on() && System.getProperty("overhaul.hudCache.debug") == null) System.setProperty("overhaul.hudCache.debug", "true");
     }
     @Override public String getRefMapperConfig() { return null; }
 
