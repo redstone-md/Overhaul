@@ -38,7 +38,7 @@
     "VeilShaderCompilerBlazeMixin",
     "VeilScreenShaderBlazeMixin",
     "DefaultChunkRendererBlazeMixin",
-    "FlywheelBackendBlazeMixin","DhTerrainBlazeMixin","DhGenericBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhVanillaFadeBlazeMixin","DhPostProcessBlazeMixin"
+    "FlywheelBackendBlazeMixin","DhTerrainBlazeMixin","DhVertexBufferBlazeMixin","DhGenericBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhVanillaFadeBlazeMixin","DhPostProcessBlazeMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }

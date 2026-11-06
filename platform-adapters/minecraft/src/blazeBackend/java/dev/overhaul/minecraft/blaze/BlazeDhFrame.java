@@ -108,10 +108,12 @@ public final class BlazeDhFrame {
         try {
             int count = vertices.getVertexCount();
             if (count == 0 || vertices.getId() == 0 || indices.getId() == 0) return;
-            var vertexBuffer = buffers.device(renderer, vertices.getId());
-            int indexName = indices.getId();
-            // DH grows the shared buffer in place, so a new generation means the cached device buffer may be retired.
+            // DH grows the shared buffer in place, so a new generation means a cached device buffer may be retired.
             int generation = buffers.generation();
+            var vertexBuffer = vertices instanceof BlazeDhDeviceSlot.Holder holder
+                    ? holder.overhaul$deviceSlot().resolve(renderer, buffers, vertices.getId(), generation)
+                    : buffers.device(renderer, vertices.getId());
+            int indexName = indices.getId();
             if (indexName != lastIndexName || generation != lastIndexGeneration || lastIndexBuffer == null) {
                 lastIndexBuffer = buffers.device(renderer, indexName);
                 lastIndexName = indexName;

@@ -37,6 +37,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("AlexsCavesScans121Mixin", BlazeOptimization.ENTITY_SCANS),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
             Map.entry("DhRenderList121Mixin", BlazeOptimization.DH_RENDER_LIST),
+            Map.entry("DhVertexBufferBlazeMixin", BlazeOptimization.DH_DEVICE_CACHE),
             Map.entry("ViewAreaColumns121Mixin", BlazeOptimization.SECTION_GRID),
             Map.entry("BufferBuilderParticles121Mixin", BlazeOptimization.PARTICLE_QUADS),
             Map.entry("ParticleQuads121Mixin", BlazeOptimization.PARTICLE_QUADS),
