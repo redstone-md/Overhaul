@@ -54,7 +54,8 @@ public enum BlazeOptimization {
     SECTION_RUN_KEYS("sectionRunKeys", "Terrain sections find their indirect draw through a key their mesh shares instead of a hash lookup per section"),
     DEBUG_TEXT("debugText", "F3 text lines gathered at 10 Hz instead of every time the HUD is drawn"),
     POOL_RANGES("poolRanges", "Free ranges of per-frame buffer pages kept in sorted arrays instead of a tree of boxed offsets"),
-    UNIFORM_PLANS("uniformPlans", "Shader pack uniforms filled from the source each name resolved to the first time instead of asking every source again");
+    UNIFORM_PLANS("uniformPlans", "Shader pack uniforms filled from the source each name resolved to the first time instead of asking every source again"),
+    SHADOW_COLUMNS("shadowColumns", "Kept shadow casters tested against each frame's light frustum a column at a time, section by section only where the frustum cuts the column");
 
 
     private final String key, description;

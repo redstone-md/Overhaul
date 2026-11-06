@@ -56,6 +56,9 @@ final class BlazePackShadows {
     private long[] contents = new long[0], contentsAt = new long[0];
     private BlazeMesh[] meshes = new BlazeMesh[0];
     private int casterCount;
+    /** Per column that holds casters, where its casters start and its lowest section, so a frame can test it whole. */
+    private int[] columnFirst = new int[0], columnBase = new int[0];
+    private int columnCount;
     /** Per layer, the casters that have a mesh in it, so each pass walks only meshes it draws. */
     private final BlazeMesh[][] layerMeshes = new BlazeMesh[LAYERS.length][0];
     private final int[][] layerCasters = new int[LAYERS.length][0];
@@ -109,6 +112,7 @@ final class BlazePackShadows {
         if (index(BlazeViewSections.all(sections))) kept = false;
         if (still(now, x, y, z)) return;
         casterCount = 0;
+        columnCount = 0;
         incomplete = false;
         // Without the grid mixin, or with a grid that does not cover the array, sections are walked as columns of one.
         if (sections instanceof BlazeSectionGrid grid) {
@@ -135,8 +139,12 @@ final class BlazePackShadows {
             if (Math.abs(minX + 8) > limit || Math.abs(minZ + 8) > limit) continue;
             int side = bounded ? frustum.intersectAab(minX - margin, bottom - margin, minZ - margin, minX + 16 + margin, bottom + height * 16 + margin, minZ + 16 + margin) : FrustumIntersection.INSIDE;
             if (side != FrustumIntersection.INSIDE && side != FrustumIntersection.INTERSECT) continue;
+            int first = casterCount;
             for (int layer = 0; layer < height; layer++) collect(base + layer * width, minX, minZ, (float) (origins[(base + layer * width) * 3 + 1] - y),
                     limit, margin, bounded && side != FrustumIntersection.INSIDE, now);
+            if (casterCount == first) continue;
+            columnFirst[columnCount] = first;
+            columnBase[columnCount++] = base;
         }
         split();
         kept = reuse && !incomplete;
@@ -182,11 +190,27 @@ final class BlazePackShadows {
         double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
         if (inside.length != indexed.length) inside = new boolean[indexed.length];
         int[] origins = this.origins;
-        for (int at = 0; at < casterCount; at++) {
-            int index = casters[at];
-            float minX = (float) (origins[index * 3] - x), minY = (float) (origins[index * 3 + 1] - y), minZ = (float) (origins[index * 3 + 2] - z);
-            inside[index] = Math.abs(minX + 8) <= limit && Math.abs(minY + 8) <= limit && Math.abs(minZ + 8) <= limit
-                    && frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16);
+        boolean columns = BlazeOptimization.SHADOW_COLUMNS.on();
+        // A column wholly inside or outside settles all its casters with one test; only those it cuts are tested alone.
+        for (int column = 0, count = columns ? columnCount : 1; column < count; column++) {
+            int from = columns ? columnFirst[column] : 0, to = !columns || column + 1 == count ? casterCount : columnFirst[column + 1];
+            int side = FrustumIntersection.INTERSECT;
+            if (columns) {
+                int at = columnBase[column] * 3;
+                float minX = (float) (origins[at] - x), bottom = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
+                side = frustum.intersectAab(minX, bottom, minZ, minX + 16, bottom + height * 16, minZ + 16);
+            }
+            boolean whole = side == FrustumIntersection.INSIDE, outside = !whole && side != FrustumIntersection.INTERSECT;
+            for (int at = from; at < to; at++) {
+                int index = casters[at];
+                if (outside) {
+                    inside[index] = false;
+                    continue;
+                }
+                float minX = (float) (origins[index * 3] - x), minY = (float) (origins[index * 3 + 1] - y), minZ = (float) (origins[index * 3 + 2] - z);
+                inside[index] = Math.abs(minX + 8) <= limit && Math.abs(minY + 8) <= limit && Math.abs(minZ + 8) <= limit
+                        && (whole || frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16));
+            }
         }
     }
 
@@ -238,7 +262,11 @@ final class BlazePackShadows {
         indexed = all;
         seenMoves = BlazeSectionChanges.originMoves();
         if (origins.length != all.length * 3) origins = new int[all.length * 3];
-        if (casters.length != all.length) casters = new int[all.length];
+        if (casters.length != all.length) {
+            casters = new int[all.length];
+            columnFirst = new int[all.length];
+            columnBase = new int[all.length];
+        }
         for (int index = 0; index < all.length; index++) {
             var origin = BlazeViewSections.origin(all[index]);
             origins[index * 3] = origin.getX();

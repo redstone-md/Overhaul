@@ -131,6 +131,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
         labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
         labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
+        labels.put(BlazeOptimization.SHADOW_COLUMNS, "Shadow casters by column");
         return labels;
     }
 }
