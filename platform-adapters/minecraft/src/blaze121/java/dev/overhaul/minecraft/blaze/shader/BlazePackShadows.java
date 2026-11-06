@@ -7,8 +7,11 @@ import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
 import dev.overhaul.minecraft.blaze.BlazeSectionBounds;
 import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
+import dev.overhaul.minecraft.blaze.BlazeSectionGrid;
+import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
 import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.PackGraphRuntime;
+import java.util.Arrays;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
@@ -43,9 +46,12 @@ final class BlazePackShadows {
     private int[] origins = new int[0], casters = new int[0];
     /** Per section, the layer mask its meshes were read for, or 0 while one of them has yet to upload. */
     private long[] seen = new long[0];
+    /** Per section, its casting layers and the change count they were read at; read again only after some section changed. */
+    private long[] contents = new long[0], contentsAt = new long[0];
     private BlazeMesh[] meshes = new BlazeMesh[0];
     private int casterCount;
     private int seenMoves = -1;
+    private int width, height, depth;
 
     BlazePackShadows(BlazeRenderer renderer, BlazePackScene scene, PackGraphRuntime runtime, PackShadowSettings settings) {
         this.renderer = renderer;
@@ -78,21 +84,46 @@ final class BlazePackShadows {
         casterCount = 0;
         if (sections == null) return;
         index(sections.sections);
+        // Without the grid mixin, or with a grid that does not cover the array, sections are walked as columns of one.
+        if (sections instanceof BlazeSectionGrid grid) {
+            width = grid.overhaul$gridWidth();
+            height = grid.overhaul$gridHeight();
+            depth = grid.overhaul$gridDepth();
+        }
+        if (!(sections instanceof BlazeSectionGrid) || width * height * depth != indexed.length) {
+            width = indexed.length;
+            height = depth = 1;
+        }
         // The Iris field-of-view matrix has an unusual m33, so planes taken from it would not bound what it draws.
         boolean bounded = settings.fov() == null;
         if (bounded) frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
         double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
         int[] origins = this.origins;
-        for (int index = 0, at = 0; index < indexed.length; index++, at += 3) {
-            float minX = (float) (origins[at] - x), minY = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
-            if (Math.abs(minX + 8) > limit || Math.abs(minY + 8) > limit || Math.abs(minZ + 8) > limit) continue;
-            if (bounded && !frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16)) continue;
-            long contents = ((BlazeSectionBuffers) indexed[index]).overhaul$contents() & CASTING;
-            if (contents == 0) continue;
-            if (contents != seen[index]) remember(index, contents);
-            casters[casterCount++] = index;
+        long now = BlazeVisibleSections.changes();
+        // Columns first: most fall outside the light's frustum whole, and one fully inside needs no test per section.
+        for (int column = 0; column < width * depth; column++) {
+            int base = column / width * height * width + column % width, at = base * 3;
+            float minX = (float) (origins[at] - x), minZ = (float) (origins[at + 2] - z), bottom = (float) (origins[at + 1] - y);
+            if (Math.abs(minX + 8) > limit || Math.abs(minZ + 8) > limit) continue;
+            int side = bounded ? frustum.intersectAab(minX, bottom, minZ, minX + 16, bottom + height * 16, minZ + 16) : FrustumIntersection.INSIDE;
+            if (side != FrustumIntersection.INSIDE && side != FrustumIntersection.INTERSECT) continue;
+            for (int layer = 0; layer < height; layer++) collect(base + layer * width, minX, minZ, (float) (origins[(base + layer * width) * 3 + 1] - y),
+                    limit, bounded && side != FrustumIntersection.INSIDE, now);
         }
+    }
+
+    private void collect(int index, float minX, float minZ, float minY, double limit, boolean test, long now) {
+        if (Math.abs(minY + 8) > limit) return;
+        if (test && !frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16)) return;
+        if (contentsAt[index] != now) {
+            contentsAt[index] = now;
+            contents[index] = ((BlazeSectionBuffers) indexed[index]).overhaul$contents() & CASTING;
+        }
+        long layers = contents[index];
+        if (layers == 0) return;
+        if (layers != seen[index]) remember(index, layers);
+        casters[casterCount++] = index;
     }
 
     /** A buffer keeps its mesh until it closes, so the meshes stand until the section's layers change. */
@@ -111,6 +142,9 @@ final class BlazePackShadows {
         if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return;
         // A section moved to a new origin is rebuilt through an empty state, so only a new array clears these.
         if (all != indexed) {
+            contents = new long[all.length];
+            contentsAt = new long[all.length];
+            Arrays.fill(contentsAt, -1);
             seen = new long[all.length];
             meshes = new BlazeMesh[all.length * LAYERS.length];
         }

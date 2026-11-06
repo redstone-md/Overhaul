@@ -27,6 +27,8 @@ public final class BlazeVisibleSections {
     private boolean missingMesh;
 
     public static void changed(){CHANGES.incrementAndGet();}
+    /** Read before the contents it guards, so a change racing the read moves it again. */
+    public static long changes(){return CHANGES.get();}
 
     private static boolean reuse(){return BlazeOptimization.SECTION_SCAN_REUSE.on()&&BlazeOptimization.SECTION_BATCH.on();}
 

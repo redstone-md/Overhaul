@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.minecraft.blaze.BlazeSectionGrid;
 import net.minecraft.client.renderer.ViewArea;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.util.Mth;
@@ -20,7 +21,7 @@ import java.util.Arrays;
  * so the origins are worked out once per axis and the sections of unchanged columns are not visited.
  */
 @Mixin(ViewArea.class)
-abstract class ViewAreaColumns121Mixin {
+abstract class ViewAreaColumns121Mixin implements BlazeSectionGrid {
     @Unique private static final int UNKNOWN = Integer.MIN_VALUE;
 
     @Shadow @Final protected Level level;
@@ -32,6 +33,10 @@ abstract class ViewAreaColumns121Mixin {
 
     @Unique private int[] overhaul$columnX = new int[0];
     @Unique private int[] overhaul$columnZ = new int[0];
+
+    @Override public int overhaul$gridWidth() { return sectionGridSizeX; }
+    @Override public int overhaul$gridHeight() { return sectionGridSizeY; }
+    @Override public int overhaul$gridDepth() { return sectionGridSizeZ; }
 
     @Inject(method = "repositionCamera", at = @At("HEAD"), cancellable = true, require = 1)
     private void overhaul$moveWrappedColumns(double cameraX, double cameraZ, CallbackInfo callback) {
