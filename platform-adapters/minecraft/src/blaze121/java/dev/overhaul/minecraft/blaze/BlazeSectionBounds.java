@@ -11,8 +11,6 @@ import org.joml.FrustumIntersection;
  */
 public final class BlazeSectionBounds {
     private static final int SIDE = 16;
-    /** Sections are reused for other places when the camera moves, under the graph's nodes. */
-    private static int originMoves;
 
     private RenderSection[] sections = new RenderSection[0];
     private int[] origins = new int[0];
@@ -20,21 +18,12 @@ public final class BlazeSectionBounds {
     private Object graph;
     private boolean stale = true;
 
-    public static void originMoved() {
-        originMoves++;
-    }
-
-    /** Changes whenever any section takes another place, so a copy of the origins taken at another value is stale. */
-    public static int originMoves() {
-        return originMoves;
-    }
-
     public void invalidate() {
         stale = true;
     }
 
     public boolean holds(Object graph) {
-        return !stale && this.graph == graph && seenMoves == originMoves;
+        return !stale && this.graph == graph && seenMoves == BlazeSectionChanges.originMoves();
     }
 
     public void fill(Object graph, List<RenderSection> all) {
@@ -53,7 +42,7 @@ public final class BlazeSectionBounds {
         }
         Arrays.fill(sections, count, sections.length, null);
         this.graph = graph;
-        seenMoves = originMoves;
+        seenMoves = BlazeSectionChanges.originMoves();
         stale = false;
     }
 

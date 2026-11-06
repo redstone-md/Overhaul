@@ -7,10 +7,10 @@ import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
-import dev.overhaul.minecraft.blaze.BlazeSectionBounds;
+import dev.overhaul.minecraft.blaze.BlazeSectionChanges;
 import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
 import dev.overhaul.minecraft.blaze.BlazeSectionGrid;
-import dev.overhaul.minecraft.blaze.BlazeVisibleSections;
+import dev.overhaul.minecraft.blaze.BlazeViewSections;
 import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.PackGraphRuntime;
 import java.util.Arrays;
@@ -19,7 +19,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ViewArea;
-import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
@@ -49,7 +48,7 @@ final class BlazePackShadows {
     private static final float MARGIN = 10, DRIFT = 4, TURN = 0.99996f;
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
-    private SectionRenderDispatcher.RenderSection[] indexed = new SectionRenderDispatcher.RenderSection[0];
+    private Object[] indexed = new Object[0];
     private int[] origins = new int[0], casters = new int[0];
     /** Per section, the layer mask its meshes were read for, or 0 while one of them has yet to upload. */
     private long[] seen = new long[0];
@@ -106,8 +105,8 @@ final class BlazePackShadows {
             kept = false;
             return;
         }
-        long now = BlazeVisibleSections.changes();
-        if (index(sections.sections)) kept = false;
+        long now = BlazeSectionChanges.changes();
+        if (index(BlazeViewSections.all(sections))) kept = false;
         if (still(now, x, y, z)) return;
         casterCount = 0;
         incomplete = false;
@@ -226,8 +225,8 @@ final class BlazePackShadows {
     }
 
     /** True when the sections were indexed again, which drops kept casters. */
-    private boolean index(SectionRenderDispatcher.RenderSection[] all) {
-        if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return false;
+    private boolean index(Object[] all) {
+        if (all == indexed && seenMoves == BlazeSectionChanges.originMoves()) return false;
         // A section moved to a new origin is rebuilt through an empty state, so only a new array clears these.
         if (all != indexed) {
             contents = new long[all.length];
@@ -237,11 +236,11 @@ final class BlazePackShadows {
             meshes = new BlazeMesh[all.length * LAYERS.length];
         }
         indexed = all;
-        seenMoves = BlazeSectionBounds.originMoves();
+        seenMoves = BlazeSectionChanges.originMoves();
         if (origins.length != all.length * 3) origins = new int[all.length * 3];
         if (casters.length != all.length) casters = new int[all.length];
         for (int index = 0; index < all.length; index++) {
-            var origin = all[index].getOrigin();
+            var origin = BlazeViewSections.origin(all[index]);
             origins[index * 3] = origin.getX();
             origins[index * 3 + 1] = origin.getY();
             origins[index * 3 + 2] = origin.getZ();

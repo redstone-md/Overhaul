@@ -1,7 +1,7 @@
 package dev.overhaul.minecraft.blaze.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import dev.overhaul.minecraft.blaze.mixin.TextureAtlas121Accessor;
+import dev.overhaul.minecraft.blaze.mixin.TextureAtlasBlazeAccessor;
 import dev.overhaul.shader.compat.UniformBlock;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.PackIdMap;
@@ -37,7 +37,8 @@ final class BlazePackPlayer {
         effects(minecraft, living, frame.partial());
         health = living == null ? 0 : living.getHealth();
         maxHealth = living == null ? 0 : living.getMaxHealth();
-        mood = minecraft.player instanceof LocalPlayer player ? player.getCurrentMood() : 0;
+        LocalPlayer player = minecraft.player;
+        mood = player != null ? player.getCurrentMood() : 0;
         lightMain = living == null ? 0 : light(living.getMainHandItem());
         lightOff = living == null ? 0 : light(living.getOffhandItem());
         itemMain = living == null ? PackIdMap.UNKNOWN : id(ids, living.getMainHandItem());
@@ -48,8 +49,8 @@ final class BlazePackPlayer {
         fogShape = RenderSystem.getShaderFogShape().getIndex();
         fogDensity = fogEnd > 0 ? 1 / fogEnd : 0;
         TextureAtlas atlas = minecraft.getModelManager().getAtlas(TextureAtlas.LOCATION_BLOCKS);
-        atlasWidth = ((TextureAtlas121Accessor) atlas).overhaul$width();
-        atlasHeight = ((TextureAtlas121Accessor) atlas).overhaul$height();
+        atlasWidth = ((TextureAtlasBlazeAccessor) atlas).overhaul$width();
+        atlasHeight = ((TextureAtlasBlazeAccessor) atlas).overhaul$height();
         float depth = centerDepth(minecraft, near, far), rain = environment.rain(), block = environment.blockLight(), sky = environment.skyLight();
         if (!started) {
             wetness = rain;
@@ -73,7 +74,7 @@ final class BlazePackPlayer {
         var blind = living.getEffect(MobEffects.BLINDNESS);
         if (blind != null) blindness = blind.isInfiniteDuration() ? 1 : Math.min(1, blind.getDuration() / 20f);
         var dark = living.getEffect(MobEffects.DARKNESS);
-        float blend = dark == null ? 0 : dark.getBlendFactor(living, partial);
+        float blend = dark == null ? 0 : BlazePackGame.blend(dark, living, partial);
         darkness = blend * minecraft.options.darknessEffectScale().get().floatValue();
         darknessLight = Math.max(0, (float) Math.cos((living.tickCount - partial) * Math.PI * 0.025f) * 0.45f * blend);
     }

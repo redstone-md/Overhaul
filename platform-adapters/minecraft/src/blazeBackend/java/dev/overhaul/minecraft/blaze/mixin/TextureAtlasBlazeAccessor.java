@@ -6,7 +6,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 /** Shader packs read the block atlas size, which the game keeps package-private. */
 @Mixin(TextureAtlas.class)
-public interface TextureAtlas121Accessor {
+public interface TextureAtlasBlazeAccessor {
     @Invoker("getWidth")
     int overhaul$width();
 

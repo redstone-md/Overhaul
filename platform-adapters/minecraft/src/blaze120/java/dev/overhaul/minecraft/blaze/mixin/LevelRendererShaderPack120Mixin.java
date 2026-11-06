@@ -1,0 +1,87 @@
+package dev.overhaul.minecraft.blaze.mixin;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import dev.overhaul.minecraft.blaze.shader.BlazePackFrame;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.ViewArea;
+import net.minecraft.server.packs.resources.ResourceManager;
+import org.joml.Matrix4f;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/** The world's frame boundaries, which are where a shader pack's fullscreen passes belong. */
+@Mixin(LevelRenderer.class)
+abstract class LevelRendererShaderPack120Mixin {
+    @Shadow
+    private ViewArea viewArea;
+    @Unique
+    private BlazePackFrame overhaul$pack;
+    /** The world pose's matrix at the frame's start: the camera rotation, which the frame and the hand both read. */
+    @Unique
+    private final Matrix4f overhaul$view = new Matrix4f();
+
+    @Inject(method = "renderLevel", at = @At("HEAD"))
+    private void overhaul$beginPack(PoseStack pose, float partial, long nanos, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f projection, CallbackInfo callback) {
+        if (overhaul$pack == null) overhaul$pack = BlazePackFrame.open(Minecraft.getInstance());
+        if (overhaul$pack == null) return;
+        overhaul$view.set(pose.last().pose());
+        overhaul$pack.begin(camera, partial, overhaul$view, projection, light, viewArea);
+    }
+
+    @Inject(method = "renderChunkLayer", at = @At("HEAD"))
+    private void overhaul$opaqueDone(RenderType type, PoseStack pose, double x, double y, double z, Matrix4f projection, CallbackInfo callback) {
+        if (overhaul$pack != null && type == RenderType.translucent()) overhaul$pack.afterOpaque();
+    }
+
+    @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
+    private void overhaul$packClouds(CallbackInfo callback) {
+        if (overhaul$pack != null && overhaul$pack.hidesClouds()) callback.cancel();
+    }
+
+    @Inject(method = "renderSky", at = @At("HEAD"))
+    private void overhaul$skyBegins(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.sky(true);
+    }
+
+    @Inject(method = "renderSky", at = @At("RETURN"))
+    private void overhaul$skyEnds(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.sky(false);
+    }
+
+    @Inject(method = "renderSnowAndRain", at = @At("HEAD"))
+    private void overhaul$weatherBegins(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.weather(true);
+    }
+
+    @Inject(method = "renderSnowAndRain", at = @At("RETURN"))
+    private void overhaul$weatherEnds(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.weather(false);
+    }
+
+    @Inject(method = "renderLevel", at = @At("RETURN"))
+    private void overhaul$finishPack(PoseStack pose, float partial, long nanos, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f projection, CallbackInfo callback) {
+        if (overhaul$pack == null) return;
+        overhaul$pack.hand(game, camera, partial, overhaul$view);
+        overhaul$pack.finish();
+    }
+
+    @Inject(method = "onResourceManagerReload", at = @At("TAIL"))
+    private void overhaul$reloadPack(ResourceManager resources, CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.invalidate();
+    }
+
+    @Inject(method = "setLevel", at = @At("TAIL"))
+    private void overhaul$levelChanged(ClientLevel level, CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.invalidate();
+    }
+}

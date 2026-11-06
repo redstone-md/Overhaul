@@ -9,6 +9,7 @@
     "MinecraftBlazeOwnerMixin",
     "MouseGrabBlazeMixin",
     "SpriteInterpolationBlazeMixin",
+    "TextureAtlasBlazeAccessor",
     "VirtualScreenBlazeMixin",
     "VkInstanceStackMixin",
     "WindowBlazeMixin",
