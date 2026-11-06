@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.minecraft.blaze.BlazeChunkLayers;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.VertexBuffer;
@@ -62,7 +63,7 @@ abstract class RenderSectionBuffers121Mixin implements BlazeSectionBuffers {
         if (byLayer == null) {
             var layers = RenderType.chunkBufferLayers();
             byLayer = new VertexBuffer[layers.size()];
-            for (RenderType layer : layers) byLayer[layer.getChunkLayerId()] = buffers.get(layer);
+            for (RenderType layer : layers) byLayer[BlazeChunkLayers.id(layer)] = buffers.get(layer);
             overhaul$byLayer = byLayer;
         }
         return byLayer[chunkLayerId];

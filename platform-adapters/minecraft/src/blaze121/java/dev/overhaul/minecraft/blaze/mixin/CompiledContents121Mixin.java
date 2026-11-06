@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.minecraft.blaze.BlazeChunkLayers;
 import dev.overhaul.minecraft.blaze.BlazeCompiledContents;
 import java.util.List;
 import java.util.Set;
@@ -23,7 +24,7 @@ abstract class CompiledContents121Mixin implements BlazeCompiledContents {
         if (contents != 0) return contents;
         contents = KNOWN;
         if (!renderableBlockEntities.isEmpty()) contents |= BLOCK_ENTITIES;
-        for (RenderType type : hasBlocks) contents |= 1L << type.getChunkLayerId();
+        for (RenderType type : hasBlocks) contents |= 1L << BlazeChunkLayers.id(type);
         return overhaul$contents = contents;
     }
 }

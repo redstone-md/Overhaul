@@ -85,7 +85,7 @@ public final class BlazeVisibleSections {
     /** A list swapped or changed since the scan is walked whole, as vanilla would. */
     public ObjectArrayList<RenderSection> layer(ObjectArrayList<RenderSection> visible,RenderType type){
         if(!scanned(visible))return visible;
-        int id=type.getChunkLayerId();
+        int id=BlazeChunkLayers.id(type);
         Layer layer=id<0||id>=layers.length?null:layers[id];
         return layer==null?NONE:layer.sections;
     }
@@ -98,7 +98,7 @@ public final class BlazeVisibleSections {
     /** The scan's flat view of a layer, or null when it has none or its list no longer stands. */
     public Layer table(ObjectArrayList<RenderSection> visible,RenderType type){
         if(!tables||!scanned(visible))return null;
-        int id=type.getChunkLayerId();
+        int id=BlazeChunkLayers.id(type);
         return id<0||id>=layers.length||layers[id]==null?Layer.EMPTY:layers[id];
     }
 

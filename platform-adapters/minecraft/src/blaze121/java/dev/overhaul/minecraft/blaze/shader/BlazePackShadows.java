@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.shader;
 
+import dev.overhaul.minecraft.blaze.BlazeChunkLayers;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
@@ -38,7 +39,7 @@ final class BlazePackShadows {
     private static final long CASTING;
     static {
         long casting = 0;
-        for (int layer = 0; layer < LAYERS.length; layer++) casting |= 1L << (LAYER_IDS[layer] = LAYERS[layer].getChunkLayerId());
+        for (int layer = 0; layer < LAYERS.length; layer++) casting |= 1L << (LAYER_IDS[layer] = BlazeChunkLayers.id(LAYERS[layer]));
         CASTING = casting;
     }
     /**

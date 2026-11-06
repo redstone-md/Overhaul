@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.minecraft.blaze.BlazeChunkLayers;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
@@ -51,7 +52,7 @@ abstract class LevelRendererSectionBatch121Mixin {
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
         BlazeSectionOcclusion occlusion = renderer.occlusion();
         boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
-        int layerId = layer.getChunkLayerId();
+        int layerId = BlazeChunkLayers.id(layer);
         if (occlusion != null) occlusion.prepare(x, y, z);
         BlazeVisibleSections.Layer table = (Object) this instanceof BlazeLayerLists lists ? lists.overhaul$layerTable(layer) : null;
         if (table != null) {
