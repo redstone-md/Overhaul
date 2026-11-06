@@ -4,6 +4,7 @@ import dev.overhaul.vulkan.VulkanStack;
 
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
+import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,6 +30,9 @@ public final class BlazeSectionBatch implements AutoCloseable {
 
     private final BlazeRenderer owner;
     private final List<Run> runs = new ArrayList<>();
+    /** The newest run per vertex buffer, older ones with the same buffer chained through {@link #older}: a scan over thousands of runs per section was quadratic. */
+    private final Reference2IntOpenHashMap<GpuBuffer> newest = new Reference2IntOpenHashMap<>();
+    private int[] older = new int[256];
     private int[] sections = new int[4 * 1024];
     private float[] offsets = new float[3 * 1024];
     private int count;
@@ -46,6 +50,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
 
     BlazeSectionBatch(BlazeRenderer owner) {
         this.owner = owner;
+        newest.defaultReturnValue(-1);
     }
 
     /**
@@ -102,9 +107,14 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private int run(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
         int last = runs.size() - 1;
         if (last >= 0 && runs.get(last).holds(vertices, remainder, indices, indexBytes)) return last;
-        if (!ordered) for (int index = 0; index < last; index++) if (runs.get(index).holds(vertices, remainder, indices, indexBytes)) return index;
+        int head = newest.getInt(vertices);
+        if (!ordered) for (int index = head; index >= 0; index = older[index]) if (runs.get(index).holds(vertices, remainder, indices, indexBytes)) return index;
+        int added = last + 1;
         runs.add(new Run(vertices, remainder, indices, indexBytes));
-        return last + 1;
+        if (added == older.length) older = Arrays.copyOf(older, added * 2);
+        older[added] = head;
+        newest.put(vertices, added);
+        return added;
     }
 
     public void end() {
@@ -129,6 +139,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
         } finally {
             count = 0;
             runs.clear();
+            newest.clear();
         }
     }
 
