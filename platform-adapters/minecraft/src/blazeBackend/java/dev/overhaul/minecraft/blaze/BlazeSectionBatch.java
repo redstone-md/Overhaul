@@ -224,12 +224,20 @@ public final class BlazeSectionBatch implements AutoCloseable {
                     buffers.put(2, constants);
                     bindOffsets.put(2, 0);
                 }
+                Run previous = null;
                 for (int index = 0; index < runs.length; index++) {
                     Run run = runs[index];
                     buffers.put(0, run.vertices.handle());
                     bindOffsets.put(0, run.remainder);
-                    vkCmdBindVertexBuffers(command, 0, buffers, bindOffsets);
-                    vkCmdBindIndexBuffer(command, run.indices.handle(), 0, run.indexBytes == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+                    if (previous == null) {
+                        vkCmdBindVertexBuffers(command, 0, buffers, bindOffsets);
+                    } else if (previous.vertices != run.vertices || previous.remainder != run.remainder) {
+                        vkCmdBindVertexBuffers(command, 0, buffers.limit(1), bindOffsets.limit(1));
+                    }
+                    if (previous == null || previous.indices != run.indices || previous.indexBytes != run.indexBytes) {
+                        vkCmdBindIndexBuffer(command, run.indices.handle(), 0, run.indexBytes == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+                    }
+                    previous = run;
                     long offset = commands.offset() + (long) starts[index] * COMMAND_BYTES;
                     if (multiDraw) {
                         vkCmdDrawIndexedIndirect(command, indirect, offset, lengths[index], COMMAND_BYTES);
