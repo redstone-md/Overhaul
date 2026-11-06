@@ -46,9 +46,15 @@ abstract class SectionOcclusionFrustum121Mixin {
         callback.cancel();
     }
 
-    /** A partial update adds to the same graph and asks for this frustum update. */
+    /** A full update swaps in a new graph and asks for this frustum update. */
     @Inject(method = "consumeFrustumUpdate", at = @At("RETURN"))
     private void overhaul$graphChanged(CallbackInfoReturnable<Boolean> callback) {
         if (callback.getReturnValueZ()) overhaul$bounds.invalidate();
+    }
+
+    /** A partial update adds nodes to the same graph without asking for a frustum update, so the copy misses them. */
+    @Inject(method = "runPartialUpdate", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SectionOcclusionGraph;runUpdates"))
+    private void overhaul$graphGrew(CallbackInfo callback) {
+        overhaul$bounds.invalidate();
     }
 }
