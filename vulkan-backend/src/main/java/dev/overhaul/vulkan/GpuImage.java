@@ -5,18 +5,19 @@ import org.lwjgl.vulkan.*;
 import java.util.*;
 import static org.lwjgl.vulkan.VK10.*;
 
-/** Allocator-owned optimal 2D image. Layout state is tracked independently for every mip/layer. */
+/** Allocator-owned optimal 2D or 3D image. Layout state is tracked independently for every mip/layer. */
 public final class GpuImage implements AutoCloseable {
     private final GpuAllocator allocator;
     private final ImageFormat format;
-    private final int width,height,mips,layers,usage,flags;
+    private final int width,height,depth,mips,layers,usage,flags;
+    private final boolean volume;
     private final long allocation;
     private long handle;
     private final int[] layouts;
     private final Set<GpuImageView> views=Collections.newSetFromMap(new IdentityHashMap<>());
     private FrameRing.Submission lastUse;
-    GpuImage(GpuAllocator allocator,long handle,long allocation,ImageFormat format,int width,int height,int mips,int layers,int usage,int flags){
-        this.allocator=allocator;this.handle=handle;this.allocation=allocation;this.format=format;
+    GpuImage(GpuAllocator allocator,long handle,long allocation,ImageFormat format,int width,int height,int depth,boolean volume,int mips,int layers,int usage,int flags){
+        this.allocator=allocator;this.handle=handle;this.allocation=allocation;this.format=format;this.depth=depth;this.volume=volume;
         this.width=width;this.height=height;this.mips=mips;this.layers=layers;this.usage=usage;this.flags=flags;layouts=new int[Math.multiplyExact(mips,layers)];
     }
     public VulkanContext context(){requireOpen();return allocator.context();}
@@ -24,10 +25,13 @@ public final class GpuImage implements AutoCloseable {
     public ImageFormat format(){return format;}
     public int width(int mip){checkMip(mip);return Math.max(1,width>>mip);}
     public int height(int mip){checkMip(mip);return Math.max(1,height>>mip);}
+    /** Slices of a 3D image; 1 for every 2D image. */
+    public int depth(){return depth;}
+    public boolean volume(){return volume;}
     public int mipLevels(){return mips;}public int layers(){return layers;}public int usage(){return usage;}
     public int layout(int mip,int layer){requireOpen();checkSubresource(mip,layer);return layouts[layer*mips+mip];}
     public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount){
-        return view(baseMip,mipCount,baseLayer,layerCount,layerCount==1?VK_IMAGE_VIEW_TYPE_2D:VK_IMAGE_VIEW_TYPE_2D_ARRAY,format.aspectMask());
+        return view(baseMip,mipCount,baseLayer,layerCount,volume()?VK_IMAGE_VIEW_TYPE_3D:layerCount==1?VK_IMAGE_VIEW_TYPE_2D:VK_IMAGE_VIEW_TYPE_2D_ARRAY,format.aspectMask());
     }
     public GpuImageView cubeView(int baseMip,int mipCount,int baseLayer){return view(baseMip,mipCount,baseLayer,6,VK_IMAGE_VIEW_TYPE_CUBE,format.aspectMask());}
     public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount,int viewType,int aspectMask){
@@ -36,7 +40,9 @@ public final class GpuImage implements AutoCloseable {
     public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount,int viewType,int aspectMask,GpuImageView.Components components){
         requireOpen();checkRange(baseMip,mipCount,baseLayer,layerCount);
         if(aspectMask==0||(aspectMask&~format.aspectMask())!=0)throw new IllegalArgumentException("view aspect differs from format");
-        if(viewType==VK_IMAGE_VIEW_TYPE_CUBE){if((flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)==0||layerCount!=6||baseLayer%6!=0)throw new IllegalArgumentException("invalid cube image view");}
+        if(volume()!=(viewType==VK_IMAGE_VIEW_TYPE_3D))throw new IllegalArgumentException("3D views need a 3D image and the reverse");
+        if(viewType==VK_IMAGE_VIEW_TYPE_3D){}
+        else if(viewType==VK_IMAGE_VIEW_TYPE_CUBE){if((flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)==0||layerCount!=6||baseLayer%6!=0)throw new IllegalArgumentException("invalid cube image view");}
         else if(viewType!=VK_IMAGE_VIEW_TYPE_2D_ARRAY&&(viewType!=VK_IMAGE_VIEW_TYPE_2D||layerCount!=1))throw new IllegalArgumentException("unsupported 2D image view type");
         GpuImageView view=new GpuImageView(this,baseMip,mipCount,baseLayer,layerCount,viewType,aspectMask,components);views.add(view);return view;
     }

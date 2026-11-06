@@ -37,6 +37,7 @@ public final class VulkanContext implements AutoCloseable {
     private String deviceName;
     private boolean multiDrawIndirect;
     private boolean indirectFirstInstance;
+    private boolean vertexStores,fragmentStores,storageFormats;
     private int maxIndirectDrawCount;
     private DeviceCapabilities capabilities;
     private ValidationMonitor validation;
@@ -135,10 +136,12 @@ public final class VulkanContext implements AutoCloseable {
             VkPhysicalDeviceFeatures supported = features.features();
             multiDrawIndirect = supported.multiDrawIndirect();
             indirectFirstInstance = supported.drawIndirectFirstInstance();
+            vertexStores = supported.vertexPipelineStoresAndAtomics();fragmentStores = supported.fragmentStoresAndAtomics();storageFormats = supported.shaderStorageImageExtendedFormats();
             deviceInfo.pEnabledFeatures(VkPhysicalDeviceFeatures.calloc(stack)
                 .multiDrawIndirect(multiDrawIndirect).drawIndirectFirstInstance(indirectFirstInstance)
                 .samplerAnisotropy(supported.samplerAnisotropy()).fillModeNonSolid(supported.fillModeNonSolid())
-                .independentBlend(supported.independentBlend()).logicOp(supported.logicOp()));
+                .independentBlend(supported.independentBlend()).logicOp(supported.logicOp())
+                .vertexPipelineStoresAndAtomics(vertexStores).fragmentStoresAndAtomics(fragmentStores).shaderStorageImageExtendedFormats(storageFormats));
             var enabledDraw=VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default().shaderDrawParameters(draw.shaderDrawParameters());
             if(subset)enabledDraw.pNext(portability.enabled(stack).address());
             deviceInfo.pNext(enabledDraw.address());
@@ -240,6 +243,11 @@ public final class VulkanContext implements AutoCloseable {
     public String deviceName() { requireOwner(); return deviceName; }
     public boolean multiDrawIndirect() { requireOwner(); return multiDrawIndirect; }
     public boolean indirectFirstInstance() { requireOwner(); return indirectFirstInstance; }
+    /** Vertex and geometry stages may write storage images, as shader-pack voxelization does. */
+    public boolean vertexStores() { requireOwner(); return vertexStores; }
+    public boolean fragmentStores() { requireOwner(); return fragmentStores; }
+    /** Storage images may use the small and packed formats, such as r8ui and r11f_g11f_b10f. */
+    public boolean storageFormats() { requireOwner(); return storageFormats; }
     public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
     public DeviceCapabilities capabilities() { requireOwner(); return capabilities; }
     public PortabilityCapabilities portability(){requireOwner();return portability;}

@@ -51,6 +51,15 @@ public final class GpuAllocator implements AutoCloseable {
         return createImage(format,width,height,mips,layers,usage,0);
     }
     public GpuImage createImage(ImageFormat format,int width,int height,int mips,int layers,int usage,int flags){
+        return createImage(format,width,height,1,false,mips,layers,usage,flags);
+    }
+    /** A single-mip 3D color image, as shader packs declare for voxel and light volumes. */
+    public GpuImage createVolume(ImageFormat format,int width,int height,int depth,int usage){
+        if(depth<1)throw new IllegalArgumentException("invalid volume depth");
+        if(format.aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT)throw new IllegalArgumentException("volumes hold color formats");
+        return createImage(format,width,height,depth,true,1,1,usage,0);
+    }
+    private GpuImage createImage(ImageFormat format,int width,int height,int depth,boolean volume,int mips,int layers,int usage,int flags){
         requireOpen();java.util.Objects.requireNonNull(format,"format");
         if(width<1||height<1||mips<1||mips>32-Integer.numberOfLeadingZeros(Math.max(width,height))||layers<1||usage==0)
             throw new IllegalArgumentException("invalid image dimensions/mips/layers/usage");
@@ -61,16 +70,16 @@ public final class GpuAllocator implements AutoCloseable {
             throw new IllegalArgumentException("attachment usage differs from image format");
         try(MemoryStack stack=VulkanStack.push()){
             VkImageFormatProperties support=VkImageFormatProperties.malloc(stack);
-            check(vkGetPhysicalDeviceImageFormatProperties(context.physicalDevice(),format.vkFormat(),VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,flags,support),"image format support");
-            if(width>support.maxExtent().width()||height>support.maxExtent().height()||mips>support.maxMipLevels()||layers>support.maxArrayLayers())
+            check(vkGetPhysicalDeviceImageFormatProperties(context.physicalDevice(),format.vkFormat(),volume?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,flags,support),"image format support");
+            if(width>support.maxExtent().width()||height>support.maxExtent().height()||depth>support.maxExtent().depth()||mips>support.maxMipLevels()||layers>support.maxArrayLayers())
                 throw new IllegalArgumentException("image dimensions exceed device limits");
-            VkImageCreateInfo info=VkImageCreateInfo.calloc(stack).sType$Default().flags(flags).imageType(VK_IMAGE_TYPE_2D)
+            VkImageCreateInfo info=VkImageCreateInfo.calloc(stack).sType$Default().flags(flags).imageType(volume?VK_IMAGE_TYPE_3D:VK_IMAGE_TYPE_2D)
                 .format(format.vkFormat()).mipLevels(mips).arrayLayers(layers).samples(VK_SAMPLE_COUNT_1_BIT)
                 .tiling(VK_IMAGE_TILING_OPTIMAL).usage(usage).sharingMode(VK_SHARING_MODE_EXCLUSIVE).initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-            info.extent().set(width,height,1);
+            info.extent().set(width,height,depth);
             LongBuffer image=stack.mallocLong(1);PointerBuffer allocation=stack.mallocPointer(1);
             check(vmaCreateImage(handle,info,VmaAllocationCreateInfo.calloc(stack).usage(VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE),image,allocation,null),"vmaCreateImage");
-            GpuImage result=new GpuImage(this,image.get(0),allocation.get(0),format,width,height,mips,layers,usage,flags);
+            GpuImage result=new GpuImage(this,image.get(0),allocation.get(0),format,width,height,depth,volume,mips,layers,usage,flags);
             images.add(result);return result;
         }
     }
