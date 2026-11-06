@@ -40,7 +40,7 @@ final class BlazePass implements BlazeQueue.Operation {
         try{
             for(String name:program.bindings().samplers().keySet()){
                 BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name));
-                if(target.writes(sample.view().image()))throw new SamplingFeedback();
+                if(sample.view()!=null&&target.writes(sample.view().image()))throw new SamplingFeedback();
                 samples.add(sample);
             }
             ByteBuffer bytes=shader.uniforms();
@@ -63,7 +63,7 @@ final class BlazePass implements BlazeQueue.Operation {
         int index=0;
         for(String name:program.bindings().samplers().keySet()){
             BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name)),existing=samples.get(index++);
-            if(sample.view()!=existing.view()||sample.sampler()!=existing.sampler())return false;
+            if(sample.view()!=existing.view()||sample.sampler()!=existing.sampler()||sample.buffer()!=existing.buffer())return false;
         }
         ByteBuffer bytes=shader.uniforms();
         int range=Math.max(16,bytes.remaining());

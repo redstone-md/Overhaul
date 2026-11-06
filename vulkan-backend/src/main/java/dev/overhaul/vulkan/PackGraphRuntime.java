@@ -82,8 +82,9 @@ public final class PackGraphRuntime implements AutoCloseable {
             packImages=new PackImageSet(context,allocator,pack.images(),width,height);
             for(var program:pack.programs()){
                 packImages.requireStorage(program.code().descriptors(),program.name());
-                if(program.scene()&&program.code().descriptors().hasStorageImages()&&!context.vertexStores())
-                    throw new UnsupportedShaderException("Device cannot write storage images from scene geometry: "+program.name());
+                var descriptors=program.code().descriptors();
+                if(program.scene()&&(descriptors.hasStorageImages()||descriptors.hasStorageBuffers())&&!context.vertexStores())
+                    throw new UnsupportedShaderException("Device cannot write storage resources from scene geometry: "+program.name());
             }
             if(hasShadows)shadows=new PackShadowImages(context,allocator,pack.shadow(),compiler);
             sampler=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
@@ -280,6 +281,11 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(view==null)throw new IllegalArgumentException("Not a pack image binding: "+name);return view;
     }
     public long packImageSampler(String sampler){requireOpen();return packImages.sampler(sampler);}
+    /** The pack storage buffer a {@code buffer} binding names. */
+    public GpuBuffer packBuffer(dev.overhaul.shader.compat.ProgramBindings bindings,String name){
+        requireOpen();GpuBuffer buffer=bindings.storageBuffer(name)?packImages.buffer(bindings.bufferIndex(name)):null;
+        if(buffer==null)throw new IllegalArgumentException("Not a pack storage buffer binding: "+name);return buffer;
+    }
     public GpuImageView shadowDepth(int index){requireShadows();return shadows.depth(index);}
     public GpuImageView shadowDepthSample(int index,boolean comparison){requireShadows();return shadows.depthSample(index,comparison);}
     public GpuImageView shadowColor(int index){requireShadows();return shadows.color(index);}

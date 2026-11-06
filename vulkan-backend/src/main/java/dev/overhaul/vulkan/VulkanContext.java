@@ -39,6 +39,7 @@ public final class VulkanContext implements AutoCloseable {
     private boolean indirectFirstInstance;
     private boolean vertexStores,fragmentStores,storageFormats;
     private int maxIndirectDrawCount;
+    private long maxStorageBufferRange;
     private DeviceCapabilities capabilities;
     private ValidationMonitor validation;
     private boolean closed;
@@ -147,6 +148,7 @@ public final class VulkanContext implements AutoCloseable {
             deviceInfo.pNext(enabledDraw.address());
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(physicalDevice, properties);
+            maxStorageBufferRange = Integer.toUnsignedLong(properties.limits().maxStorageBufferRange());
             capabilities = new DeviceCapabilities(supported.samplerAnisotropy(), supported.fillModeNonSolid(),
                 supported.independentBlend(), draw.shaderDrawParameters(), supported.samplerAnisotropy()
                 ? properties.limits().maxSamplerAnisotropy() : 1f, properties.limits().maxImageDimension2D(),
@@ -249,6 +251,8 @@ public final class VulkanContext implements AutoCloseable {
     /** Storage images may use the small and packed formats, such as r8ui and r11f_g11f_b10f. */
     public boolean storageFormats() { requireOwner(); return storageFormats; }
     public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
+    /** Largest storage buffer range one descriptor may bind. */
+    public long maxStorageBufferRange() { requireOwner(); return maxStorageBufferRange; }
     public DeviceCapabilities capabilities() { requireOwner(); return capabilities; }
     public PortabilityCapabilities portability(){requireOwner();return portability;}
     public boolean samplerAnisotropy(){return capabilities().samplerAnisotropy();}

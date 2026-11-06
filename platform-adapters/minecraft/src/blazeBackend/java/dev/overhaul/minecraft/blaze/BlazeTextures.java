@@ -19,9 +19,14 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Device-owned texture namespace, upload pixel-store state and deterministic resource closure. */
 public final class BlazeTextures implements AutoCloseable {
-    /** A bound image; {@code general} marks a pack storage image that stays in GENERAL layout and is never transitioned. */
-    public record Sampled(GpuImageView view,long sampler,boolean general){
-        public Sampled(GpuImageView view,long sampler){this(view,sampler,false);}
+    /**
+     * A bound image; {@code general} marks a pack storage image that stays in GENERAL layout and is never transitioned.
+     * A pack storage buffer binds through {@code buffer} and has no view.
+     */
+    public record Sampled(GpuImageView view,long sampler,boolean general,GpuBuffer buffer){
+        public Sampled(GpuImageView view,long sampler,boolean general){this(view,sampler,general,null);}
+        public Sampled(GpuImageView view,long sampler){this(view,sampler,false,null);}
+        public static Sampled storage(GpuBuffer buffer){return new Sampled(null,0,true,java.util.Objects.requireNonNull(buffer));}
         int layout(){return general?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
     }
     /** One subresource of a texture that a framebuffer renders to. */

@@ -15,7 +15,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * The storage images a pack declares with {@code image.*}. They live outside the render graph in GENERAL layout for
  * their whole life: shaders write them with {@code imageStore} and read them through their sampler, and every pass that
- * touches one is fenced by {@link #barrier} instead of a layout transition.
+ * touches one is fenced by {@link #barrier} instead of a layout transition. The {@code bufferObject.*} storage buffers
+ * share that fence and start zeroed.
  */
 final class PackImageSet implements AutoCloseable {
     private static final Map<String,ImageFormat> FORMATS = Map.ofEntries(
@@ -39,6 +40,7 @@ final class PackImageSet implements AutoCloseable {
     private record Entry(PackImages.Image declaration,GpuImage image,GpuImageView view){}
     private final PackImages declarations;
     private final Map<String,Entry> byName=new LinkedHashMap<>(),bySampler=new LinkedHashMap<>();
+    private final Map<Integer,GpuBuffer> buffers=new LinkedHashMap<>();
     private GpuSampler linear,nearest;
     private boolean initialized;
 
@@ -55,13 +57,18 @@ final class PackImageSet implements AutoCloseable {
                 Entry entry=new Entry(declaration,image,image.view(0,1,0,1));
                 byName.put(declaration.name(),entry);bySampler.put(declaration.sampler(),entry);
             }
+            long range=context.maxStorageBufferRange();
+            for(var buffer:declarations.buffers().entrySet()){
+                if(buffer.getValue()>range)throw new UnsupportedShaderException("Device storage buffers hold at most "+range+" bytes: bufferObject."+buffer.getKey());
+                buffers.put(buffer.getKey(),allocator.deviceBuffer(buffer.getValue(),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT));
+            }
             linear=allocator.createSampler(new SamplerSettings(SamplerSettings.Filter.LINEAR,SamplerSettings.Filter.LINEAR,SamplerSettings.Mipmap.NEAREST,
                     SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,SamplerSettings.Address.CLAMP,0,0,1,SamplerSettings.Compare.NONE));
             nearest=allocator.createSampler(SamplerSettings.nearest());
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
 
-    boolean isEmpty(){return byName.isEmpty();}
+    boolean isEmpty(){return byName.isEmpty()&&buffers.isEmpty();}
 
     /** Moves every image to GENERAL once, before any frame records against it. */
     void initialize(ImmediateCommands lane){
@@ -70,12 +77,13 @@ final class PackImageSet implements AutoCloseable {
         initialized=true;
     }
 
-    /** Zeroes the images the pack asks to clear each frame, or all of them on the first frame. */
+    /** Zeroes the images the pack asks to clear each frame, or all images and buffers on the first frame. */
     void clear(VkCommandBuffer command,boolean all){
         requireInitialized();
         List<Entry> cleared=new ArrayList<>();for(Entry entry:byName.values())if(all||entry.declaration.clear())cleared.add(entry);
-        if(cleared.isEmpty())return;
+        if(cleared.isEmpty()&&!(all&&!buffers.isEmpty()))return;
         barrier(command);
+        if(all)for(GpuBuffer buffer:buffers.values())vkCmdFillBuffer(command,buffer.handle(),0,VK_WHOLE_SIZE,0);
         try(MemoryStack stack=VulkanStack.push()){
             var value=VkClearColorValue.calloc(stack);
             var range=VkImageSubresourceRange.calloc(1,stack).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).baseMipLevel(0).levelCount(1).baseArrayLayer(0).layerCount(1);
@@ -84,6 +92,8 @@ final class PackImageSet implements AutoCloseable {
         barrier(command);
     }
 
+    /** The storage buffer a pack numbers {@code index}, or null when it declares none. */
+    GpuBuffer buffer(int index){requireInitialized();return buffers.get(index);}
     /** The image a storage binding names, or null when the name is not a pack image. */
     GpuImageView storage(String name){Entry entry=byName.get(name);return entry==null?null:checked(entry);}
     /** The image a sampler reads, or null when the sampler is not a pack image's. */
@@ -95,14 +105,19 @@ final class PackImageSet implements AutoCloseable {
     }
     /** True when every binding a program declares as a storage image is one of these images. */
     void requireStorage(ProgramBindings bindings,String program){
+        for(String name:bindings.samplers().keySet())if(bindings.storageBuffer(name)&&!buffers.containsKey(bindings.bufferIndex(name)))
+            throw new UnsupportedShaderException("Storage buffer is not declared with bufferObject."+bindings.bufferIndex(name)+": "+program);
         for(String name:bindings.samplers().keySet())if(bindings.storageImage(name)){
             Entry entry=byName.get(name);
             if(entry==null)throw new UnsupportedShaderException("Storage image is not declared with image."+name+": "+program);
             if(entry.declaration.volume()!=bindings.volume(name))throw new UnsupportedShaderException("Storage image "+name+" dimension differs from its declaration: "+program);
         }
     }
-    /** True when the binding is a storage image or the sampler of a pack image. */
-    boolean owns(ProgramBindings bindings,String name){return bindings.storageImage(name)?byName.containsKey(name):bySampler.containsKey(name);}
+    /** True when the binding is a pack storage buffer, a storage image or the sampler of a pack image. */
+    boolean owns(ProgramBindings bindings,String name){
+        if(bindings.storageBuffer(name))return buffers.containsKey(bindings.bufferIndex(name));
+        return bindings.storageImage(name)?byName.containsKey(name):bySampler.containsKey(name);
+    }
     boolean uses(ProgramBindings bindings){
         for(String name:bindings.samplers().keySet())if(owns(bindings,name))return true;
         return false;
@@ -128,6 +143,7 @@ final class PackImageSet implements AutoCloseable {
         List<Entry> reverse=new ArrayList<>(byName.values());java.util.Collections.reverse(reverse);
         for(Entry entry:reverse)entry.image.close();
         byName.clear();bySampler.clear();
+        for(GpuBuffer buffer:buffers.values())buffer.close();buffers.clear();
         if(nearest!=null){nearest.close();nearest=null;}if(linear!=null){linear.close();linear=null;}initialized=false;
     }
 }

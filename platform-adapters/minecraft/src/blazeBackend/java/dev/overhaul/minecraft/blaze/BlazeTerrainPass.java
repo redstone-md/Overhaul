@@ -71,7 +71,7 @@ final class BlazeTerrainPass implements BlazeQueue.Operation {
                 samples.add(sample);
                 if (name.equals(atlas)) sized = sample;
             }
-            var image = sized == null ? samples.isEmpty() ? null : samples.get(0).view().image() : sized.view().image();
+            var image = sized == null ? samples.isEmpty() || samples.get(0).view() == null ? null : samples.get(0).view().image() : sized.view().image();
             uniforms = owner.hostStorage().acquire(program.bindings().uniformBytes());
             try (MemoryStack stack = VulkanStack.push()) {
                 ByteBuffer bytes = stack.calloc(uniforms.size());

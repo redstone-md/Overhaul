@@ -116,6 +116,10 @@ final class BlazePackDraw implements BlazeProgramShape {
     }
 
     private void sample(String name, PackGraphRuntime runtime) {
+        if (code.bindings().storageBuffer(name)) {
+            samplers.put(name, BlazeTextures.Sampled.storage(runtime.packBuffer(code.bindings(), name)));
+            return;
+        }
         if (runtime.packImageBinding(code.bindings(), name)) {
             boolean storage = code.bindings().storageImage(name);
             samplers.put(name, new BlazeTextures.Sampled(runtime.packImage(code.bindings(), name), storage ? 0 : runtime.packImageSampler(name), true));
