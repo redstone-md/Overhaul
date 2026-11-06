@@ -122,6 +122,7 @@ public final class BlazePackFrame implements AutoCloseable {
         if (scene != null) scene.end();
         try {
             runtime.render(renderer.commands(), frame(minecraft.getMainRenderTarget()), uniforms);
+            if (scene != null) scene.drawOnTop();
             uniforms.complete();
         } catch (RuntimeException failure) {
             fail(installed, failure);

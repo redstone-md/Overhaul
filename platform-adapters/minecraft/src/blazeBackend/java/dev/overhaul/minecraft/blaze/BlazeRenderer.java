@@ -233,6 +233,13 @@ public final class BlazeRenderer implements AutoCloseable {
     void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){draw(mesh,target,shader,state.snapshot());}
+    /** Captures a draw now, in the game's current state, for {@link #queue} to place later in the frame; null draws nothing. */
+    BlazePass capture(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){
+        requireOpen();if(mesh.state().indexCount()==0)return null;
+        try{return new BlazePass(this,target,mesh,shader,state.snapshot());}
+        catch(BlazePass.SamplingFeedback feedback){BlazeGlBoundary.reportOnce("sampling feedback","A draw sampled the framebuffer it renders to; it was dropped");return null;}
+    }
+    void queue(BlazePass pass){requireOpen();BlazeStats.pass();queue.add(pass,0);}
     /** A draw whose raster state is not the game's, as the light camera's are. */
     void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader,BlazeDrawState.Snapshot snapshot){
         requireOpen();if(mesh.state().indexCount()==0)return;

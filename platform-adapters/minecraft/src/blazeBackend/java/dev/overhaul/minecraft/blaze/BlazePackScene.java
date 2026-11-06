@@ -40,6 +40,7 @@ public final class BlazePackScene implements AutoCloseable {
     private final Map<TargetKey, BlazeTarget> targets = new HashMap<>();
     private final Map<String, Object> shadowTextures = new HashMap<>();
     private final List<AutoCloseable> owned = new ArrayList<>();
+    private final List<BlazePass> onTop = new ArrayList<>();
     private final GpuBuffer constants;
     private final BlazeTextures.Sampled white, flatNormal, noSpecular;
     private BlazeTarget main, plain;
@@ -106,6 +107,15 @@ public final class BlazePackScene implements AutoCloseable {
         weather = false;
     }
 
+    /** Queues the draws held back while the frame was open, over the image the pack's last pass left in the main target. */
+    public void drawOnTop() {
+        try {
+            for (BlazePass pass : onTop) renderer.queue(pass);
+        } finally {
+            onTop.clear();
+        }
+    }
+
     /** Brackets the game's rain and snow, which the pack draws with gbuffers_weather. */
     public void weather(boolean drawing) {
         weather = drawing;
@@ -145,6 +155,11 @@ public final class BlazePackScene implements AutoCloseable {
     void draw(BlazeMesh mesh, BlazeShaderSnapshot game) {
         String shader = activeShader();
         if (weather && "particle".equals(shader)) shader = WEATHER;
+        if (shader != null && BlazePackSelection.onTop(shader)) {
+            BlazePass pass = renderer.capture(mesh, main, game);
+            if (pass != null) onTop.add(pass);
+            return;
+        }
         BlazePackDraw draw = shader == null ? null : select(shader);
         if (draw != null) {
             try {
@@ -240,6 +255,8 @@ public final class BlazePackScene implements AutoCloseable {
     @Override
     public void close() {
         open = false;
+        for (BlazePass pass : onTop) pass.close();
+        onTop.clear();
         renderer.packScene(null);
         for (BlazePackDraw draw : byProgram.values()) renderer.forgetProgram(draw.code);
         for (BlazeTarget target : targets.values()) target.close();

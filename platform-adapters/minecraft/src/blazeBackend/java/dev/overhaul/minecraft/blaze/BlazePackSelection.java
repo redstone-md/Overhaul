@@ -19,6 +19,11 @@ final class BlazePackSelection {
         };
     }
 
+    /** The block outline and debug lines: no pack program draws them, and the pack's passes would paint over them. */
+    static boolean onTop(String shader) {
+        return "rendertype_lines".equals(shader);
+    }
+
     /**
      * The alpha test a pack without its own expects from the loader: the game's shaders discard below a tenth except
      * for solid and translucent terrain, and Iris keeps that cutoff for the programs standing in for them.
