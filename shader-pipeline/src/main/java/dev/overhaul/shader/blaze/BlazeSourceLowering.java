@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 /** Parses only global stage declarations; function parameter in/out qualifiers stay untouched. */
 final class BlazeSourceLowering {
     private static final Pattern DECLARATION = Pattern.compile("(?:(flat)\\s+)?(in|out)\\s+(\\w+)\\s+(\\w+)\\s*;");
+    private static final Pattern STORAGE_BUFFER = Pattern.compile("layout\\s*\\([^)]*\\)\\s*(?:(?:readonly|writeonly|coherent|volatile|restrict)\\s+)*buffer\\b");
     private BlazeSourceLowering() {}
     record Stage(String source,Set<String> flatVaryings,Map<String,String> attributes,Map<String,String> varyings){}
 
@@ -51,6 +52,15 @@ final class BlazeSourceLowering {
                     }
                     index = declaration.end();
                     continue;
+                }
+                if (braces == 0 && parentheses == 0 && word.equals("layout")) {
+                    // A storage buffer block keeps its layout: the translator turns it into the program's own binding.
+                    Matcher buffer = STORAGE_BUFFER.matcher(text).region(index, text.length());
+                    if (buffer.lookingAt()) {
+                        output.append(buffer.group());
+                        index = buffer.end();
+                        continue;
+                    }
                 }
                 if (braces == 0 && parentheses == 0 && (word.equals("smooth")
                         || word.equals("noperspective") || word.equals("layout") || word.equals("centroid"))) {

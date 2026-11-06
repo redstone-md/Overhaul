@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 
 /**
  * Rewrites what current OpenGL sources declare into the shape the Blaze lowering reads: uniform blocks become loose
- * uniforms named after their block, explicit locations go because every input binds by name, and a vertex shader that
+ * uniforms named after their block, or read-only storage buffers when they hold arrays or structs, explicit locations go because every input binds by name, and a vertex shader that
  * only counts vertices reads the count from a position attribute.
  */
 public final class BlazeModernSource {
@@ -46,22 +46,36 @@ public final class BlazeModernSource {
         while (block.find()) {
             String instance = block.group(3), body = block.group(2);
             renamed.setLength(0);
+            if (!flat(body)) {
+                // Arrays and structs have no loose-uniform shape; the block keeps its std140 bytes as a read-only storage buffer.
+                renamed.append("layout(std140, binding = ").append(BlazeBlockBuffers.index(block.group(1))).append(") readonly buffer ")
+                        .append(block.group(1)).append(" {").append(body).append('}').append(instance == null ? "" : " " + instance).append(';');
+                block.appendReplacement(result, Matcher.quoteReplacement(renamed.toString()));
+                continue;
+            }
             Matcher field = FIELD.matcher(body);
-            int end = 0;
             while (field.find()) {
-                if (!body.substring(end, field.start()).isBlank()) throw new UnsupportedShaderException("Unsupported uniform block field in " + block.group(1));
-                end = field.end();
                 String name = instance == null ? field.group(2) : instance + "_" + field.group(2);
                 renamed.append("uniform ").append(field.group(1)).append(' ').append(name).append(';');
                 if (instance != null) names.add(new String[] {instance, field.group(2), name});
             }
-            if (!body.substring(end).isBlank()) throw new UnsupportedShaderException("Unsupported uniform block field in " + block.group(1));
             block.appendReplacement(result, Matcher.quoteReplacement(renamed.toString()));
         }
         block.appendTail(result);
         String out = result.toString();
         for (String[] name : names) out = out.replaceAll("\\b" + name[0] + "\\s*\\.\\s*" + name[1] + "\\b", name[2]);
         return out;
+    }
+
+    /** True when every member is one plain {@code type name;}, so the block can become loose uniforms. */
+    private static boolean flat(String body) {
+        Matcher field = FIELD.matcher(body);
+        int end = 0;
+        while (field.find()) {
+            if (!body.substring(end, field.start()).isBlank()) return false;
+            end = field.end();
+        }
+        return body.substring(end).isBlank();
     }
 
     private static String separate(String text) {
