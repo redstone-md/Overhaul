@@ -128,6 +128,32 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         };
     }
 
+    /** A custom definition's input bound to the provider that owns it, so each frame skips the name switches. */
+    @Override
+    public PackCustomUniforms.Reader reader(String name, int component) {
+        if (!READERS) return PackCustomUniforms.Source.super.reader(name, component);
+        PackCustomUniforms.Reader frameValue = switch (name) {
+            case "viewWidth" -> () -> width;
+            case "viewHeight" -> () -> height;
+            case "aspectRatio" -> () -> (double) width / height;
+            case "frameCounter" -> () -> frame;
+            case "frameTime" -> () -> frameTime;
+            case "frameTimeCounter" -> () -> counter;
+            case "near" -> () -> near;
+            case "far" -> () -> far;
+            case "cameraPosition", "previousCameraPosition", "fogColor", "cameraPositionInt", "cameraPositionFract",
+                 "previousCameraPositionInt", "previousCameraPositionFract" -> () -> read(name, component);
+            default -> null;
+        };
+        if (frameValue != null) return frameValue;
+        if (!Double.isNaN(celestial.read(name, component))) return () -> celestial.read(name, component);
+        if (!Double.isNaN(environment.read(name, component))) return () -> environment.read(name, component);
+        if (!Double.isNaN(presence.read(name, component))) return () -> presence.read(name, component);
+        if (!Double.isNaN(distant.read(name, component))) return () -> distant.read(name, component);
+        player.read(name, component); // an unknown name fails here, once, as it would on the first frame
+        return () -> player.read(name, component);
+    }
+
     /**
      * Each uniform's source, found once per block: the custom definitions and the providers that turned a name down are
      * not asked again. Every provider decides by the name alone, so the answer holds until the pack changes.
@@ -137,6 +163,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
 
     private static final byte CUSTOM = 0, FRAME = 1, CELESTIAL = 2, ENVIRONMENT = 3, PRESENCE = 4, DISTANT = 5, PLAYER = 6;
     private static final boolean PLANS = BlazeOptimization.UNIFORM_PLANS.on();
+    private static final boolean READERS = BlazeOptimization.UNIFORM_READERS.on();
     private final Map<UniformBlock, Plan> plans = new IdentityHashMap<>();
 
     @Override

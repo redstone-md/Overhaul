@@ -20,7 +20,13 @@ import java.util.regex.Pattern;
  */
 public final class PackCustomUniforms {
     /** Supplies a built-in value; an unknown name throws, so nothing silently reads as zero. */
-    public interface Source { double read(String name, int component); }
+    public interface Source {
+        double read(String name, int component);
+        /** One name and component bound once, so each frame skips the name lookup; by default it asks {@link #read}. */
+        default Reader reader(String name, int component) { return () -> read(name, component); }
+    }
+    /** A built-in value already resolved to whatever supplies it. */
+    public interface Reader { double read(); }
 
     private static final Pattern KEY = Pattern.compile("(uniform|variable)\\.(bool|int|float|vec[234])\\.([A-Za-z_]\\w*)");
     private static final Set<String> EXPRESSION_ONLY = Set.of("is_alive","is_burning","is_child","is_glowing","is_hurt","is_in_lava",
@@ -53,6 +59,8 @@ public final class PackCustomUniforms {
     private final List<Builtin> builtins;
     private final Map<String,String> uniformTypes;
     private double frameSeconds;
+    private Source boundSource;
+    private Reader[][] readers = new Reader[0][];
 
     private PackCustomUniforms(Map<String,Definition> definitions, List<Definition> order, List<Builtin> builtins) {
         this.definitions = definitions; this.order = order; this.builtins = builtins;
@@ -140,8 +148,22 @@ public final class PackCustomUniforms {
 
     public void update(double frameSeconds, Source source) {
         this.frameSeconds = frameSeconds;
-        for (Builtin builtin : builtins) for (int index = 0; index < builtin.values().length; index++) builtin.values()[index] = source.read(builtin.name(),index);
+        if (source != boundSource) bind(source);
+        for (int at = 0; at < readers.length; at++) {
+            double[] values = builtins.get(at).values();
+            Reader[] bound = readers[at];
+            for (int index = 0; index < bound.length; index++) values[index] = bound[index].read();
+        }
         for (Definition definition : order) store(definition);
+    }
+    private void bind(Source source) {
+        readers = new Reader[builtins.size()][];
+        for (int at = 0; at < readers.length; at++) {
+            Builtin builtin = builtins.get(at);
+            readers[at] = new Reader[builtin.values().length];
+            for (int index = 0; index < readers[at].length; index++) readers[at][index] = source.reader(builtin.name(),index);
+        }
+        boundSource = source;
     }
     /** Components are written after all are read, so a self-reference sees last frame's vector. */
     private static void store(Definition definition) {

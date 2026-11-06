@@ -55,6 +55,7 @@ public enum BlazeOptimization {
     DEBUG_TEXT("debugText", "F3 text lines gathered at 10 Hz instead of every time the HUD is drawn"),
     POOL_RANGES("poolRanges", "Free ranges of per-frame buffer pages kept in sorted arrays instead of a tree of boxed offsets"),
     UNIFORM_PLANS("uniformPlans", "Shader pack uniforms filled from the source each name resolved to the first time instead of asking every source again"),
+    UNIFORM_READERS("uniformReaders", "Built-in values a pack's custom uniforms read bound once to the source that owns them instead of looked up by name every frame"),
     SHADOW_COLUMNS("shadowColumns", "Kept shadow casters tested against each frame's light frustum a column at a time, section by section only where the frustum cuts the column"),
     SHADOW_TIGHT_REUSE("shadowTightReuse", "The light frustum test of kept shadow casters widened by four blocks and reused while the camera moves less than half a block and the sun turns less than a quarter degree"),
     SHADOW_REACH("shadowReach", "Shadow casters whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map; needs packShadowReuse"),

@@ -133,6 +133,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
         labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
         labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
+        labels.put(BlazeOptimization.UNIFORM_READERS, "Bound custom uniform inputs");
         labels.put(BlazeOptimization.SHADOW_COLUMNS, "Shadow casters by column");
         labels.put(BlazeOptimization.SHADOW_TIGHT_REUSE, "Reused shadow frustum test");
         labels.put(BlazeOptimization.SHADOW_REACH, "Shadow casters by view");
