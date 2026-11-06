@@ -83,7 +83,8 @@ These are with F3 open, Complementary and Distant Horizons, run back to back on 
 without it that view is 262, 2.06x. An earlier
 pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
 A later back to back pair, after `shadowReach`, gave horizon 259 against 134 (1.93x) and looking
-down 273 against 121 (2.26x): the horizon run landed in the slow clock mode.
+down 273 against 121 (2.26x): the horizon run landed in the slow clock mode. The newest pair gave
+horizon 269 against 125 (2.15x) and looking down 252 against 128 (1.97x).
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
 3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
@@ -108,7 +109,11 @@ Looking down (spectator at 4.7 140 3.2, pitch 50) the GPU spends about 3.86 ms: 
 options, the top of the view still reaches about 5° below the horizon, so nearly every LOD is on screen.
 
 `-Doverhaul.blaze.gpuStats=true` logs a `Blaze GPU ms per frame` line every 600
-frames. Each mark ends the open render pass, so frames run slightly slower while it is on. Prism keeps
+frames. It also stamps every shader pack graph pass (`pass:<name>`) and the opaque shadow casters
+(`shadowOpaque`). At the horizon in the fast clock mode (3.48 ms total): opaque shadow casters 0.30,
+the shadowtex1 copy 0.02, distant 0.98, opaque 0.77, deferred1 0.25, composite1 0.25, the other
+composites 0.05 to 0.07 each, final 0.03. The whole mipmap chain is about 0.13 ms and all clears about
+0.04 ms, so neither is worth a rewrite. Each mark ends the open render pass, so frames run slightly slower while it is on. Prism keeps
 an instance's settings in memory and writes them back, so close Prism before editing `instance.cfg`.
 
 Experiments that did not help, all reverted:
@@ -120,6 +125,8 @@ Experiments that did not help, all reverted:
 - Sorting Distant Horizons containers by distance: 0.93 against 0.94 ms, noise. Their quadtree order is already close.
 - Masking Distant Horizons fragments behind vanilla terrain. Complementary discards them itself past 0.4 to
   0.6 of the far plane; an upper-bound probe saved about 0.05 ms, so it was dropped.
+- Dropping shadow casters below the surface (a probe with a height floor): about 0.02 ms.
+- Skipping the shadowtex1 copy would save only 0.02 ms.
 - Batching image barriers, and skipping near Distant Horizons containers: no measurable change.
 - Culling Distant Horizons buffers by the box their vertices span. DH tests each buffer against a box as tall as
   the world, so this is tighter, but looking down it removed only about 7% of buffers and the distant phase
