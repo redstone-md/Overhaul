@@ -7,7 +7,7 @@ import net.minecraft.world.level.LightLayer;
 
 /** One camera and world snapshot shared by every pass of a frame; it retains no level, camera or entity. */
 final class BlazePackEnvironment {
-    private int worldTime, worldDay, moonPhase, submersion, blockLight, skyLight;
+    private int worldTime, worldDay, moonPhase, submersion, blockLight, skyLight, height, bottom, logicalHeight;
     private float red, green, blue, rain, thunder, altitude, brightness;
 
     void capture(BlazePackCapture frame) {
@@ -25,6 +25,9 @@ final class BlazePackEnvironment {
         green = (float) sky.y;
         blue = (float) sky.z;
         moonPhase = level.getMoonPhase();
+        height = level.getHeight();
+        bottom = level.getMinBuildHeight();
+        logicalHeight = level.dimensionType().logicalHeight();
         rain = weather(level.getRainLevel(partial));
         thunder = weather(level.getThunderLevel(partial));
         altitude = (float) position.y;
@@ -59,6 +62,9 @@ final class BlazePackEnvironment {
             case "eyeBrightness" -> values.setIntVector(name, blockLight, skyLight);
             case "screenBrightness" -> values.setFloat(name, brightness);
             case "pi" -> values.setFloat(name, (float) Math.PI);
+            case "heightLimit" -> values.setInt(name, height);
+            case "bedrockLevel" -> values.setInt(name, bottom);
+            case "logicalHeightLimit" -> values.setInt(name, logicalHeight);
             default -> {
                 return false;
             }
@@ -80,6 +86,9 @@ final class BlazePackEnvironment {
             case "eyeBrightness" -> component == 0 ? blockLight : skyLight;
             case "screenBrightness" -> brightness;
             case "pi" -> Math.PI;
+            case "heightLimit" -> height;
+            case "bedrockLevel" -> bottom;
+            case "logicalHeightLimit" -> logicalHeight;
             default -> Double.NaN;
         };
     }
