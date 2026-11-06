@@ -4,7 +4,6 @@ import dev.overhaul.vulkan.VulkanStack;
 
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.GpuBuffer;
-import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,9 +29,11 @@ public final class BlazeSectionBatch implements AutoCloseable {
 
     private final BlazeRenderer owner;
     private final List<Run> runs = new ArrayList<>();
-    /** The newest run per vertex buffer, older ones with the same buffer chained through {@link #older}: a scan over thousands of runs per section was quadratic. */
-    private final Reference2IntOpenHashMap<GpuBuffer> newest = new Reference2IntOpenHashMap<>();
-    private int[] older = new int[256];
+    /**
+     * Run index plus one by all four run keys, open addressed. Keyed by vertex buffer alone, sections of one page with
+     * different remainders chained every run of that page, and each new run walked the whole chain.
+     */
+    private int[] slots = new int[1024];
     private int[] sections = new int[4 * 1024];
     private float[] offsets = new float[3 * 1024];
     private int count;
@@ -50,7 +51,6 @@ public final class BlazeSectionBatch implements AutoCloseable {
 
     BlazeSectionBatch(BlazeRenderer owner) {
         this.owner = owner;
-        newest.defaultReturnValue(-1);
     }
 
     /**
@@ -107,14 +107,35 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private int run(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
         int last = runs.size() - 1;
         if (last >= 0 && runs.get(last).holds(vertices, remainder, indices, indexBytes)) return last;
-        int head = newest.getInt(vertices);
-        if (!ordered) for (int index = head; index >= 0; index = older[index]) if (runs.get(index).holds(vertices, remainder, indices, indexBytes)) return index;
         int added = last + 1;
-        runs.add(new Run(vertices, remainder, indices, indexBytes));
-        if (added == older.length) older = Arrays.copyOf(older, added * 2);
-        older[added] = head;
-        newest.put(vertices, added);
+        Run run = new Run(vertices, remainder, indices, indexBytes);
+        if (ordered) {
+            runs.add(run);
+            return added;
+        }
+        int mask = slots.length - 1, slot = hash(run) & mask;
+        for (int held; (held = slots[slot]) != 0; slot = slot + 1 & mask) {
+            if (runs.get(held - 1).holds(vertices, remainder, indices, indexBytes)) return held - 1;
+        }
+        runs.add(run);
+        slots[slot] = added + 1;
+        if (runs.size() * 2 > slots.length) rehash();
         return added;
+    }
+
+    private static int hash(Run run) {
+        int hash = System.identityHashCode(run.vertices) * 0x9E3779B9 ^ run.remainder * 0x85EBCA6B ^ System.identityHashCode(run.indices) * 0xC2B2AE35 ^ run.indexBytes;
+        return hash ^ hash >>> 16;
+    }
+
+    private void rehash() {
+        slots = new int[slots.length * 2];
+        int mask = slots.length - 1;
+        for (int index = 0; index < runs.size(); index++) {
+            int slot = hash(runs.get(index)) & mask;
+            while (slots[slot] != 0) slot = slot + 1 & mask;
+            slots[slot] = index + 1;
+        }
     }
 
     public void end() {
@@ -138,8 +159,8 @@ public final class BlazeSectionBatch implements AutoCloseable {
             failed.run();
         } finally {
             count = 0;
+            if (!ordered && !runs.isEmpty()) Arrays.fill(slots, 0);
             runs.clear();
-            newest.clear();
         }
     }
 
