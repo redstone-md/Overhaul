@@ -65,14 +65,24 @@ public final class BlazeSectionBatch implements AutoCloseable {
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {
-        int indexCount = mesh.drawIndexCount;
-        BlazeMeshState.Layout layout = mesh.drawLayout;
-        if (indexCount == 0 || compact == null && BlazeCompactSection.compact(layout)) return;
-        if (first != null && (mesh.drawTopology != firstTopology || layout != firstLayout && !layout.equals(firstLayout))) finish();
+        if (compact == null && BlazeCompactSection.compact(mesh.drawLayout)) return;
+        append(mesh.stateOrNull(), mesh.drawLayout, mesh.drawTopology, mesh.drawIndexCount, mesh.drawFirstIndex, mesh.drawBaseVertex,
+                mesh.drawVertices, mesh.drawRemainder, mesh.drawIndices, mesh.drawIndexBytes, x, y, z);
+    }
+
+    /** A mesh another renderer uploaded: whole buffers, indices from the start of theirs. */
+    void add(BlazeMeshState state, GpuBuffer vertices, GpuBuffer indices, int indexCount, float x, float y, float z) {
+        append(state, state.layout(), state.topology(), indexCount, 0, 0, vertices, 0, indices, state.indexBytes(), x, y, z);
+    }
+
+    private void append(BlazeMeshState state, BlazeMeshState.Layout layout, int topology, int indexCount, int firstIndex, int baseVertex,
+            GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes, float x, float y, float z) {
+        if (indexCount == 0) return;
+        if (first != null && (topology != firstTopology || layout != firstLayout && !layout.equals(firstLayout))) finish();
         if (first == null) {
-            first = mesh.stateOrNull();
+            first = state;
             firstLayout = layout;
-            firstTopology = mesh.drawTopology;
+            firstTopology = topology;
         }
         if (count * 4 == sections.length) {
             sections = Arrays.copyOf(sections, sections.length * 2);
@@ -80,9 +90,9 @@ public final class BlazeSectionBatch implements AutoCloseable {
         }
         int at = count * 4, position = count * 3;
         sections[at] = indexCount;
-        sections[at + 1] = mesh.drawFirstIndex;
-        sections[at + 2] = mesh.drawBaseVertex;
-        sections[at + 3] = run(mesh.drawVertices, mesh.drawRemainder, mesh.drawIndices, mesh.drawIndexBytes);
+        sections[at + 1] = firstIndex;
+        sections[at + 2] = baseVertex;
+        sections[at + 3] = run(vertices, remainder, indices, indexBytes);
         offsets[position] = x;
         offsets[position + 1] = y;
         offsets[position + 2] = z;

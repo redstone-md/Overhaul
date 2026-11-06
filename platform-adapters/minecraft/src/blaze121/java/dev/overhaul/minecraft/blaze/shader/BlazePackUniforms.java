@@ -28,6 +28,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
     private final BlazePackCelestial celestial = new BlazePackCelestial();
     private final BlazePackPlayer player = new BlazePackPlayer();
     private final BlazePackPresence presence = new BlazePackPresence();
+    private final BlazePackDistantUniforms distant = new BlazePackDistantUniforms();
     private PackCustomUniforms custom;
     private int width, height, frame;
     private float frameTime, counter, near, far;
@@ -70,6 +71,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         }
         player.capture(capture, frameTime, pack.smoothing(), pack.ids(), environment, near, capture.minecraft().gameRenderer.getDepthFar());
         presence.capture(capture);
+        distant.capture(capture.projection());
         custom.update(frameTime, this);
     }
 
@@ -83,6 +85,10 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
 
     org.joml.Matrix4f shadowProjection(org.joml.Matrix4f into) {
         return celestial.shadowProjection(into);
+    }
+
+    org.joml.Matrix4f distantProjection(org.joml.Matrix4f into) {
+        return distant.projection(into);
     }
 
     @Override
@@ -107,6 +113,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
                 double value = celestial.read(name, component);
                 if (Double.isNaN(value)) value = environment.read(name, component);
                 if (Double.isNaN(value)) value = presence.read(name, component);
+                if (Double.isNaN(value)) value = distant.read(name, component);
                 yield Double.isNaN(value) ? player.read(name, component) : value;
             }
         };
@@ -152,7 +159,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
                 case FragmentAlphaTest.CUTOFF -> values.setFloat(name, 0f); // each draw overwrites it
                 case "renderStage" ->values.setInt(name, PackRenderStages.of(program.name()));
                 default -> {
-                    if (!celestial.fill(name, values) && !environment.fill(name, values) && !presence.fill(name, values) && !player.fill(name, values)) {
+                    if (!celestial.fill(name, values) && !environment.fill(name, values) && !presence.fill(name, values) && !distant.fill(name, values) && !player.fill(name, values)) {
                         throw new UnsupportedShaderException("Unbound shader-pack uniform: " + name + " in " + program.name());
                     }
                 }
@@ -166,6 +173,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         previousX = x;
         previousY = y;
         previousZ = z;
+        distant.complete();
         frame = (frame + 1) % 720720;
         initialized = true;
     }
@@ -173,6 +181,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
     void resetHistory() {
         initialized = false;
         player.reset();
+        distant.reset();
     }
 
     private static double fraction(double value) {

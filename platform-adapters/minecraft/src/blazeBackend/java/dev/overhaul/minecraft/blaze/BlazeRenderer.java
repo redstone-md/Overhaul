@@ -226,6 +226,7 @@ public final class BlazeRenderer implements AutoCloseable {
         try{draw(mesh,target,shader);}
         catch(UnsupportedOperationException failure){BlazeGlBoundary.reportOnce("foreign draw "+failure.getMessage(),"A mod program's draw was dropped: "+failure.getMessage());}
     }
+    BlazePackScene packScene(){return packScene;}
     void packScene(BlazePackScene scene){
         boolean compact=scene!=null&&compactsSections();packScene=scene;
         boolean ids=BlazePackBlockIds.activate(scene==null?null:scene.ids());

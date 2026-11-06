@@ -45,6 +45,10 @@ public final class BlazeDhFrame {
         }
         GlStateManager._colorMask(true, true, true, true);
         if (containers == null) return;
+        if (packDraws(renderer)) {
+            drawThroughPack(renderer, params, opaque, containers);
+            return;
+        }
         BlazeDh dh = renderer.dh();
         dh.begin(terrainSettings(params));
         for (int index = 0; index < containers.size(); index++) {
@@ -58,6 +62,51 @@ public final class BlazeDhFrame {
             }
         }
         dh.end();
+    }
+
+    /** A shader pack with DH programs draws the LODs into its own gbuffers, which leaves DH's composite nothing to add. */
+    private static boolean packDraws(BlazeRenderer renderer) {
+        BlazePackScene scene = renderer.packScene();
+        return scene != null && scene.drawsDistant();
+    }
+
+    private static void drawThroughPack(BlazeRenderer renderer, RenderParams params, boolean opaque, SortedArraySet<LodBufferContainer> containers) {
+        BlazePackDistant.planes(RenderUtil.getNearClipPlaneInBlocks(), RenderUtil.getFarClipPlaneDistanceInBlocks(), Quality.lodChunkRenderDistanceRadius.get() * 16);
+        BlazePackScene scene = renderer.packScene();
+        if (!opaque && scene.holdDistant(() -> drawThroughPack(renderer, params, false, containers))) return;
+        BlazeSectionBatch batch = scene.distant(opaque);
+        if (batch == null) return;
+        var buffers = BlazeGlBoundary.buffers();
+        try {
+            for (int index = 0; index < containers.size(); index++) {
+                LodBufferContainer container = containers.get(index);
+                if (!container.buffersUploaded) continue;
+                float x = (float) (container.minCornerBlockPos.getX() - params.exactCameraPosition.x);
+                float y = (float) (container.minCornerBlockPos.getY() - params.exactCameraPosition.y);
+                float z = (float) (container.minCornerBlockPos.getZ() - params.exactCameraPosition.z);
+                for (IVertexBufferWrapper wrapper : opaque ? container.vboOpaqueWrappers : container.vboTransparentWrappers) {
+                    if (wrapper != null) add(renderer, buffers, batch, (GLVertexBuffer) wrapper, x, y, z);
+                }
+            }
+        } finally {
+            scene.distantDone(batch, opaque);
+        }
+    }
+
+    private static void add(BlazeRenderer renderer, BlazeGlBuffers buffers, BlazeSectionBatch batch, GLVertexBuffer vertices, float x, float y, float z) {
+        GlQuadIndexBuffer indices = vertices.getQuadIBO();
+        if (indices == null) return;
+        long vertexStamp = vertices.renderStampLock.readLock(), indexStamp = indices.renderStampLock.readLock();
+        try {
+            int count = vertices.getVertexCount();
+            if (count == 0 || vertices.getId() == 0 || indices.getId() == 0) return;
+            var vertexBuffer = buffers.device(renderer, vertices.getId());
+            var indexBuffer = buffers.device(renderer, indices.getId());
+            if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);
+        } finally {
+            vertices.renderStampLock.unlock(vertexStamp);
+            indices.renderStampLock.unlock(indexStamp);
+        }
     }
 
     private static void draw(BlazeDh dh, GLVertexBuffer vertices, float x, float y, float z) {
@@ -136,13 +185,14 @@ public final class BlazeDhFrame {
     /** The original copy leaves the frame's framebuffer bound, and everything after it draws there. */
     public static void composite(BlazeRenderer renderer, RenderParams params, int colorTexture, int depthTexture) {
         GlStateManager._glBindFramebuffer(36160, Minecraft.getInstance().getMainRenderTarget().frameBufferId);
+        if (packDraws(renderer)) return;
         float far = RenderUtil.getFarClipPlaneDistanceInBlocks();
         renderer.dh().composite(colorTexture, depthTexture, columns(params.dhInverseMvmProjectionMatrix), far * 0.5F, far * 0.9F);
     }
 
     /** DH's own distances: the band starts past the clip plane its LODs are cut at, so what fades in is always there. */
     public static void vanillaFade(BlazeRenderer renderer, RenderParams params) {
-        if (Debugging.lodOnlyMode.get()) return;
+        if (Debugging.lodOnlyMode.get() || packDraws(renderer)) return;
         float near = RenderUtil.getNearClipPlaneInBlocks() + 16;
         renderer.dh().vanillaFade(Minecraft.getInstance().getMainRenderTarget().getDepthTextureId(), columns(params.dhInverseMvmProjectionMatrix),
                 columns(params.mcInverseMvmProjectionMatrix), near * 1.5F, near * 1.9F, params.clientLevelWrapper.getMaxHeight());

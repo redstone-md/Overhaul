@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.shader;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
+import dev.overhaul.minecraft.blaze.BlazePackDistant;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeTarget;
@@ -10,11 +11,13 @@ import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.graph.PackPreflight;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackBuiltinMacros;
+import dev.overhaul.shader.pack.PackDhPrograms;
 import dev.overhaul.shader.pack.PackDiagnostic;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.ShaderPackSource;
 import dev.overhaul.vulkan.PackGraphRuntime;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import net.minecraft.SharedConstants;
@@ -35,6 +38,7 @@ public final class BlazePackFrame implements AutoCloseable {
     private final Minecraft minecraft;
     private final BlazeRenderer renderer;
     private final BlazePackUniforms uniforms = new BlazePackUniforms();
+    private final Matrix4f distantProjection = new Matrix4f();
     private Properties file;
     private BlazePackConfiguration installed, blocked;
     private CompiledShaderPack pack;
@@ -85,7 +89,10 @@ public final class BlazePackFrame implements AutoCloseable {
             }
             uniforms.capture(new BlazePackCapture(minecraft, camera, partial, view, projection, width, height), pack);
             runtime.beginFrame(renderer.packCommands(), frame(main), uniforms);
-            if (scene != null) scene.begin(renderer.target(main.frameBufferId));
+            if (scene != null) {
+                scene.begin(renderer.target(main.frameBufferId));
+                scene.distantCamera(view, uniforms.distantProjection(distantProjection));
+            }
             if (shadows != null) {
                 shadows.render(minecraft, sections, uniforms, camera, light, frame(main));
                 scene.shadowsDone();
@@ -156,6 +163,10 @@ public final class BlazePackFrame implements AutoCloseable {
         long started = System.nanoTime();
         try (ShaderPackSource source = ShaderPackSource.open(configuration.pack()); ShadercCompiler compiler = new ShadercCompiler()) {
             Map<String, String> definitions = PackBuiltinMacros.with(configuration.definitions(), SharedConstants.getCurrentVersion().getName(), System.getProperty("os.name"));
+            if (BlazePackDistant.loaded()) {
+                definitions = new HashMap<>(definitions);
+                for (var macro : PackDhPrograms.macros().entrySet()) definitions.putIfAbsent(macro.getKey(), macro.getValue());
+            }
             Map<String, Boolean> options = configuration.selectedOptions();
             String dimension = minecraft.level.dimension().location().toString();
             CompiledShaderPack compiled;
@@ -194,7 +205,8 @@ public final class BlazePackFrame implements AutoCloseable {
     private PackGraphRuntime.Frame frame(RenderTarget main) {
         BlazeTarget target = renderer.target(main.frameBufferId);
         float[] fog = uniforms.fog();
-        return new PackGraphRuntime.Frame(target.colorView(), target.depthView(), new PackRenderTargets.Color(fog[0], fog[1], fog[2], 1), Map.of());
+        return new PackGraphRuntime.Frame(target.colorView(), target.depthView(), new PackRenderTargets.Color(fog[0], fog[1], fog[2], 1),
+                scene == null ? Map.of() : scene.distantTextures());
     }
 
     private void fail(BlazePackConfiguration configuration, Exception failure) {

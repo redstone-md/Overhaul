@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze;
 import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
+import dev.overhaul.shader.pack.PackDhPrograms;
 import dev.overhaul.shader.pack.PackSectionOffsets;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import java.nio.ByteBuffer;
@@ -72,6 +73,8 @@ final class BlazePackVertexInputs {
                 if (position == null) throw new UnsupportedShaderException("Mesh without positions reached a pack program");
                 yield new NativeGraphicsPipeline.Attribute(location, 0, position.nativeFormat(), position.offset());
             }
+            case PackDhPrograms.POSITION -> required(location, layout, "DhPosition");
+            case PackDhPrograms.DATA -> required(location, layout, "DhData");
             case "overhaulLegacyColor" -> either(location, layout, "Color", constants, ONE);
             case "overhaulLegacyNormal" -> either(location, layout, "Normal", constants, UP);
             case "overhaulLegacyTexCoord0", "mc_midTexCoord" -> either(location, layout, "UV0", constants, TEXTURE);
@@ -82,6 +85,12 @@ final class BlazePackVertexInputs {
             case "at_velocity", "at_midBlock" -> constant(location, constants, ZERO);
             default -> throw new UnsupportedShaderException("Unbound pack vertex input: " + name);
         };
+    }
+
+    private static NativeGraphicsPipeline.Attribute required(int location, BlazeMeshState.Layout layout, String source) {
+        var field = field(layout, source);
+        if (field == null) throw new UnsupportedShaderException("Mesh without " + source + " reached a Distant Horizons program");
+        return new NativeGraphicsPipeline.Attribute(location, 0, field.nativeFormat(), field.offset());
     }
 
     private static NativeGraphicsPipeline.Attribute either(int location, BlazeMeshState.Layout layout, String source, int constants, int fallback) {

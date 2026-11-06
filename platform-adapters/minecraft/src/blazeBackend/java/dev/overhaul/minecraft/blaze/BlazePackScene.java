@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackDhPrograms;
 import dev.overhaul.shader.pack.PackIdMap;
 import dev.overhaul.shader.pack.PackProgramFallbacks;
 import dev.overhaul.shader.pack.PackSectionOffsets;
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -47,6 +49,11 @@ public final class BlazePackScene implements AutoCloseable {
     private final List<BlazePass> onTop = new ArrayList<>();
     private final GpuBuffer constants;
     private final BlazeTextures.Sampled white, flatNormal, noSpecular;
+    private final BlazePackDistant distant;
+    private final CompiledShaderPack.Program distantOpaque, distantTranslucent;
+    private final Map<String, Object> distantTextures = new HashMap<>();
+    private final Matrix4f distantView = new Matrix4f(), distantProjection = new Matrix4f();
+    private Runnable heldDistant;
     private BlazeTarget main, plain;
     private BlazePackDraw caster;
     private BlazeDrawState.Snapshot shadowRaster;
@@ -69,6 +76,11 @@ public final class BlazePackScene implements AutoCloseable {
         white = solid(1, 1, 1, 1);
         flatNormal = solid(0.5f, 0.5f, 1, 1);
         noSpecular = solid(0, 0, 0, 0);
+        distantOpaque = programs.get("dh_terrain");
+        distantTranslucent = distantOpaque == null ? null : programs.getOrDefault("dh_water", distantOpaque);
+        GpuImage size = runtime.color(0).image();
+        distant = distantOpaque == null ? null : new BlazePackDistant(renderer, size.width(0), size.height(0));
+        if (distant != null) owned.add(distant);
         renderer.packScene(this);
     }
 
@@ -97,7 +109,77 @@ public final class BlazePackScene implements AutoCloseable {
         main = mainTarget;
         open = true;
         opaqueDone = false;
+        heldDistant = null;
         nextPhase();
+        if (distant != null) distant.begin(target(List.of(), distant.view(0)), target(List.of(), distant.view(1)));
+    }
+
+    /** The camera the frame's LODs draw with: the pack's model-view and its projection over DH's clip planes. */
+    public void distantCamera(Matrix4fc modelView, Matrix4fc projection) {
+        distantView.set(modelView);
+        distantProjection.set(projection);
+    }
+
+    /** True while the pack draws Distant Horizons' terrain itself, so DH's own composite has nothing to add. */
+    public boolean drawsDistant() {
+        return open && distant != null;
+    }
+
+    /** LOD depth for the pack's composites; empty when the pack draws no LODs. */
+    public Map<String, GpuImageView> distantTextures() {
+        return distant == null ? Map.of() : distant.textures();
+    }
+
+    GpuImageView distantDepth(int index) {
+        return distant == null ? null : distant.view(index);
+    }
+
+    /**
+     * DH draws translucent LODs before the pack's deferred passes, which would light them twice: such a pass is kept
+     * and drawn right after those passes, as the pack's own translucent terrain is. True when it was kept.
+     */
+    boolean holdDistant(Runnable later) {
+        if (!drawsDistant() || opaqueDone) return false;
+        heldDistant = later;
+        return true;
+    }
+
+    /** One DH terrain pass as a batch, each LOD added with its offset from the camera; null draws nothing. */
+    BlazeSectionBatch distant(boolean opaque) {
+        if (!drawsDistant()) return null;
+        if (!opaque && !opaqueDone) {
+            BlazeGlBoundary.reportOnce("pack lods early", "Translucent LODs came before the pack's deferred passes and were left out");
+            return null;
+        }
+        var program = opaque ? distantOpaque : distantTranslucent;
+        if (sectioned.containsKey(program) && sectioned.get(program) == null) return null;
+        try {
+            BlazePackDraw draw = sectioned.get(program);
+            if (draw == null) {
+                draw = new BlazePackDraw(this, program, program.code(), true);
+                renderer.shape(draw.code, draw);
+                sectioned.put(program, draw);
+            }
+            draw.prepare(phase, runtime, uniforms);
+            distantTextures.put("Sampler2", RenderSystem.getShaderTexture(2));
+            return renderer.sectionBatch().begin(draw.cast(distantView, distantProjection, distantTextures), null, !opaque, draw.target(),
+                    distant.raster(opaque), () -> sectioned.put(program, null));
+        } catch (RuntimeException failure) {
+            BlazeGlBoundary.reportOnce("pack lods " + program.name(), "Pack program " + program.name() + " cannot draw LODs, which are left out: " + failure);
+            sectioned.put(program, null);
+            return null;
+        }
+    }
+
+    /** Ends a pass {@link #distant} began; after the opaque one the depth translucent LODs sample is copied. */
+    void distantDone(BlazeSectionBatch batch, boolean opaque) {
+        batch.end();
+        if (opaque) distant.opaqueDone();
+    }
+
+    /** The depth a scene program tests against: LOD programs have their own. */
+    GpuImageView depthFor(CompiledShaderPack.Program program) {
+        return distant != null && PackDhPrograms.drawn(baseName(program)) ? distant.view(0) : main.depthView();
     }
 
     /** The deferred passes ran and may have swapped targets, so everything cached against the old ones is stale. */
@@ -105,10 +187,14 @@ public final class BlazePackScene implements AutoCloseable {
         if (!open || opaqueDone) return;
         opaqueDone = true;
         nextPhase();
+        Runnable held = heldDistant;
+        heldDistant = null;
+        if (held != null) held.run();
     }
 
     public void end() {
         open = false;
+        heldDistant = null;
         weather = false;
         hand = false;
     }

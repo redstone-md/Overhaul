@@ -83,7 +83,7 @@ final class BlazePackDraw implements BlazeProgramShape {
         for (String name : code.bindings().samplers().keySet()) sample(name, runtime);
         List<GpuImageView> outputs = shadow ? runtime.shadowTargets(program) : runtime.sceneTargets(program);
         if (outputs.size() != program.code().framebuffer().colorTargets().size()) throw new UnsupportedShaderException("Program outputs do not match its targets: " + program.name());
-        target = shadow ? scene.target(outputs, runtime.shadowDepth(0)) : scene.target(outputs);
+        target = scene.target(outputs, shadow ? runtime.shadowDepth(0) : scene.depthFor(program));
         phase = current;
     }
 
@@ -148,6 +148,11 @@ final class BlazePackDraw implements BlazeProgramShape {
             case "overlay" -> gameSamplers.add(new GameSampler(name, "Sampler1"));
             case "normals" -> samplers.put(name, scene.flatNormal());
             case "specular" -> samplers.put(name, scene.noSpecular());
+            case "dhDepthTex", "dhDepthTex0", "dhDepthTex1" -> {
+                GpuImageView lods = scene.distantDepth(name.equals("dhDepthTex1") ? 1 : 0);
+                if (lods == null) throw new UnsupportedShaderException("LOD depth without Distant Horizons terrain: " + name + " in " + program.name());
+                samplers.put(name, new BlazeTextures.Sampled(lods, runtime.depthSamplerHandle()));
+            }
             default -> throw new UnsupportedShaderException("Unbound scene pack sampler: " + name + " in " + program.name());
         }
     }
