@@ -16,6 +16,8 @@ import net.minecraft.world.level.biome.Biomes;
 final class BlazePackBiome {
     private final Map<String, Double> identifiers = new HashMap<>();
     private Object registryOwner;
+    /** Weak so a left world is not kept alive while the menu shows. */
+    private java.lang.ref.WeakReference<Object> identifierLevel = new java.lang.ref.WeakReference<>(null);
     private Minecraft minecraft;
     private boolean fresh;
     private double id, category, precipitation, temperature, rainfall;
@@ -97,15 +99,21 @@ final class BlazePackBiome {
     private double identifier(String name) {
         var level = minecraft.level;
         if (level == null) return -1;
-        var registry = level.registryAccess().registryOrThrow(Registries.BIOME);
-        if (registry != registryOwner) {
-            registryOwner = registry;
-            identifiers.clear();
-            registry.entrySet().forEach(entry -> {
-                String path = entry.getKey().location().getPath().toUpperCase(Locale.ROOT).replace('/', '_');
-                identifiers.putIfAbsent("BIOME_" + path, (double) registry.getId(entry.getValue()));
-            });
+        // A level keeps its registries, so the registry lookup runs once per level rather than per uniform.
+        if (level != identifierLevel.get()) {
+            identifierLevel = new java.lang.ref.WeakReference<>(level);
+            var registry = level.registryAccess().registryOrThrow(Registries.BIOME);
+            if (registry != registryOwner) fill(registry);
         }
         return identifiers.getOrDefault(name, -1.0);
+    }
+
+    private void fill(net.minecraft.core.Registry<Biome> registry) {
+        registryOwner = registry;
+        identifiers.clear();
+        registry.entrySet().forEach(entry -> {
+            String path = entry.getKey().location().getPath().toUpperCase(Locale.ROOT).replace('/', '_');
+            identifiers.putIfAbsent("BIOME_" + path, (double) registry.getId(entry.getValue()));
+        });
     }
 }
