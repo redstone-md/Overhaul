@@ -95,14 +95,26 @@ public final class BlazeMesh implements AutoCloseable {
     BlazeGeometryRange indexRange() { return indices; }
     public BlazeMeshState state() { requireOpen(); if (state == null) throw new IllegalStateException("Mesh has no upload"); return state; }
 
-    Snapshot snapshot(){return new Snapshot(state(),vertices,indices);}
+    Snapshot snapshot(){return new Snapshot(state(),vertices,indices,false);}
+    /**
+     * With {@code patches}, a quad mesh draws its vertices in order as lines with adjacency, four to a quad, which a
+     * geometry stage standing in for tessellation reads as one patch.
+     */
+    Snapshot snapshot(boolean patches){
+        BlazeMeshState current=state();
+        if(!patches||current.pattern()!=BlazeMeshState.IndexPattern.QUADS)return new Snapshot(current,vertices,indices,false);
+        int count=Math.min(current.vertexCount(),current.indexCount()/6*4);
+        return new Snapshot(new BlazeMeshState(current.layout(),current.vertexCount(),count,VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+                current.indexBytes(),BlazeMeshState.IndexPattern.SEQUENTIAL),vertices,null,true);
+    }
     /** Captured before the ordinary game VertexBuffer can replace its next upload. */
     static final class Snapshot implements AutoCloseable {
         private final BlazeMeshState state;
         private final BlazeGeometryRange vertices,indices;
+        private final boolean patches;
         private BlazeBufferPool.Pin vertexUse,indexUse;
-        private Snapshot(BlazeMeshState state,BlazeGeometryRange vertices,BlazeGeometryRange indices){
-            this.state=state;this.vertices=vertices;this.indices=indices;
+        private Snapshot(BlazeMeshState state,BlazeGeometryRange vertices,BlazeGeometryRange indices,boolean patches){
+            this.state=state;this.vertices=vertices;this.indices=indices;this.patches=patches;
             try{if(vertices!=null)vertexUse=vertices.retain();if(indices!=null)indexUse=indices.retain();}
             catch(RuntimeException|Error failure){close();throw failure;}
         }
@@ -111,6 +123,7 @@ public final class BlazeMesh implements AutoCloseable {
             if(state.indexCount()==0)return;
             try(var stack=VulkanStack.push()){
                 vkCmdBindVertexBuffers(command,0,stack.longs(vertices.buffer().handle()),stack.longs(vertices.offset()));
+                if(patches){vkCmdDraw(command,state.indexCount(),1,0,0);return;}
                 vkCmdBindIndexBuffer(command,indices.buffer().handle(),indices.offset(),state.indexBytes()==2?VK_INDEX_TYPE_UINT16:VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(command,state.indexCount(),1,0,0,0);
             }

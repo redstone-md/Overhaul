@@ -327,6 +327,9 @@ public final class BlazeRenderer implements AutoCloseable {
         return List.of(vertex,new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_GEOMETRY_BIT,"main",program.geometry().directBuffer()),fragment);
     }
     /** A geometry stage reads whole primitives of one kind; the draw has to assemble that kind. */
+    /** Whether the device runs geometry stages, which also carry the tessellation stages Veil's programs bring. */
+    public boolean geometryShaders(){return context.geometryShaders();}
+
     private void checkGeometry(BlazeProgramCompiler.Program program,int topology){
         if(!context.geometryShaders())throw new GeometryMismatch("the device has no geometry shaders");
         var wanted=program.primitive();
@@ -334,7 +337,8 @@ public final class BlazeRenderer implements AutoCloseable {
             case TRIANGLES->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP||topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
             case LINES->topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
             case POINTS->topology==VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-            case LINES_ADJACENCY,TRIANGLES_ADJACENCY->false;
+            case LINES_ADJACENCY->topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY;
+            case TRIANGLES_ADJACENCY->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY;
         };
         if(!fits)throw new GeometryMismatch(wanted.name().toLowerCase(java.util.Locale.ROOT)+" input for topology "+topology);
     }

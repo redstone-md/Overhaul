@@ -19,7 +19,8 @@ public final class BlazeModernSource {
     private static final Pattern ARRAY = Pattern.compile("\\buniform\\s+(\\w+)\\s*(?:\\[\\s*(\\d+)\\s*\\]\\s*(\\w+)|\\s(\\w+)\\s*\\[\\s*(\\d+)\\s*\\])\\s*;");
     /** Joins an array's name to an element's index in the loose uniform that replaces it. */
     public static final String ELEMENT = "_ovElem";
-    private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version[^\\r\\n]*");
+    private static final Pattern PRIMITIVE = Pattern.compile("\\blayout\\s*\\([^)]*\\)\\s*(?:in|out)\\s*;");
+    private static final Pattern VERSION =Pattern.compile("(?m)^\\s*#version[^\\r\\n]*");
 
     private BlazeModernSource() {}
 
@@ -36,6 +37,16 @@ public final class BlazeModernSource {
         if (text.matches("(?s).*\\bin\\s+vec2\\s+UV\\s*;.*")) text = text.replaceAll("\\bUV\\b", "UV0");
         if (text.contains("gl_VertexID") && !ATTRIBUTE.matcher(text).find()) text = countedVertices(text);
         return text;
+    }
+
+    /** A geometry stage keeps its primitive layouts, which name no variable and so carry no location to drop. */
+    static String normaliseGeometry(String source) {
+        Matcher primitive = PRIMITIVE.matcher(source);
+        StringBuilder layouts = new StringBuilder("\n");
+        while (primitive.find()) layouts.append(primitive.group()).append('\n');
+        String text = normalise(PRIMITIVE.matcher(source).replaceAll(""), false);
+        Matcher version = VERSION.matcher(text);
+        return version.find() ? text.substring(0, version.end()) + layouts + text.substring(version.end()) : layouts + text;
     }
 
     private static String blocks(String text) {

@@ -23,7 +23,7 @@ import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 
 /** Runs Veil's programs natively: its finished GLSL becomes SPIR-V, and its uniform and texture caches feed each draw. */
 public final class BlazeVeilPrograms {
-    private static final int VERTEX = 35633, FRAGMENT = 35632;
+    private static final int VERTEX = 35633, FRAGMENT = 35632, CONTROL = 36488, EVALUATION = 36487;
     private static final String CAMERA = "VeilCamera_";
     private static final Pattern BLOCK = Pattern.compile("\\buniform\\s+(\\w+)\\s*\\{[^}]*\\}\\s*(\\w+)?");
     private record Source(int type, String name, String code) {}
@@ -42,7 +42,7 @@ public final class BlazeVeilPrograms {
     public static void link(int program, Iterable<Integer> shaders) {
         var programs = BlazePrograms.current();
         if (programs == null || !programs.known(program)) return;
-        Source vertex = null, fragment = null;
+        Source vertex = null, fragment = null, control = null, evaluation = null;
         for (int shader : shaders) {
             Source source = SOURCES.get(shader);
             if (source == null) {
@@ -51,6 +51,8 @@ public final class BlazeVeilPrograms {
             }
             if (source.type() == VERTEX) vertex = source;
             else if (source.type() == FRAGMENT) fragment = source;
+            else if (source.type() == CONTROL) control = source;
+            else if (source.type() == EVALUATION) evaluation = source;
             else {
                 fail(programs, program, source.name(), "stage type " + source.type() + " has no native path");
                 return;
@@ -60,9 +62,16 @@ public final class BlazeVeilPrograms {
             fail(programs, program, "program " + program, "it lacks a vertex or fragment stage");
             return;
         }
+        if ((control == null) != (evaluation == null)) {
+            fail(programs, program, "program " + program, "it has only one tessellation stage");
+            return;
+        }
         String name = vertex.name() + " + " + fragment.name();
         try {
-            programs.linkForeign(program, name, programs.compiler().compileModern(vertex.name(), fragment.name(), vertex.code(), fragment.code()));
+            var compiler = programs.compiler();
+            programs.linkForeign(program, name, control == null
+                    ? compiler.compileModern(vertex.name(), fragment.name(), vertex.code(), fragment.code())
+                    : compiler.compileTessellated(vertex.name(), control.name(), evaluation.name(), fragment.name(), vertex.code(), control.code(), evaluation.code(), fragment.code()));
             BlazeGlVertexArrays.declare(program, vertex.code());
             reportBlocks(name, vertex.code());
             reportBlocks(name, fragment.code());

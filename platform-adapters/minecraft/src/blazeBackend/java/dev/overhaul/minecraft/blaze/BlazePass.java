@@ -49,7 +49,7 @@ final class BlazePass implements BlazeQueue.Operation {
             chunk=owner.uniformArena().reserve(range);
             uniforms=chunk.retain();
             descriptors=owner.descriptors().acquire(program,chunk,range,samples);
-            BlazeMesh.Snapshot first=mesh.snapshot();
+            BlazeMesh.Snapshot first=mesh.snapshot(patches(program));
             meshes.add(first);
             pipeline=owner.pipeline(program,first.state(),state,target,descriptors.layout());
             offsets[0]=owner.uniformArena().write(bytes,range);
@@ -59,7 +59,9 @@ final class BlazePass implements BlazeQueue.Operation {
     boolean append(BlazeRenderer owner,BlazeTarget target,BlazeMesh mesh,BlazeShaderSnapshot shader,BlazeDrawState.Snapshot state){
         if(meshes.size()==MAX_DRAWS||target!=this.target||shader.program()!=program||!state.equals(this.state))return false;
         BlazeMeshState next=mesh.state(),first=meshes.get(0).state();
-        if(next.topology()!=first.topology()||!next.layout().equals(first.layout()))return false;
+        if(!next.layout().equals(first.layout()))return false;
+        boolean patches=patches(program);
+        if(patches?next.pattern()!=BlazeMeshState.IndexPattern.QUADS:next.topology()!=first.topology())return false;
         int index=0;
         for(String name:program.bindings().samplers().keySet()){
             BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name),program.bindings().samplerTypes().get(name)),existing=samples.get(index++);
@@ -68,11 +70,15 @@ final class BlazePass implements BlazeQueue.Operation {
         ByteBuffer bytes=shader.uniforms();
         int range=Math.max(16,bytes.remaining());
         if(owner.uniformArena().reserve(range)!=chunk)return false;
-        BlazeMesh.Snapshot snapshot=mesh.snapshot();
+        BlazeMesh.Snapshot snapshot=mesh.snapshot(patches);
         if(meshes.size()==offsets.length)offsets=Arrays.copyOf(offsets,offsets.length*2);
         offsets[meshes.size()]=owner.uniformArena().write(bytes,range);
         meshes.add(snapshot);
         return true;
+    }
+    /** A lines-with-adjacency geometry stage over quads is tessellation run as geometry: each quad is one patch. */
+    private static boolean patches(BlazeProgramCompiler.Program program){
+        return program.primitive()==dev.overhaul.shader.compat.PackGeometryInterface.Primitive.LINES_ADJACENCY;
     }
     /** Records a batch in order; consecutive draws to one target share a render pass. */
     static void recordAll(VkCommandBuffer command,List<BlazeQueue.Operation> operations){

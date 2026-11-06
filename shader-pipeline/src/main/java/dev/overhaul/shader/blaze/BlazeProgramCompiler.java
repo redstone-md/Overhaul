@@ -50,6 +50,25 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         String vs = BlazeGeometryStage.flatten(preprocess(vertexName, vertex, ShaderStage.VERTEX, includes));
         String gs = BlazeGeometryStage.flatten(preprocess(geometryName, geometry, ShaderStage.GEOMETRY, includes));
         String fs = BlazeGeometryStage.flatten(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, includes));
+        return geometry(vertexName, geometryName, fragmentName, vs, gs, fs);
+    }
+
+    /**
+     * A current-OpenGL program with a tessellation stage pair, includes already expanded; the pair runs as a geometry
+     * stage over quad patches, which the draw sends as lines with adjacency.
+     */
+    public synchronized Program compileTessellated(String vertexName, String controlName, String evaluationName, String fragmentName,
+            String vertex, String control, String evaluation, String fragment) {
+        var none = unresolved();
+        var stages = BlazeTessellationStage.lower(preprocess(vertexName, vertex, ShaderStage.VERTEX, none),
+                preprocess(controlName, control, ShaderStage.GEOMETRY, none), preprocess(evaluationName, evaluation, ShaderStage.GEOMETRY, none));
+        String vs = BlazeModernSource.normalise(stages.vertex(), true);
+        String gs = BlazeModernSource.normaliseGeometry(stages.geometry());
+        String fs = BlazeModernSource.normalise(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, none), false);
+        return geometry(vertexName, evaluationName, fragmentName, vs, gs, fs);
+    }
+
+    private Program geometry(String vertexName, String geometryName, String fragmentName, String vs, String gs, String fs) {
         var vertexStage = BlazeSourceLowering.lower(vs, true);
         var geometryStage = BlazeGeometryStage.lower(gs);
         var fragmentStage = BlazeSourceLowering.lower(fs, false);
@@ -75,12 +94,16 @@ public final class BlazeProgramCompiler implements AutoCloseable {
 
     /** A program written for current OpenGL, with its includes already expanded by its own loader. */
     public synchronized Program compileModern(String vertexName, String fragmentName, String vertex, String fragment) {
-        ShadercCompiler.IncludeResolver none = (requested, requester, relative) -> {
-            throw new IllegalArgumentException("Unresolved shader include: " + requested);
-        };
+        var none = unresolved();
         String vs = BlazeModernSource.normalise(preprocess(vertexName, vertex, ShaderStage.VERTEX, none), true);
         String fs = BlazeModernSource.normalise(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, none), false);
         return lower(vertexName, fragmentName, vs, fs);
+    }
+
+    private static ShadercCompiler.IncludeResolver unresolved() {
+        return (requested, requester, relative) -> {
+            throw new IllegalArgumentException("Unresolved shader include: " + requested);
+        };
     }
 
     private Program lower(String vertexName, String fragmentName, String vs, String fs) {
