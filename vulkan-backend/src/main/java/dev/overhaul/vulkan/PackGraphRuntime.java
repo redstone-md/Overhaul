@@ -292,10 +292,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         });
     }
     private void requireBlit(int format,int feature){
-        try(MemoryStack stack=VulkanStack.push()){
-            var properties=VkFormatProperties.malloc(stack);vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),format,properties);
-            if((properties.optimalTilingFeatures()&feature)==0)throw new UnsupportedShaderException("Device cannot blit shader-pack image format: "+format);
-        }
+        if((mipmaps.optimalFeatures(format)&feature)==0)throw new UnsupportedShaderException("Device cannot blit shader-pack image format: "+format);
     }
     private static CompiledShaderPack.Program depthProgram(ShadercCompiler compiler,boolean reversed){
         String vertex="#version 120\nattribute vec2 Position; varying vec2 uv; void main(){uv=Position;gl_Position=vec4(Position*2.0-1.0,0.0,1.0);}";

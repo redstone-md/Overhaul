@@ -4,16 +4,15 @@ import dev.overhaul.shader.compat.UnsupportedShaderException;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkFormatProperties;
 import org.lwjgl.vulkan.VkImageBlit;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import static org.lwjgl.vulkan.VK10.*;
 
 /** Per-level graph writes keep lower mip lifetime/layouts distinct from the rendered base attachment. */
 final class PackMipmaps {
     private final VulkanContext context;
-    private final Set<Integer> supported=new HashSet<>();
+    private final Map<Integer,Integer> features=new HashMap<>();
     PackMipmaps(VulkanContext context){this.context=context;}
 
     void generate(PackFrameGraph plan,List<GpuImageView> levels){
@@ -38,12 +37,17 @@ final class PackMipmaps {
     }
 
     private void requireLinearBlit(int format){
-        if(supported.contains(format))return;
+        int required=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        if((optimalFeatures(format)&required)!=required)throw new UnsupportedShaderException("Device cannot generate a filtered mip chain for pack image format: "+format);
+    }
+
+    /** A format's optimal-tiling features never change on one device, and blits ask for them every frame. */
+    int optimalFeatures(int format){
+        Integer known=features.get(format);
+        if(known!=null)return known;
         try(MemoryStack stack=VulkanStack.push()){
             var properties=VkFormatProperties.malloc(stack);vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),format,properties);
-            int required=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-            if((properties.optimalTilingFeatures()&required)!=required)throw new UnsupportedShaderException("Device cannot generate a filtered mip chain for pack image format: "+format);
+            int value=properties.optimalTilingFeatures();features.put(format,value);return value;
         }
-        supported.add(format);
     }
 }
