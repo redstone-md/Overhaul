@@ -16,6 +16,9 @@ public final class GpuImage implements AutoCloseable {
     private final int[] layouts;
     private final Set<GpuImageView> views=Collections.newSetFromMap(new IdentityHashMap<>());
     private FrameRing.Submission lastUse;
+    private static volatile boolean mergeBarriers=true;
+    /** Off, every subresource of a transition records its own pipeline barrier call, as before barriers merged. */
+    public static void mergeBarriers(boolean merge){mergeBarriers=merge;}
     GpuImage(GpuAllocator allocator,long handle,long allocation,ImageFormat format,int width,int height,int depth,boolean volume,int mips,int layers,int usage,int flags){
         this.allocator=allocator;this.handle=handle;this.allocation=allocation;this.format=format;this.depth=depth;this.volume=volume;
         this.width=width;this.height=height;this.mips=mips;this.layers=layers;this.usage=usage;this.flags=flags;layouts=new int[Math.multiplyExact(mips,layers)];
@@ -63,21 +66,44 @@ public final class GpuImage implements AutoCloseable {
     public LayoutChange recordTransition(VkCommandBuffer command,int baseMip,int mipCount,int baseLayer,int layerCount,int newLayout){
         requireOpen();checkRange(baseMip,mipCount,baseLayer,layerCount);validateLayout(newLayout);
         if(command.getDevice()!=context().device())throw new IllegalArgumentException("command belongs to another device");
-        int[] old=new int[Math.multiplyExact(mipCount,layerCount)];int cursor=0;
+        int[] old=new int[Math.multiplyExact(mipCount,layerCount)];int cursor=0;boolean uniform=true;
         for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++){
-            int before=layouts[layer*mips+mip];old[cursor++]=before;
-            try(MemoryStack stack=VulkanStack.push()){
-                VkImageMemoryBarrier.Buffer barrier=VkImageMemoryBarrier.calloc(1,stack).sType$Default().image(handle)
-                    .oldLayout(before).newLayout(newLayout).srcAccessMask(access(before)).dstAccessMask(access(newLayout))
-                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-                barrier.subresourceRange().aspectMask(format.aspectMask()).baseMipLevel(mip).levelCount(1).baseArrayLayer(layer).layerCount(1);
-                vkCmdPipelineBarrier(command,before==VK_IMAGE_LAYOUT_UNDEFINED?VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,null,null,barrier);
-            }
+            int before=layouts[layer*mips+mip];old[cursor++]=before;uniform&=before==old[0];
         }
+        if(!mergeBarriers)recordEach(command,baseMip,mipCount,baseLayer,layerCount,old,newLayout);
+        else if(uniform)record(command,baseMip,mipCount,baseLayer,layerCount,old[0],newLayout);
+        else recordAll(command,baseMip,mipCount,baseLayer,layerCount,old,newLayout);
         for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++)layouts[layer*mips+mip]=newLayout;
         return new LayoutChange(baseMip,mipCount,baseLayer,layerCount,old);
     }
+    /** One barrier over the whole range, which every subresource enters from the same layout. */
+    private void record(VkCommandBuffer command,int baseMip,int mipCount,int baseLayer,int layerCount,int before,int newLayout){
+        try(MemoryStack stack=VulkanStack.push()){
+            VkImageMemoryBarrier.Buffer barrier=VkImageMemoryBarrier.calloc(1,stack);
+            fill(barrier.get(0),baseMip,mipCount,baseLayer,layerCount,before,newLayout);
+            vkCmdPipelineBarrier(command,source(before),VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,null,null,barrier);
+        }
+    }
+    /** Subresources entering from different layouts, one barrier each, all in one call. */
+    private void recordAll(VkCommandBuffer command,int baseMip,int mipCount,int baseLayer,int layerCount,int[] old,int newLayout){
+        try(MemoryStack stack=VulkanStack.push()){
+            VkImageMemoryBarrier.Buffer barriers=VkImageMemoryBarrier.calloc(old.length,stack);int cursor=0,stages=0;
+            for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++){
+                int before=old[cursor];fill(barriers.get(cursor++),mip,1,layer,1,before,newLayout);stages|=source(before);
+            }
+            vkCmdPipelineBarrier(command,stages,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,null,null,barriers);
+        }
+    }
+    private void recordEach(VkCommandBuffer command,int baseMip,int mipCount,int baseLayer,int layerCount,int[] old,int newLayout){
+        int cursor=0;
+        for(int layer=baseLayer;layer<baseLayer+layerCount;layer++)for(int mip=baseMip;mip<baseMip+mipCount;mip++)record(command,mip,1,layer,1,old[cursor++],newLayout);
+    }
+    private void fill(VkImageMemoryBarrier barrier,int baseMip,int mipCount,int baseLayer,int layerCount,int before,int newLayout){
+        barrier.sType$Default().image(handle).oldLayout(before).newLayout(newLayout).srcAccessMask(access(before)).dstAccessMask(access(newLayout))
+            .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.subresourceRange().aspectMask(format.aspectMask()).baseMipLevel(baseMip).levelCount(mipCount).baseArrayLayer(baseLayer).layerCount(layerCount);
+    }
+    private static int source(int before){return before==VK_IMAGE_LAYOUT_UNDEFINED?VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;}
     void validateLayout(int layout){
         switch(layout){
             case VK_IMAGE_LAYOUT_GENERAL -> { }

@@ -78,6 +78,7 @@ public final class BlazeRenderer implements AutoCloseable {
         windowHandle=glfwNoApiWindow;
         dev.overhaul.minecraft.hud.HudCacheTarget.enableWorldVisibility();
         context=VulkanContext.openWindowed(glfwNoApiWindow);
+        GpuImage.mergeBarriers(BlazeOptimization.MERGED_BARRIERS.on());
         try{
             allocator=new GpuAllocator(context);commands=new ImmediateCommands(context);
             queue=new BlazeQueue(context);

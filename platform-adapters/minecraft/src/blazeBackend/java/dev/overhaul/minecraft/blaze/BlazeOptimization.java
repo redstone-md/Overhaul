@@ -64,6 +64,7 @@ public enum BlazeOptimization {
     STRIDE_OFFSETS("strideOffsets", "Section vertices placed on a multiple of their stride, so a shader pack's wider vertices share one draw per buffer page instead of one per leftover offset"),
     DH_SHARED_PAGES("dhSharedPages", "Distant Horizons vertex buffers drawn by a shader pack share device pages, so the LODs of a pass draw as one indirect multi-draw per page instead of one draw per LOD"),
     DH_DEVICE_CACHE("dhDeviceCache", "Each Distant Horizons vertex buffer keeps the device buffer it resolved to instead of looking it up by name every frame"),
+    MERGED_BARRIERS("mergedBarriers", "Image layout changes over several mips or layers recorded as one barrier instead of one per mip and layer"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
