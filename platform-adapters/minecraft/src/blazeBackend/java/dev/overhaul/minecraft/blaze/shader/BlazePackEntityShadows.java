@@ -6,9 +6,12 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.slf4j.Logger;
@@ -16,8 +19,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Draws the level's entities from the pack's light camera, as Iris does, so mobs, players and dropped items cast
- * shadows. The game's renderers run unchanged with the light's matrices set; the scene sends their draws to the
- * shadow map. Ground shadow blobs and hitboxes are left out, since they are no part of the entity's shape.
+ * shadows, and block entities such as chests and signs with them. The game's renderers run unchanged with the light's
+ * matrices set; the scene sends their draws to the shadow map. Ground shadow blobs and hitboxes are left out, since
+ * they are no part of the entity's shape.
  */
 final class BlazePackEntityShadows {
     private static final Logger LOG = LoggerFactory.getLogger(BlazePackEntityShadows.class);
@@ -25,7 +29,7 @@ final class BlazePackEntityShadows {
     private final Matrix4f combined = new Matrix4f();
     private boolean failed;
 
-    /** Casts every entity within {@code limit} blocks of the camera, tested against the light's frustum when it has one. */
+    /** Casts every entity and block entity within {@code limit} blocks of the camera, tested against the light's frustum when it has one. */
     void cast(Minecraft minecraft, BlazePackScene scene, Camera camera, float partial, Matrix4f view, Matrix4f projection, boolean bounded, double limit) {
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         // The game points the dispatcher at its camera only once it draws entities, after the first shadow pass.
@@ -61,6 +65,7 @@ final class BlazePackEntityShadows {
                 dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
                         dispatcher.getPackedLightCoords(entity, partial));
             }
+            blockEntities(minecraft, partial, pose, buffers, x, y, z, bounded, limit);
         } catch (RuntimeException failure) {
             failed = true;
             LOG.warn("Entities stop casting pack shadows", failure);
@@ -71,6 +76,32 @@ final class BlazePackEntityShadows {
             dispatcher.setRenderHitBoxes(hitboxes);
             BlazePackGame.restoreModelView();
             RenderSystem.setProjectionMatrix(savedProjection, savedSorting);
+        }
+    }
+
+    /** The loaded chunks around the camera hold every block entity that could cast; each draws as the game's pass does. */
+    private void blockEntities(Minecraft minecraft, float partial, PoseStack pose, net.minecraft.client.renderer.MultiBufferSource buffers,
+                               double x, double y, double z, boolean bounded, double limit) {
+        BlockEntityRenderDispatcher dispatcher = minecraft.getBlockEntityRenderDispatcher();
+        if (dispatcher.camera == null) return;
+        int reach = (int) Math.ceil(limit / 16) + 1, centreX = Mth.floor(x) >> 4, centreZ = Mth.floor(z) >> 4;
+        var chunks = minecraft.level.getChunkSource();
+        for (int cx = centreX - reach; cx <= centreX + reach; cx++) for (int cz = centreZ - reach; cz <= centreZ + reach; cz++) {
+            LevelChunk chunk = chunks.getChunkNow(cx, cz);
+            if (chunk == null) continue;
+            for (BlockEntity entity : chunk.getBlockEntities().values()) {
+                var renderer = dispatcher.getRenderer(entity);
+                if (renderer == null || entity.isRemoved()) continue;
+                var at = entity.getBlockPos();
+                double bx = at.getX() - x, by = at.getY() - y, bz = at.getZ() - z;
+                if (Math.abs(bx) > limit || Math.abs(by) > limit || Math.abs(bz) > limit) continue;
+                if (bounded && !renderer.shouldRenderOffScreen(entity) && !frustum.testAab((float) bx - 1, (float) by - 1, (float) bz - 1,
+                        (float) bx + 2, (float) by + 2, (float) bz + 2)) continue;
+                pose.pushPose();
+                pose.translate(bx, by, bz);
+                dispatcher.render(entity, partial, pose, buffers);
+                pose.popPose();
+            }
         }
     }
 }
