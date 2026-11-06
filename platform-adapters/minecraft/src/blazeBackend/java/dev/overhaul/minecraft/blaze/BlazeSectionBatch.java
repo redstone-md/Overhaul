@@ -21,6 +21,7 @@ import static org.lwjgl.vulkan.VK10.*;
  */
 public final class BlazeSectionBatch implements AutoCloseable {
     private static final int COMMAND_BYTES = 20;
+    private static final boolean RUN_KEYS = BlazeOptimization.SECTION_RUN_KEYS.on();
 
     /** Unique across batches, so a run key stamped by another batch, or by this one before its last flush, reads as new. */
     private static final AtomicLong STAMPS = new AtomicLong();
@@ -74,6 +75,22 @@ public final class BlazeSectionBatch implements AutoCloseable {
                 mesh.drawRun, x, y, z);
     }
 
+    /** A slot of a scan table that copied its mesh's draw fields; the mesh itself is read only to start a group. */
+    public void add(BlazeVisibleSections.Layer table, int index, float x, float y, float z) {
+        int indexCount = table.indexCount(index);
+        if (indexCount == 0) return;
+        BlazeMeshState.Layout layout = table.layout(index);
+        if (compact == null && BlazeCompactSection.compact(layout)) return;
+        int topology = table.topology(index);
+        BlazeMeshState state = startsGroup(layout, topology) ? table.mesh(index).stateOrNull() : null;
+        append(state, layout, topology, indexCount, table.firstIndex(index), table.baseVertex(index), table.run(index), x, y, z);
+    }
+
+    /** Whether a section with this layout and topology opens a new group, the only time its mesh state is read. */
+    private boolean startsGroup(BlazeMeshState.Layout layout, int topology) {
+        return first == null || topology != firstTopology || layout != firstLayout && !layout.equals(firstLayout);
+    }
+
     /**
      * A mesh another renderer uploaded: whole buffers, indices from the start of theirs. Each such mesh owns its
      * buffers, so its key is not interned: an intern lookup per mesh costs more than the run it could never share.
@@ -86,7 +103,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private void append(BlazeMeshState state, BlazeMeshState.Layout layout, int topology, int indexCount, int firstIndex, int baseVertex,
             BlazeSectionRun run, float x, float y, float z) {
         if (indexCount == 0) return;
-        if (first != null && (topology != firstTopology || layout != firstLayout && !layout.equals(firstLayout))) finish();
+        if (first != null && startsGroup(layout, topology)) finish();
         if (first == null) {
             first = state;
             firstLayout = layout;
@@ -107,7 +124,16 @@ public final class BlazeSectionBatch implements AutoCloseable {
         count++;
     }
 
+    /** With shared keys the stamp alone answers, so the last run's buffers are not compared for every section. */
     private int run(BlazeSectionRun run) {
+        if (!ordered && RUN_KEYS) {
+            if (run.stamp == stamp) return run.index;
+            int added = runs.size();
+            run.stamp = stamp;
+            run.index = added;
+            runs.add(run);
+            return added;
+        }
         int last = runs.size() - 1;
         if (last >= 0 && runs.get(last).holds(run)) return last;
         int added = last + 1;
@@ -115,12 +141,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
             runs.add(run);
             return added;
         }
-        if (run.stamp == stamp) return run.index;
-        if (!BlazeOptimization.SECTION_RUN_KEYS.on()) return hashed(run, added);
-        run.stamp = stamp;
-        run.index = added;
-        runs.add(run);
-        return added;
+        return hashed(run, added);
     }
 
     private int hashed(BlazeSectionRun run, int added) {
@@ -165,7 +186,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
             failed.run();
         } finally {
             count = 0;
-            if (!ordered && !runs.isEmpty() && !BlazeOptimization.SECTION_RUN_KEYS.on()) Arrays.fill(slots, 0);
+            if (!ordered && !runs.isEmpty() && !RUN_KEYS) Arrays.fill(slots, 0);
             runs.clear();
             stamp = STAMPS.incrementAndGet();
         }

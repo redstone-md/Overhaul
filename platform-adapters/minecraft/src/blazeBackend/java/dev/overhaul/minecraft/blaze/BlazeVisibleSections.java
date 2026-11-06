@@ -123,13 +123,22 @@ public abstract class BlazeVisibleSections<T> {
         return visible==source&&visible.size()==scanned;
     }
 
-    /** Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier. */
+    /**
+     * Rewrites only changed slots: the order rarely changes between frames, and each reference store pays a GC barrier.
+     * With {@code sectionDraws} each slot also copies its mesh's draw fields, so drawing reads flat arrays instead of
+     * one scattered mesh per section; a mesh copied here marks itself, and any later change to it makes the scan stale.
+     */
     public static final class Layer {
         private static final Layer EMPTY=new Layer();
+        private static final boolean DRAWS=BlazeOptimization.SECTION_DRAWS.on();
         private final ObjectArrayList<Object> sections=new ObjectArrayList<>();
         private int cursor;
         private BlazeMesh[] meshes=new BlazeMesh[256];
         private int[] origins=new int[3*256];
+        /** Index count, first index, base vertex and topology; a zero count draws nothing. */
+        private int[] draws=new int[4*256];
+        private BlazeSectionRun[] runs=new BlazeSectionRun[256];
+        private BlazeMeshState.Layout[] layouts=new BlazeMeshState.Layout[256];
         private void put(Object section){
             if(cursor==sections.size())sections.add(section);
             else if(sections.get(cursor)!=section)sections.set(cursor,section);
@@ -141,13 +150,41 @@ public abstract class BlazeVisibleSections<T> {
             if(at==meshes.length){
                 meshes=Arrays.copyOf(meshes,at*2);
                 origins=Arrays.copyOf(origins,at*6);
+                draws=Arrays.copyOf(draws,at*8);
+                runs=Arrays.copyOf(runs,at*2);
+                layouts=Arrays.copyOf(layouts,at*2);
             }
             if(meshes[at]!=mesh)meshes[at]=mesh;
             origins[at*3]=x;
             origins[at*3+1]=y;
             origins[at*3+2]=z;
+            if(DRAWS)copyDraw(at,mesh);
+        }
+        /** Marked before the fields are read, so a change racing the copy moves the change counter after it. */
+        private void copyDraw(int at,BlazeMesh mesh){
+            if(mesh!=null&&!mesh.tabled)mesh.tabled=true;
+            int count=mesh==null?0:mesh.drawIndexCount;
+            BlazeSectionRun run=count==0?null:mesh.drawRun;
+            BlazeMeshState.Layout layout=count==0?null:mesh.drawLayout;
+            if(run==null||layout==null)count=0;
+            draws[at*4]=count;
+            if(count!=0){
+                draws[at*4+1]=mesh.drawFirstIndex;
+                draws[at*4+2]=mesh.drawBaseVertex;
+                draws[at*4+3]=mesh.drawTopology;
+            }
+            if(runs[at]!=run)runs[at]=run;
+            if(layouts[at]!=layout)layouts[at]=layout;
         }
         public int size(){return cursor;}
+        /** Whether each slot holds its mesh's draw fields, so a batch can add it without reading the mesh. */
+        public boolean draws(){return DRAWS;}
+        int indexCount(int index){return draws[index*4];}
+        int firstIndex(int index){return draws[index*4+1];}
+        int baseVertex(int index){return draws[index*4+2];}
+        int topology(int index){return draws[index*4+3];}
+        BlazeSectionRun run(int index){return runs[index];}
+        BlazeMeshState.Layout layout(int index){return layouts[index];}
         public BlazeMesh mesh(int index){return meshes[index];}
         public int originX(int index){return origins[index*3];}
         public int originY(int index){return origins[index*3+1];}

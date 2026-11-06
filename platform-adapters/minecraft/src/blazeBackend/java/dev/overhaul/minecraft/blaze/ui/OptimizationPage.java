@@ -16,7 +16,7 @@ final class OptimizationPage extends SettingsPage {
     private static final List<Group> GROUPS = List.of(
             new Group("Terrain", List.of(BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
                     BlazeOptimization.SECTION_LISTS, BlazeOptimization.SECTION_TABLE, BlazeOptimization.SECTION_BOUNDS,
-                    BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS)),
+                    BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS, BlazeOptimization.SECTION_DRAWS)),
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
@@ -132,6 +132,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
         labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
         labels.put(BlazeOptimization.SHADOW_COLUMNS, "Shadow casters by column");
+        labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
         return labels;
     }
 }

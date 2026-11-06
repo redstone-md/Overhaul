@@ -56,13 +56,15 @@ abstract class LevelRendererSectionBatch121Mixin {
         if (occlusion != null) occlusion.prepare(x, y, z);
         BlazeVisibleSections.Layer table = (Object) this instanceof BlazeLayerLists lists ? lists.overhaul$layerTable(layer) : null;
         if (table != null) {
+            boolean flat = table.draws();
             for (int size = table.size(), at = 0; at < size; at++) {
                 int index = forward ? at : size - 1 - at;
                 BlazeMesh mesh = table.mesh(index);
                 if (mesh == null) continue;
                 int originX = table.originX(index), originY = table.originY(index), originZ = table.originZ(index);
                 if (occlusion != null && occlusion.hidden(originX, originY, originZ)) continue;
-                batch.add(mesh, (float) (originX - x), (float) (originY - y), (float) (originZ - z));
+                if (flat) batch.add(table, index, (float) (originX - x), (float) (originY - y), (float) (originZ - z));
+                else batch.add(mesh, (float) (originX - x), (float) (originY - y), (float) (originZ - z));
             }
         } else while (forward ? sections.hasNext() : sections.hasPrevious()) {
             RenderSection section = forward ? sections.next() : sections.previous();

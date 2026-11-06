@@ -23,6 +23,8 @@ public final class BlazeMesh implements AutoCloseable {
     GpuBuffer drawVertices, drawIndices;
     BlazeMeshState.Layout drawLayout;
     BlazeSectionRun drawRun;
+    /** Set once a section scan copied the draw fields above, so a change to them must make that scan stale. */
+    volatile boolean tabled;
 
     BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, BlazeSequenceIndices sequences, boolean stream, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.sequences=sequences;this.stream=stream;this.onClose=onClose; }
 
@@ -62,6 +64,11 @@ public final class BlazeMesh implements AutoCloseable {
     }
 
     private void flatten() {
+        flattenFields();
+        if (tabled) BlazeSectionChanges.changed();
+    }
+
+    private void flattenFields() {
         BlazeMeshState current = state;
         if (current == null || current.indexCount() == 0 || vertices == null || indices == null) {
             drawIndexCount = 0;
