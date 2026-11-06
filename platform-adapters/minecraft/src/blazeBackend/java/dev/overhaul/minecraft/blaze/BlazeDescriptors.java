@@ -4,7 +4,6 @@ import dev.overhaul.vulkan.VulkanStack;
 
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.VulkanContext;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,7 +38,7 @@ final class BlazeDescriptors implements AutoCloseable {
             }
             page=new Page(layout);layout.pages.add(page);
         }
-        long set=page.free.removeFirst();page.active++;
+        long set=page.take();page.active++;
         Lease lease=new Lease(layout,page,set);
         try{write(lease,program,uniforms,range,samples);return lease;}catch(RuntimeException|Error failure){lease.close();throw failure;}
     }
@@ -67,7 +66,7 @@ final class BlazeDescriptors implements AutoCloseable {
         private boolean released;
         private Lease(Layout layout,Page page,long set){this.layout=layout;this.page=page;this.set=set;}
         long layout(){return layout.handle;}long set(){return set;}
-        @Override public void close(){if(!released){released=true;page.active--;if(!page.closed)page.free.addLast(set);}}
+        @Override public void close(){if(!released){released=true;page.active--;if(!page.closed)page.give(set);}}
     }
     private final class Layout implements AutoCloseable {
         private final List<Page> pages=new ArrayList<>();
@@ -83,12 +82,14 @@ final class BlazeDescriptors implements AutoCloseable {
                 check(vkCreateDescriptorSetLayout(context.device(),VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(bindings),null,pointer),"Blaze descriptor layout");handle=pointer.get(0);
             }
         }
-        private Page available(){for(Page page:pages)if(!page.free.isEmpty())return page;return null;}
+        private Page available(){for(Page page:pages)if(page.freeCount!=0)return page;return null;}
         private void discardIdlePages(){var iterator=pages.iterator();while(iterator.hasNext()){Page page=iterator.next();if(page.active==0){page.close();iterator.remove();}}}
         @Override public void close(){if(handle==0)return;for(Page page:pages)page.close();pages.clear();vkDestroyDescriptorSetLayout(context.device(),handle,null);handle=0;}
     }
     private final class Page implements AutoCloseable {
-        private final ArrayDeque<Long> free=new ArrayDeque<>();
+        /** Free sets as a stack of raw handles; a boxed deque allocated a Long for every draw's set. */
+        private final long[] free=new long[SETS_PER_PAGE];
+        private int freeCount;
         private long pool;
         private int active;
         private boolean closed;
@@ -102,9 +103,11 @@ final class BlazeDescriptors implements AutoCloseable {
                 var nativeLayouts=stack.mallocLong(SETS_PER_PAGE);for(int index=0;index<SETS_PER_PAGE;index++)nativeLayouts.put(index,layout.handle);
                 var sets=stack.mallocLong(SETS_PER_PAGE);
                 check(vkAllocateDescriptorSets(context.device(),VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool).pSetLayouts(nativeLayouts),sets),"Blaze descriptor page sets");
-                for(int index=0;index<SETS_PER_PAGE;index++)free.addLast(sets.get(index));pageCount++;
+                for(int index=0;index<SETS_PER_PAGE;index++)give(sets.get(index));pageCount++;
             }catch(RuntimeException|Error failure){if(pool!=0)vkDestroyDescriptorPool(context.device(),pool,null);throw failure;}
         }
-        @Override public void close(){if(!closed){closed=true;vkDestroyDescriptorPool(context.device(),pool,null);pool=0;free.clear();pageCount--;}}
+        private long take(){return free[--freeCount];}
+        private void give(long set){free[freeCount++]=set;}
+        @Override public void close(){if(!closed){closed=true;vkDestroyDescriptorPool(context.device(),pool,null);pool=0;freeCount=0;pageCount--;}}
     }
 }
