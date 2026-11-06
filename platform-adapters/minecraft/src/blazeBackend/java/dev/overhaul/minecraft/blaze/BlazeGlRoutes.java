@@ -110,7 +110,10 @@ final class BlazeGlRoutes {
         put(table, "glGenTextures", (renderer, a) -> each(a, address -> MemoryUtil.memPutInt(address, renderer.textures().generate())));
         put(table, "glDeleteTextures", (renderer, a) -> each(a, address -> renderer.textures().delete(MemoryUtil.memGetInt(address))));
         put(table, "glActiveTexture", (renderer, a) -> renderer.textures().active(a.integer(0)));
-        put(table, "glBindTexture", (renderer, a) -> { if (a.integer(0) == TEXTURE_2D) renderer.textures().bind(a.integer(1)); });
+        put(table, "glBindTexture", (renderer, a) -> {
+            if (BlazeTextureTargets.supported(a.integer(0))) renderer.textures().bind(a.integer(0), a.integer(1));
+            else BlazeGlBoundary.reportOnce("texture target " + a.integer(0), "A mod bound a texture target with no owned storage: " + a.integer(0));
+        });
         put(table, "glGenerateMipmap", (renderer, a) -> renderer.textures().generateMipmap(a.integer(0)));
         put(table, "glPixelStorei", (renderer, a) -> renderer.textures().pixelStore(a.integer(0), a.integer(1)));
         put(table, "glTexParameteri", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.integer(2)));
@@ -120,10 +123,30 @@ final class BlazeGlRoutes {
             if (source != 0) renderer.textures().upload(a.integer(0), a.integer(1), 0, 0, a.integer(3), a.integer(4), a.integer(6), a.integer(7), source);
         });
         put(table, "glTexStorage2D", (renderer, a) -> renderer.textures().storage(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4)));
+        put(table, "glTexImage3D", (renderer, a) -> {
+            if (!layered(a.integer(0))) return;
+            renderer.textures().image(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), a.integer(8));
+            long source = buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(9));
+            if (source != 0) renderer.textures().upload(a.integer(0), a.integer(1), 0, 0, 0, a.integer(3), a.integer(4), a.integer(5), a.integer(7), a.integer(8), source);
+        });
+        put(table, "glTexStorage3D", (renderer, a) -> {
+            if (layered(a.integer(0))) renderer.textures().storage(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5));
+        });
+        put(table, "glTexSubImage3D", (renderer, a) -> {
+            if (layered(a.integer(0))) renderer.textures().upload(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7),
+                    a.integer(8), a.integer(9), buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(10)));
+        });
         put(table, "glTexSubImage2D", (renderer, a) -> renderer.textures().upload(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(8))));
         put(table, "glGetTexImage", (renderer, a) -> renderer.textures().download(a.integer(0), a.integer(1), a.integer(2), a.integer(3), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(4))));
         put(table, "glGetTexLevelParameteriv", (renderer, a) -> MemoryUtil.memPutInt(a.pointer(3), renderer.textures().levelParameter(a.integer(0), a.integer(1), a.integer(2))));
         put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(6))));
+    }
+
+    /** 3D image calls store only 2D arrays; a 3D texture has no owned storage. */
+    private static boolean layered(int target) {
+        if (target == BlazeTextureTargets.ARRAY) return true;
+        BlazeGlBoundary.reportOnce("3D texture " + target, "A mod specified a 3D texture, which has no owned storage: " + target);
+        return false;
     }
 
     private static void each(Arguments arguments, LongConsumer action) {

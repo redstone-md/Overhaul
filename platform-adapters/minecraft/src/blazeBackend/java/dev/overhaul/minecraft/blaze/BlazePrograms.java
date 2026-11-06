@@ -151,7 +151,8 @@ public final class BlazePrograms implements AutoCloseable {
     public BlazeShaderSnapshot sectionSnapshot(int id,Map<String,Uniform> uniforms){return BlazeShaderSnapshot.capture(entry(id).sections,uniforms,boundTextures(id));}
     private Map<String,Object> boundTextures(int id){
         requireOpen();var renderer=BlazeFrontend.require();if(renderer.programs()!=this)throw new IllegalStateException("Foreign shader device");
-        Map<String,Object> textures=new LinkedHashMap<>();for(var sampler:entry(id).samplerUnits.entrySet())textures.put(sampler.getKey(),renderer.textures().boundId(sampler.getValue()));
+        var entry=entry(id);var types=entry.program.bindings().samplerTypes();
+        Map<String,Object> textures=new LinkedHashMap<>();for(var sampler:entry.samplerUnits.entrySet())textures.put(sampler.getKey(),renderer.textures().boundId(sampler.getValue(),types.get(sampler.getKey())));
         return textures;
     }
     /** Names the active program when a draw cannot use it, because its shader instance never finished constructing. */

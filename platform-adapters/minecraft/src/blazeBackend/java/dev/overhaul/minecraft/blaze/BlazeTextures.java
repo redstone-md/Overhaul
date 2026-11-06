@@ -40,7 +40,9 @@ public final class BlazeTextures implements AutoCloseable {
     /** By name: names are handed out in sequence and never reused, and this is read several times a draw. */
     private BlazeTexture[] textures=new BlazeTexture[1024];
     private final BlazePixelStore pixels=new BlazePixelStore();
+    /** The 2D bindings; {@link #layered} holds the cube and 2D array bindings of the same units. */
     private final int[] bindings=new int[32];
+    private final int[][] layered={bindings,new int[32],new int[32]};
     private BlazeTexture incomplete;
     /** Cleared cube, array and 3D views, made the first time a sampler of that dimension asks. */
     private final GpuImageView[] blanks=new GpuImageView[3];
@@ -71,11 +73,19 @@ public final class BlazeTextures implements AutoCloseable {
         requireOpen();var texture=texture(id);texture.attach();texture.allocate(internal,width,height,1,commands);
     }
     /** Immutable storage: the same image as a full mip chain defined level by level. */
-    void storage(int target,int levels,int internal,int width,int height){target(target);current().allocate(internal,width,height,levels,commands);}
+    void storage(int target,int levels,int internal,int width,int height){
+        int kind=kind(target);if(kind==BlazeTextureTargets.KIND_CUBE)current(target).allocate(internal,width,height,levels,6,VK_IMAGE_VIEW_TYPE_CUBE,commands,true);
+        else storage(target,levels,internal,width,height,1);
+    }
+    /** Immutable storage of a 2D array, its depth the layer count. */
+    void storage(int target,int levels,int internal,int width,int height,int depth){
+        int kind=kind(target);if(kind==BlazeTextureTargets.KIND_CUBE)throw new UnsupportedOperationException("Cube storage has no depth");
+        current(target).allocate(internal,width,height,levels,depth,BlazeTextureTargets.viewType(kind),commands,true);
+    }
     private int nextId(){if(next<=0)throw new IllegalStateException("Texture namespace exhausted");return next++;}
     public void delete(int id){
         requireOpen();if(id==0)return;BlazeTexture texture=find(id);if(texture==null)return;textures[id]=null;
-        for(int unit=0;unit<bindings.length;unit++)if(bindings[unit]==id)bindings[unit]=0;texture.close();
+        for(int[] kind:layered)for(int unit=0;unit<kind.length;unit++)if(kind[unit]==id)kind[unit]=0;texture.close();
     }
     public void active(int textureUnit){
         requireOpen();int unit=textureUnit-GL_TEXTURE0;if(unit<0||unit>=bindings.length)throw new IllegalArgumentException("Texture unit outside owned range");active=unit;
@@ -83,42 +93,79 @@ public final class BlazeTextures implements AutoCloseable {
     public int active(){requireOpen();return GL_TEXTURE0+active;}
     public int textureUnits(){requireOpen();return bindings.length;}
     public int boundId(int unit){requireOpen();if(unit<0||unit>=bindings.length)throw new IllegalArgumentException("Texture unit outside owned range");return bindings[unit];}
-    public void bind(int id){requireOpen();if(id!=0&&find(id)==null)throw new IllegalArgumentException("Unknown owned texture: "+id);bindings[active]=id;}
+    public void bind(int id){bind(GL_TEXTURE_2D,id);}
+    public void bind(int target,int id){requireOpen();int kind=kind(target);if(id!=0&&find(id)==null)throw new IllegalArgumentException("Unknown owned texture: "+id);layered[kind][active]=id;}
+    /** The name bound to a unit for a sampler of the given GLSL type, or 0 for a dimension names never hold. */
+    public int boundId(int unit,String samplerType){
+        int kind=BlazeTextureTargets.kindOf(viewType(samplerType));if(kind<0)return 0;boundId(unit);return layered[kind][unit];
+    }
     public Integer integer(int name){
-        requireOpen();if(name==GL_ACTIVE_TEXTURE)return GL_TEXTURE0+active;if(name==GL_TEXTURE_BINDING_2D)return bindings[active];return pixels.integer(name);
+        requireOpen();if(name==GL_ACTIVE_TEXTURE)return GL_TEXTURE0+active;if(name==GL_TEXTURE_BINDING_2D)return bindings[active];
+        if(name==BlazeTextureTargets.BINDING_CUBE)return layered[BlazeTextureTargets.KIND_CUBE][active];
+        if(name==BlazeTextureTargets.BINDING_ARRAY)return layered[BlazeTextureTargets.KIND_ARRAY][active];return pixels.integer(name);
     }
     public void pixelStore(int name,int value){requireOpen();pixels.set(name,value);}
-    public void parameter(int target,int name,float value){target(target);current().parameter(name,value);}
+    public void parameter(int target,int name,float value){current(target).parameter(name,value);}
     public void prepare(int internal,int id,int maximumMip,int width,int height){
         requireOpen();if(maximumMip<0)throw new IllegalArgumentException("Negative texture mip count");bind(id);
-        var texture=current();texture.parameter(GL_TEXTURE_MAX_LEVEL,maximumMip);texture.parameter(GL_TEXTURE_MIN_LOD,0);texture.parameter(GL_TEXTURE_MAX_LOD,maximumMip);
+        var texture=current(GL_TEXTURE_2D);texture.parameter(GL_TEXTURE_MAX_LEVEL,maximumMip);texture.parameter(GL_TEXTURE_MIN_LOD,0);texture.parameter(GL_TEXTURE_MAX_LOD,maximumMip);
         texture.allocate(internal,width,height,Math.addExact(maximumMip,1),commands);
     }
     public void image(int target,int level,int internal,int width,int height,int border,int format,int type,IntBuffer input){
         requireOpen();if(target==GL_PROXY_TEXTURE_2D){proxy(level,internal,width,height,border,format,type,input);return;}
-        target(target);if(border!=0||level<0)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
+        int kind=kind(target);if(border!=0||level<0)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
+        if(kind==BlazeTextureTargets.KIND_ARRAY||target==BlazeTextureTargets.CUBE_MAP)throw new UnsupportedOperationException("2D image of a layered target");
         BlazePixels.bytes(format,type);
-        var texture=current();
-        if(level==0){
-            int physical=32-Integer.numberOfLeadingZeros(Math.max(width,height));
-            texture.allocate(internal,width,height,Math.addExact(Math.min(physical-1,texture.maximum()),1),commands,false);
-        }else{
-            var image=texture.image();if(texture.mip(level)>=image.mipLevels()||image.width(texture.mip(level))!=width||image.height(texture.mip(level))!=height||texture.internal!=internal)
-                throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
-            if(!image.format().isDepth())clearColor(image,texture.mip(level),texture.layer(),0,0,0,texture.channels==4?0:1);
-            texture.define(level);
-        }
+        define(current(target),kind,level,internal,width,height,kind==BlazeTextureTargets.KIND_CUBE?6:1,BlazeTextureTargets.layer(target));
         if(input!=null)upload(target,level,0,0,width,height,format,type,MemoryUtil.memByteBuffer(input));
     }
+    /** glTexImage3D of a 2D array: level 0 gives the array its layers, later levels must match them. */
+    public void image(int target,int level,int internal,int width,int height,int depth,int border,int format,int type){
+        int kind=kind(target);if(kind!=BlazeTextureTargets.KIND_ARRAY)throw new UnsupportedOperationException("Only 2D arrays take 3D images");
+        if(border!=0||level<0||depth<1)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
+        BlazePixels.bytes(format,type);var texture=current(target);
+        if(level>0&&texture.layers()!=depth)throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
+        define(texture,kind,level,internal,width,height,depth,-1);
+    }
+    /**
+     * A level's specification. Level 0 of a 2D texture or an array allocates new storage; a cube face keeps the cube
+     * while the other faces already have the same shape, since a cube is specified one face at a time.
+     */
+    private void define(BlazeTexture texture,int kind,int level,int internal,int width,int height,int layers,int face){
+        if(level==0){
+            boolean kept=face>=0&&kind==BlazeTextureTargets.KIND_CUBE&&texture.viewType()==VK_IMAGE_VIEW_TYPE_CUBE&&texture.defined(0)
+                    &&texture.internal==internal&&texture.image().width(0)==width&&texture.image().height(0)==height;
+            if(kept)return;
+            int physical=32-Integer.numberOfLeadingZeros(Math.max(width,height));
+            texture.allocate(internal,width,height,Math.addExact(Math.min(physical-1,texture.maximum()),1),layers,BlazeTextureTargets.viewType(kind),commands,false);
+            return;
+        }
+        var image=texture.image();if(texture.mip(level)>=image.mipLevels()||image.width(texture.mip(level))!=width||image.height(texture.mip(level))!=height||texture.internal!=internal||texture.viewType()!=BlazeTextureTargets.viewType(kind))
+            throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
+        if(!image.format().isDepth())for(int layer=face>=0?face:0;layer<(face>=0?face+1:texture.layers());layer++)
+            clearColor(image,texture.mip(level),texture.layer()+layer,0,0,0,texture.channels==4?0:1);
+        texture.define(level);
+    }
     public void upload(int target,int level,int x,int y,int width,int height,int format,int type,long address){
-        requireOpen();target(target);if(width==0||height==0)return;
+        requireOpen();kind(target);if(width==0||height==0)return;
         if(address==0)throw new IllegalArgumentException("Null pixel source");
         var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         upload(target,level,x,y,width,height,format,type,MemoryUtil.memByteBuffer(address,layout.bytes()));
     }
+    /** glTexSubImage3D of a 2D array: each slice of the source is one layer's rectangle, packed one after another. */
+    public void upload(int target,int level,int x,int y,int z,int width,int height,int depth,int format,int type,long address){
+        if(kind(target)!=BlazeTextureTargets.KIND_ARRAY)throw new UnsupportedOperationException("Only 2D arrays take 3D uploads");
+        if(width==0||height==0||depth==0)return;if(address==0)throw new IllegalArgumentException("Null pixel source");
+        var texture=current(target);if(z<0||depth<0||z>texture.layers()-depth)throw new IllegalArgumentException("Pixel box exceeds texture layers");
+        long slice=pixels.layout(false,width,height,BlazePixels.bytes(format,type)).bytes();
+        for(int layer=0;layer<depth;layer++)upload(texture,level,z+layer,x,y,width,height,format,type,MemoryUtil.memByteBuffer(address+layer*slice,(int)slice));
+    }
     public void upload(int target,int level,int x,int y,int width,int height,int format,int type,ByteBuffer source){
-        target(target);if(width==0||height==0)return;var texture=current();
-        var area=region(texture,level,x,y,width,height);var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
+        kind(target);if(width==0||height==0)return;
+        upload(current(target),level,BlazeTextureTargets.layer(target),x,y,width,height,format,type,source);
+    }
+    private void upload(BlazeTexture texture,int level,int layer,int x,int y,int width,int height,int format,int type,ByteBuffer source){
+        var area=region(texture,level,layer,x,y,width,height);var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         if(source.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel source is truncated");
         int storage=texture.image().format().bytesPerPixel();
         if(!BlazeTextureFormats.storage(texture.internal).convertible()||!BlazePixels.convertible(format,type)){
@@ -134,8 +181,8 @@ public final class BlazeTextures implements AutoCloseable {
         try{uploadImage(texture.image(),area,converted,0);}finally{MemoryUtil.memFree(converted);}
     }
     public void download(int target,int level,int format,int type,long address){
-        target(target);var texture=current();if(!texture.defined(level))throw new IllegalStateException("Texture mip is not defined");var image=texture.image();int mip=texture.mip(level);
-        transfer(image,new ImageRegion(mip,texture.layer(),0,0,image.width(mip),image.height(mip)),format,type,address);
+        var texture=current(target);if(!texture.defined(level))throw new IllegalStateException("Texture mip is not defined");var image=texture.image();int mip=texture.mip(level);
+        transfer(image,new ImageRegion(mip,texture.layer()+BlazeTextureTargets.layer(target),0,0,image.width(mip),image.height(mip)),format,type,address);
     }
     public void read(BlazeTarget target,int x,int y,int width,int height,int format,int type,long address){
         requireOpen();if(width==0||height==0||target==null)return;
@@ -160,8 +207,8 @@ public final class BlazeTextures implements AutoCloseable {
         var bytes=immediate().readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().bytesPerPixel(),destination,layout,region.width(),region.height(),format,type);
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
-        target(target);if(width==0||height==0||source==null)return;var texture=current();
-        var from=readImage(source,GL_RGBA);var to=texture.image();var destination=region(texture,level,xOffset,yOffset,width,height);
+        kind(target);if(width==0||height==0||source==null)return;var texture=current(target);
+        var from=readImage(source,GL_RGBA);var to=texture.image();var destination=region(texture,level,BlazeTextureTargets.layer(target),xOffset,yOffset,width,height);
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
         var area=new ImageRegion(source.level(),0,x,y,width,height);
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
@@ -190,36 +237,40 @@ public final class BlazeTextures implements AutoCloseable {
         requireOpen();
         if(name!=GL_TEXTURE_WIDTH&&name!=GL_TEXTURE_HEIGHT&&name!=GL_TEXTURE_INTERNAL_FORMAT)throw new UnsupportedOperationException("Unsupported texture level query: "+name);
         if(target==GL_PROXY_TEXTURE_2D){if(level!=0)return 0;return switch(name){case GL_TEXTURE_WIDTH->proxyWidth;case GL_TEXTURE_HEIGHT->proxyHeight;case GL_TEXTURE_INTERNAL_FORMAT->proxyInternal;default->throw new AssertionError();};}
-        target(target);var texture=current();if(!texture.defined(level))return 0;var image=texture.image();int mip=texture.mip(level);
+        var texture=current(target);if(!texture.defined(level))return 0;var image=texture.image();int mip=texture.mip(level);
         return switch(name){case GL_TEXTURE_WIDTH->image.width(mip);case GL_TEXTURE_HEIGHT->image.height(mip);case GL_TEXTURE_INTERNAL_FORMAT->texture.internal;
             default->throw new UnsupportedOperationException("Unsupported texture level query: "+name);};
     }
     public Sampled resolve(Object value){
-        requireOpen();int id;
-        if(value instanceof Sampled ready)return ready;
-        if(value instanceof Integer number)id=number;
-        else if(value instanceof java.util.function.IntSupplier supplier)id=supplier.getAsInt();
-        else if(value instanceof AbstractTexture texture)id=texture.getId();
-        else if(value instanceof RenderTarget target)id=target.getColorTextureId();
-        else throw new UnsupportedOperationException("Unsupported texture sampler payload: "+(value==null?"null":value.getClass().getName()));
-        return sampled(id);
+        requireOpen();if(value instanceof Sampled ready)return ready;
+        return sampled(id(value),VK_IMAGE_VIEW_TYPE_2D);
+    }
+    private static int id(Object value){
+        if(value instanceof Integer number)return number;
+        if(value instanceof java.util.function.IntSupplier supplier)return supplier.getAsInt();
+        if(value instanceof AbstractTexture texture)return texture.getId();
+        if(value instanceof RenderTarget target)return target.getColorTextureId();
+        throw new UnsupportedOperationException("Unsupported texture sampler payload: "+(value==null?"null":value.getClass().getName()));
     }
     public void generateMipmap(int target){
-        requireOpen();target(target);var texture=current();
+        var texture=current(target);
         if(texture.borrowed()||!texture.defined(texture.baseLevel()))return;
-        transfers.mipmaps(texture.image(),texture.baseLevel(),0);texture.defineMipmaps(texture.baseLevel()+1);
+        for(int layer=0;layer<texture.layers();layer++)transfers.mipmaps(texture.image(),texture.baseLevel(),layer);
+        texture.defineMipmaps(texture.baseLevel()+1);
     }
-    public Sampled resolveBound(int unit){return sampled(boundId(unit));}
+    public Sampled resolveBound(int unit){return sampled(boundId(unit),VK_IMAGE_VIEW_TYPE_2D);}
     /**
-     * As {@link #resolve(Object)} for a sampler of the given GLSL type. Names hold 2D storage only, so a cube, array
-     * or 3D sampler reads a cleared view of its own dimension unless the value already is one.
+     * As {@link #resolve(Object)} for a sampler of the given GLSL type. A name whose storage has another dimension, and
+     * every 3D sampler, reads a cleared view of the sampler's own dimension, as an incomplete texture reads in OpenGL.
      */
     public Sampled resolve(Object value,String type){
         int wanted=viewType(type);
         if(wanted==VK_IMAGE_VIEW_TYPE_2D)return resolve(value);
-        if(value instanceof Sampled ready&&ready.view()!=null&&ready.view().viewType()==wanted)return ready;
-        return new Sampled(blank(wanted),incomplete().sampler().handle());
+        requireOpen();
+        if(value instanceof Sampled ready)return ready.view()!=null&&ready.view().viewType()==wanted?ready:blankSampled(wanted);
+        return sampled(id(value),wanted);
     }
+    private Sampled blankSampled(int viewType){return new Sampled(blank(viewType),incomplete().sampler().handle());}
     private static int viewType(String type){
         if(type==null)return VK_IMAGE_VIEW_TYPE_2D;
         if(type.endsWith("samplerCube")||type.endsWith("samplerCubeShadow"))return VK_IMAGE_VIEW_TYPE_CUBE;
@@ -238,13 +289,16 @@ public final class BlazeTextures implements AutoCloseable {
             return blanks[slot]=image.view(0,1,0,image.layers(),viewType,image.format().aspectMask());
         }catch(RuntimeException|Error failure){blankImages[slot]=null;image.close();throw failure;}
     }
-    private Sampled sampled(int id){
-        var texture=texture(id);if(!texture.complete())texture=incomplete();var view=texture.view();
-        if(queue==null)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)if(view.image().layout(mip,view.baseLayer())!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            commands.transition(view.image(),mip,view.baseLayer(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    private Sampled sampled(int id,int viewType){
+        var texture=texture(id);
+        if(texture.viewType()!=viewType||!texture.complete()){if(viewType!=VK_IMAGE_VIEW_TYPE_2D)return blankSampled(viewType);texture=incomplete();}
+        var view=texture.view();
+        if(queue==null)for(int layer=view.baseLayer();layer<view.baseLayer()+view.layerCount();layer++)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)
+            if(view.image().layout(mip,layer)!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)commands.transition(view.image(),mip,layer,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         return new Sampled(view,texture.sampler().handle());
     }
-    private BlazeTexture current(){requireOpen();return texture(bindings[active]);}
+    private BlazeTexture current(int target){requireOpen();return texture(layered[kind(target)][active]);}
+    private int kind(int target){requireOpen();return BlazeTextureTargets.kind(target);}
     private BlazeTexture incomplete(){
         if(incomplete==null){
             var created=new BlazeTexture(allocator,queue,transfers,samplers);
@@ -253,11 +307,12 @@ public final class BlazeTextures implements AutoCloseable {
         }
         return incomplete;
     }
-    private ImageRegion region(BlazeTexture texture,int level,int x,int y,int width,int height){
+    private ImageRegion region(BlazeTexture texture,int level,int layer,int x,int y,int width,int height){
         if(!texture.defined(level))throw new IllegalStateException("Texture mip is not defined");
         var image=texture.image();int mip=texture.mip(level);
         if(x<0||y<0||width<1||height<1||x>image.width(mip)-width||y>image.height(mip)-height)throw new IllegalArgumentException("Pixel rectangle exceeds texture mip");
-        return new ImageRegion(mip,texture.layer(),x,y,width,height);
+        if(layer<0||layer>=texture.layers())throw new IllegalArgumentException("Pixel layer exceeds texture layers");
+        return new ImageRegion(mip,texture.layer()+layer,x,y,width,height);
     }
     private void proxy(int level,int internal,int width,int height,int border,int format,int type,IntBuffer input){
         if(level!=0||border!=0||input!=null||internal!=GL_RGBA||format!=GL_RGBA||type!=GL_UNSIGNED_BYTE)
@@ -277,7 +332,6 @@ public final class BlazeTextures implements AutoCloseable {
     private ImmediateCommands immediate(){if(queue!=null)queue.flush();return commands;}
     private void uploadImage(GpuImage image,ImageRegion area,ByteBuffer bytes,int pitch){if(transfers!=null)transfers.upload(image,area,bytes,pitch);else commands.upload(image,area,bytes,pitch);}
     private void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){if(transfers!=null)transfers.clearColor(image,mip,layer,r,g,b,a);else commands.clearColor(image,mip,layer,r,g,b,a);}
-    private void target(int value){requireOpen();if(value!=GL_TEXTURE_2D)throw new UnsupportedOperationException("Only owned 2D textures are supported");}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Texture registry is closed");}
     @Override public void close(){
         if(closed)return;requireOpen();Throwable failure=null;
@@ -285,7 +339,7 @@ public final class BlazeTextures implements AutoCloseable {
         if(incomplete!=null)try{incomplete.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{incomplete=null;}
         for(int slot=0;slot<blankImages.length;slot++)if(blankImages[slot]!=null)try{blankImages[slot].close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{blankImages[slot]=null;blanks[slot]=null;}
         try{samplers.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
-        Arrays.fill(textures,null);Arrays.fill(bindings,0);closed=true;
+        Arrays.fill(textures,null);for(int[] kind:layered)Arrays.fill(kind,0);closed=true;
         if(failure instanceof RuntimeException error)throw error;if(failure instanceof Error error)throw error;
     }
 }

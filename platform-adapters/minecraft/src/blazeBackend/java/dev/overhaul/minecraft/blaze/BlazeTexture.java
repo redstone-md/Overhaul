@@ -23,6 +23,7 @@ final class BlazeTexture implements AutoCloseable {
     private int base,max=1000;
     private float minLod=-1000,maxLod=1000,lodBias;
     private boolean attached;
+    private int viewType=VK_IMAGE_VIEW_TYPE_2D;
     int channels=4,internal=GL_RGBA;
     BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,BlazeSamplers samplers){this.allocator=allocator;this.queue=queue;this.transfers=transfers;this.samplers=samplers;}
     BlazeTexture(GpuAllocator allocator,BlazeQueue queue,BlazeTransfers transfers,BlazeSamplers samplers,GpuImageView borrowed){this(allocator,queue,transfers,samplers);this.borrowed=borrowed;min=mag=GL_NEAREST;wrapS=wrapT=GL_CLAMP_TO_EDGE;max=borrowed.mipCount()-1;if(borrowed.image().format().isDepth()){internal=36012;channels=1;}}
@@ -45,20 +46,29 @@ final class BlazeTexture implements AutoCloseable {
         allocate(internal,width,height,levels,commands,true);
     }
     void allocate(int internal,int width,int height,int levels,ImmediateCommands commands,boolean defineAll){
+        allocate(internal,width,height,levels,1,VK_IMAGE_VIEW_TYPE_2D,commands,defineAll);
+    }
+    /** Storage of a 2D, cube or 2D array texture: a cube holds its six faces as layers. */
+    void allocate(int internal,int width,int height,int levels,int layers,int viewType,ImmediateCommands commands,boolean defineAll){
         if(borrowed())throw new UnsupportedOperationException("Cannot redefine a render-target texture alias");
+        if(layers<1||viewType==VK_IMAGE_VIEW_TYPE_CUBE&&(layers!=6||width!=height))throw new IllegalArgumentException("Invalid layered texture shape");
         var storage=BlazeTextureFormats.storage(internal);int count=storage.channels();ImageFormat format=storage.format();
-        GpuImage next=allocator.createImage(format,width,height,levels,1,usage(format));
+        GpuImage next=allocator.createImage(format,width,height,levels,layers,usage(format),flags(viewType));
         try{
-            if(!format.isDepth())for(int level=0;level<levels;level++){
-                if(transfers!=null)transfers.clearColor(next,level,0,0,0,0,count==4?0:1);
-                else commands.clearColor(next,level,0,0,0,0,count==4?0:1);
+            if(!format.isDepth())for(int level=0;level<levels;level++)for(int layer=0;layer<layers;layer++){
+                if(transfers!=null)transfers.clearColor(next,level,layer,0,0,0,count==4?0:1);
+                else commands.clearColor(next,level,layer,0,0,0,count==4?0:1);
             }
         }catch(RuntimeException|Error failure){retire(next);throw failure;}
         try{releaseSampling();if(image!=null)retire(image);}
         catch(RuntimeException|Error failure){try{retire(next);}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
-        image=next;this.internal=internal;channels=count;defined=new boolean[levels];
+        image=next;this.internal=internal;channels=count;defined=new boolean[levels];this.viewType=viewType;
         if(defineAll)java.util.Arrays.fill(defined,true);else defined[0]=true;
     }
+    /** The view dimension this texture samples as; a render-target alias is always 2D. */
+    int viewType(){return borrowed!=null?VK_IMAGE_VIEW_TYPE_2D:viewType;}
+    int layers(){return borrowed!=null?1:image==null?0:image.layers();}
+    private static int flags(int viewType){return viewType==VK_IMAGE_VIEW_TYPE_CUBE?VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0;}
     private int usage(ImageFormat format){
         int usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         return attached?usage|(format.isDepth()?VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT:VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT):usage;
@@ -66,9 +76,9 @@ final class BlazeTexture implements AutoCloseable {
     /** Marks this texture as a framebuffer attachment: its image moves to one that allows it, keeping any colour contents. */
     void attach(){
         if(borrowed()||attached)return;attached=true;if(image==null)return;
-        GpuImage next=allocator.createImage(image.format(),image.width(0),image.height(0),image.mipLevels(),1,usage(image.format()));
-        if(transfers!=null&&!image.format().isDepth())for(int level=0;level<image.mipLevels();level++){
-            var area=new ImageRegion(level,0,0,0,image.width(level),image.height(level));transfers.copy(image,area,next,area);
+        GpuImage next=allocator.createImage(image.format(),image.width(0),image.height(0),image.mipLevels(),image.layers(),usage(image.format()),flags(viewType));
+        if(transfers!=null&&!image.format().isDepth())for(int level=0;level<image.mipLevels();level++)for(int layer=0;layer<image.layers();layer++){
+            var area=new ImageRegion(level,layer,0,0,image.width(level),image.height(level));transfers.copy(image,area,next,area);
         }
         releaseSampling();retire(image);image=next;
     }
@@ -98,7 +108,7 @@ final class BlazeTexture implements AutoCloseable {
             GpuImage source=image();int available=borrowed==null?source.mipLevels():borrowed.mipCount();
             if(base>=available||max<base)throw new IllegalStateException("Incomplete texture mip range");
             int count=Math.min(available-1,max)-base+1;
-            view=source.view(mip(base),count,layer(),1);
+            view=borrowed!=null?source.view(mip(base),count,layer(),1):source.view(mip(base),count,0,source.layers(),viewType,source.format().aspectMask());
             BlazeStats.viewCreated();
         }
         return view;
