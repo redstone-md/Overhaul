@@ -46,6 +46,11 @@ final class BlazePackShadows {
      * the frustum is widened by MARGIN, which covers that drift, a pack's two-block shadow snap and the turn at 200 blocks.
      */
     private static final float MARGIN = 10, DRIFT = 4, TURN = 0.99996f;
+    /**
+     * A reused tight test widens the frustum by TIGHT_MARGIN, which covers TIGHT_DRIFT of camera movement, the two-block
+     * shadow snap and a TIGHT_TURN of about a quarter degree at 256 blocks.
+     */
+    private static final float TIGHT_MARGIN = 4, TIGHT_DRIFT = 0.5f, TIGHT_TURN = 0.99999f;
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
     private Object[] indexed = new Object[0];
@@ -68,6 +73,11 @@ final class BlazePackShadows {
     private boolean tight;
     private double keptX, keptY, keptZ;
     private float lightX, lightY, lightZ;
+    /** Bumped each time the casters are gathered again, so a reused tight test never outlives the casters it was for. */
+    private int gathered, tightGathered = -1;
+    private double tightX, tightY, tightZ;
+    private float tightLightX, tightLightY, tightLightZ;
+    private final Matrix4f tightProjection = new Matrix4f();
     private long keptAt = -1;
     private boolean kept, incomplete;
     private int seenMoves = -1;
@@ -103,6 +113,7 @@ final class BlazePackShadows {
      */
     private void collect(ViewArea sections, double x, double y, double z) {
         if (sections == null) {
+            gathered++;
             casterCount = 0;
             Arrays.fill(layerCounts, 0);
             kept = false;
@@ -111,6 +122,7 @@ final class BlazePackShadows {
         long now = BlazeSectionChanges.changes();
         if (index(BlazeViewSections.all(sections))) kept = false;
         if (still(now, x, y, z)) return;
+        gathered++;
         casterCount = 0;
         columnCount = 0;
         incomplete = false;
@@ -160,9 +172,20 @@ final class BlazePackShadows {
     /** True when the casters kept from an earlier frame still cover this one. */
     private boolean still(long now, double x, double y, double z) {
         if (!kept || now != keptAt || Math.abs(x - keptX) > DRIFT || Math.abs(y - keptY) > DRIFT || Math.abs(z - keptZ) > DRIFT) return false;
-        float turn = view.m02() * lightX + view.m12() * lightY + view.m22() * lightZ;
+        return facing(lightX, lightY, lightZ, TURN);
+    }
+
+    /** True when the light's direction is within the angle whose cosine is {@code cosine} of the given one. */
+    private boolean facing(float x, float y, float z, float cosine) {
+        float turn = view.m02() * x + view.m12() * y + view.m22() * z;
         float length = view.m02() * view.m02() + view.m12() * view.m12() + view.m22() * view.m22();
-        return turn > TURN * (float) Math.sqrt(length * (lightX * lightX + lightY * lightY + lightZ * lightZ));
+        return turn > cosine * (float) Math.sqrt(length * (x * x + y * y + z * z));
+    }
+
+    /** True when the last tight test, widened by its margin, still covers this frame's casters and light. */
+    private boolean tightStill(double x, double y, double z) {
+        return tightGathered == gathered && Math.abs(x - tightX) <= TIGHT_DRIFT && Math.abs(y - tightY) <= TIGHT_DRIFT
+                && Math.abs(z - tightZ) <= TIGHT_DRIFT && projection.equals(tightProjection) && facing(tightLightX, tightLightY, tightLightZ, TIGHT_TURN);
     }
 
     private void collect(int index, float minX, float minZ, float minY, double limit, float margin, boolean test, long now) {
@@ -185,9 +208,22 @@ final class BlazePackShadows {
     private void tighten(double x, double y, double z) {
         tight = BlazeOptimization.PACK_SHADOW_REUSE.on() && settings.fov() == null && casterCount != 0;
         if (!tight) return;
+        boolean reuse = BlazeOptimization.SHADOW_TIGHT_REUSE.on();
+        if (reuse && tightStill(x, y, z)) return;
+        float margin = reuse ? TIGHT_MARGIN : 0;
+        if (reuse) {
+            tightGathered = gathered;
+            tightX = x;
+            tightY = y;
+            tightZ = z;
+            tightLightX = view.m02();
+            tightLightY = view.m12();
+            tightLightZ = view.m22();
+            tightProjection.set(projection);
+        }
         frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
-        double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
+        double limit = multiplier > 0 ? settings.distance() * multiplier + 16 + margin : Double.MAX_VALUE;
         if (inside.length != indexed.length) inside = new boolean[indexed.length];
         int[] origins = this.origins;
         boolean columns = BlazeOptimization.SHADOW_COLUMNS.on();
@@ -198,7 +234,7 @@ final class BlazePackShadows {
             if (columns) {
                 int at = columnBase[column] * 3;
                 float minX = (float) (origins[at] - x), bottom = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
-                side = frustum.intersectAab(minX, bottom, minZ, minX + 16, bottom + height * 16, minZ + 16);
+                side = frustum.intersectAab(minX - margin, bottom - margin, minZ - margin, minX + 16 + margin, bottom + height * 16 + margin, minZ + 16 + margin);
             }
             boolean whole = side == FrustumIntersection.INSIDE, outside = !whole && side != FrustumIntersection.INTERSECT;
             for (int at = from; at < to; at++) {
@@ -209,7 +245,7 @@ final class BlazePackShadows {
                 }
                 float minX = (float) (origins[index * 3] - x), minY = (float) (origins[index * 3 + 1] - y), minZ = (float) (origins[index * 3 + 2] - z);
                 inside[index] = Math.abs(minX + 8) <= limit && Math.abs(minY + 8) <= limit && Math.abs(minZ + 8) <= limit
-                        && (whole || frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16));
+                        && (whole || frustum.testAab(minX - margin, minY - margin, minZ - margin, minX + 16 + margin, minY + 16 + margin, minZ + 16 + margin));
             }
         }
     }

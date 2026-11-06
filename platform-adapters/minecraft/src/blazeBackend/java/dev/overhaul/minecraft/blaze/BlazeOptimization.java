@@ -56,6 +56,7 @@ public enum BlazeOptimization {
     POOL_RANGES("poolRanges", "Free ranges of per-frame buffer pages kept in sorted arrays instead of a tree of boxed offsets"),
     UNIFORM_PLANS("uniformPlans", "Shader pack uniforms filled from the source each name resolved to the first time instead of asking every source again"),
     SHADOW_COLUMNS("shadowColumns", "Kept shadow casters tested against each frame's light frustum a column at a time, section by section only where the frustum cuts the column"),
+    SHADOW_TIGHT_REUSE("shadowTightReuse", "The light frustum test of kept shadow casters widened by four blocks and reused while the camera moves less than half a block and the sun turns less than a quarter degree"),
     SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable"),
     DH_DEVICE_CACHE("dhDeviceCache", "Each Distant Horizons vertex buffer keeps the device buffer it resolved to instead of looking it up by name every frame"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
