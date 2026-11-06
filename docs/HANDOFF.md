@@ -49,6 +49,19 @@ key that is off.
 | Horizon view, Iris with Sodium | 7.7 ms | Baseline for the 2x target, so the target is 3.85 ms |
 | Horizon view, Overhaul | about 4.16 ms | 4213 sections in about 1250 indirect draws, 40 passes; 1.85x |
 
+The fairest comparison reads the F3 counter in both, runs interleaved, two runs each
+(`fpsbench.ps1`, see below). Latest numbers:
+
+| View | Overhaul | Iris with Sodium | Ratio |
+| --- | --- | --- | --- |
+| Horizon | about 259 fps | about 135 fps | 1.92x |
+| Looking down | about 244 to 251 fps | about 132 fps | 1.85x to 1.90x |
+
+GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
+3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
+GPU clocks. With F3 open the run always lands in the slow mode: the extra CPU work leaves
+the GPU idle gaps and it clocks down. Without F3 Overhaul is about 2.2x.
+
 At the horizon the GPU is the limit now: about 4.0 ms of GPU work per frame and
 0.15 to 0.25 ms idle between frames. GPU time per phase:
 
@@ -71,17 +84,28 @@ Experiments that did not help, all reverted:
 - Drawing Distant Horizons containers far to near: the distant phase went from 1.01 to 1.35 ms.
   They are already near to far, and the pass is bound by fragment overdraw.
 - Front-to-back order for vanilla opaque sections: no GPU change, and indirect draws rose from 1250 to 2020.
+- Sorting Distant Horizons containers by distance: 0.93 against 0.94 ms, noise. Their quadtree order is already close.
+- Masking Distant Horizons fragments behind vanilla terrain. Complementary discards them itself past 0.4 to
+  0.6 of the far plane; an upper-bound probe saved about 0.05 ms, so it was dropped.
+- Batching image barriers, and skipping near Distant Horizons containers: no measurable change.
 
 ## CPU hot spots in the latest profile
 
 The percentages are self time.
 
-- `BlazeSectionBatch.append` and `run`, 10–15%: cache misses on mesh fields per section.
+- `BlazeSectionBatch.append`, about 6%: cache misses on mesh fields per section.
+- `Int2ObjectOpenHashMap.get` in `BlazeGlBuffers.device`, about 3.5%: two lookups per Distant Horizons container.
 - `BlazePackUniforms.fill`, about 4% plus string hashing: uniforms are found by name.
 - `PackFrameGraph.create` / `VulkanRenderGraph`, about 6%: the graph is rebuilt every frame.
 
-Fixed since the previous profile: the buffer pool picks the best-fit slice through a size
-index, the GL buffer maps are unboxed, and each shadow layer keeps its own caster list.
+Fixed since the previous profile: the buffer pool picks the best fit by binary search over a
+sorted array, section runs are hashed by all four keys (the chain by vertex buffer was
+quadratic within a page, `run` fell from 11% to 3.5%), F3 counts rendered sections from the
+layer scan instead of walking every section, the GL buffer maps are unboxed, and each shadow
+layer keeps its own caster list and draws through the tight frustum.
+
+The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
+own debug string.
 
 ## Open items
 
@@ -91,4 +115,4 @@ index, the GL buffer maps are unboxed, and each shadow layer keeps its own caste
 - A crash in OpenAL.
 - Hi-Z occlusion on the GPU.
 - Running the remaining versions and loaders, beyond NeoForge 1.21.1 and a compile of Forge 1.20.1.
-- About 0.3 ms of GPU time at the horizon still stands between 1.85x and the 2x target.
+- With F3 open, about 0.1 to 0.2 ms of GPU time stands between 1.9x and the 2x target. Without F3 it is past 2x.
