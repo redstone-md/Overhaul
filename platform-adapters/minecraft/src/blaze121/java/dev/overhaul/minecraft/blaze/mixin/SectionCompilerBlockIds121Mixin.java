@@ -9,6 +9,7 @@ import dev.overhaul.minecraft.blaze.BlazePackBlockFormat;
 import dev.overhaul.minecraft.blaze.BlazePackBlockIds;
 import dev.overhaul.minecraft.blaze.BlazePackVertexTag;
 import java.util.Map;
+import net.minecraft.core.BlockPos;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.SectionBufferBuilderPack;
 import net.minecraft.client.renderer.chunk.SectionCompiler;
@@ -19,7 +20,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
- * Builds pack terrain in the block-id format and tags each layer buffer with the block about to draw into it. The
+ * Builds pack terrain in the block-id format and tags each layer buffer with the block about to draw into it and where
+ * that block sits in the section: the loop's block position, the third after the section's two corners. The
  * compile loop fetches the buffer right before each fluid and model render, so the tag always names that block.
  * Geometry mods add after the loop keeps the last block's tag.
  */
@@ -38,17 +40,22 @@ abstract class SectionCompilerBlockIds121Mixin {
 
     @WrapOperation(method = {VANILLA, NEOFORGE}, require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 0))
     private BufferBuilder overhaul$fluidLayer(SectionCompiler compiler, Map<RenderType, BufferBuilder> layers, SectionBufferBuilderPack pack,
-                                              RenderType type, Operation<BufferBuilder> original, @Local FluidState fluid) {
+                                              RenderType type, Operation<BufferBuilder> original, @Local FluidState fluid, @Local(ordinal = 2) BlockPos at) {
         BufferBuilder buffer = original.call(compiler, layers, pack, type);
-        if (BlazePackBlockIds.active() != null) ((BlazePackVertexTag) buffer).overhaul$tag(BlazePackBlockFormat.id(fluid.createLegacyBlock()), BlazePackBlockFormat.FLUID);
+        if (BlazePackBlockIds.active() != null) {
+            BlockState block = fluid.createLegacyBlock();
+            ((BlazePackVertexTag) buffer).overhaul$tag(BlazePackBlockFormat.id(block), BlazePackBlockFormat.FLUID, at.getX() & 15, at.getY() & 15, at.getZ() & 15, block.getLightEmission());
+        }
         return buffer;
     }
 
     @WrapOperation(method = {VANILLA, NEOFORGE}, require = 1, at = @At(value = "INVOKE", target = LAYER, ordinal = 1))
     private BufferBuilder overhaul$blockLayer(SectionCompiler compiler, Map<RenderType, BufferBuilder> layers, SectionBufferBuilderPack pack,
-                                              RenderType type, Operation<BufferBuilder> original, @Local BlockState state) {
+                                              RenderType type, Operation<BufferBuilder> original, @Local BlockState state, @Local(ordinal = 2) BlockPos at) {
         BufferBuilder buffer = original.call(compiler, layers, pack, type);
-        if (BlazePackBlockIds.active() != null) ((BlazePackVertexTag) buffer).overhaul$tag(BlazePackBlockFormat.id(state), BlazePackBlockFormat.BLOCK);
+        if (BlazePackBlockIds.active() != null) {
+            ((BlazePackVertexTag) buffer).overhaul$tag(BlazePackBlockFormat.id(state), BlazePackBlockFormat.BLOCK, at.getX() & 15, at.getY() & 15, at.getZ() & 15, state.getLightEmission());
+        }
         return buffer;
     }
 }

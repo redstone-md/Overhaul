@@ -9,6 +9,8 @@ import dev.overhaul.shader.pack.PackIdMap;
 public final class BlazePackBlockIds {
     /** Vertex field holding the id and the render type as two shorts. */
     public static final String FIELD = "OverhaulEntity";
+    /** Vertex field holding the offset to the block's centre in 64ths of a block and its light emission, four bytes. */
+    public static final String MID_BLOCK = "OverhaulMidBlock";
     private static volatile PackIdMap active;
 
     private BlazePackBlockIds() {}

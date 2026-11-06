@@ -10,14 +10,16 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
 /**
- * The game's block vertex followed by the pack's block id and render type, both shorts. Sections build in it only while
- * a pack with block.properties draws the world; the first 32 bytes stay the block layout, so every other reader works.
+ * The game's block vertex followed by the pack's block id and render type, both shorts, then Iris's at_midBlock: the
+ * offset to the block's centre in 64ths of a block and the block's light emission, four bytes. Sections build in it only
+ * while a pack with block.properties draws the world; the first 32 bytes stay the block layout, so every other reader works.
  */
 public final class BlazePackBlockFormat {
     /** Iris's mc_Entity.y values: packs test it to tell fluid faces from block faces. */
     public static final short BLOCK = -1, FLUID = 1;
-    public static final int ID_OFFSET = 32;
-    public static final VertexFormatElement ELEMENT = register();
+    public static final int ID_OFFSET = 32, MID_OFFSET = 36;
+    public static final VertexFormatElement ELEMENT = register(3, VertexFormatElement.Type.SHORT, 2);
+    public static final VertexFormatElement MID_ELEMENT = register(4, VertexFormatElement.Type.BYTE, 4);
     public static final VertexFormat FORMAT = VertexFormat.builder()
             .add("Position", VertexFormatElement.POSITION)
             .add("Color", VertexFormatElement.COLOR)
@@ -26,6 +28,7 @@ public final class BlazePackBlockFormat {
             .add("Normal", VertexFormatElement.NORMAL)
             .padding(1)
             .add(BlazePackBlockIds.FIELD, ELEMENT)
+            .add(BlazePackBlockIds.MID_BLOCK, MID_ELEMENT)
             .build();
     private static final short UNSET = Short.MIN_VALUE;
     private static volatile Table table;
@@ -35,11 +38,11 @@ public final class BlazePackBlockFormat {
     private BlazePackBlockFormat() {}
 
     /** Takes the highest free element id: mods that add elements pick low fixed ids. UV usage admits any index. */
-    private static VertexFormatElement register() {
+    private static VertexFormatElement register(int index, VertexFormatElement.Type type, int count) {
         for (int id = VertexFormatElement.MAX_COUNT - 1; id >= 0; id--) {
-            if (VertexFormatElement.byId(id) == null) return VertexFormatElement.register(id, 3, VertexFormatElement.Type.SHORT, VertexFormatElement.Usage.UV, 2);
+            if (VertexFormatElement.byId(id) == null) return VertexFormatElement.register(id, index, type, VertexFormatElement.Usage.UV, count);
         }
-        throw new IllegalStateException("No free vertex element id for shader-pack block ids");
+        throw new IllegalStateException("No free vertex element id for shader-pack block data");
     }
 
     /** The id the active pack gives this state, or -1; computed once per state and pack, from any build thread. */

@@ -23,10 +23,28 @@ abstract class BufferBuilderBlockIds121Mixin implements BlazePackVertexTag {
     @Shadow private long beginVertex() { return 0L; }
     @Shadow private long beginElement(VertexFormatElement element) { return 0L; }
     @Unique private short overhaul$id = -1, overhaul$type = BlazePackBlockFormat.BLOCK;
+    @Unique private float overhaul$centreX = 0.5f, overhaul$centreY = 0.5f, overhaul$centreZ = 0.5f;
+    @Unique private byte overhaul$light;
 
-    @Override public void overhaul$tag(short id, short type) {
+    @Override public void overhaul$tag(short id, short type, int x, int y, int z, int light) {
         overhaul$id = id;
         overhaul$type = type;
+        overhaul$centreX = x + 0.5f;
+        overhaul$centreY = y + 0.5f;
+        overhaul$centreZ = z + 0.5f;
+        overhaul$light = (byte) light;
+    }
+
+    /** As Iris writes it: the offset from this vertex to its block's centre, in 64ths of a block, then the light. */
+    @Unique private void overhaul$writeMid(long field, float x, float y, float z) {
+        MemoryUtil.memPutByte(field, overhaul$sixtyfourths(overhaul$centreX - x));
+        MemoryUtil.memPutByte(field + 1L, overhaul$sixtyfourths(overhaul$centreY - y));
+        MemoryUtil.memPutByte(field + 2L, overhaul$sixtyfourths(overhaul$centreZ - z));
+        MemoryUtil.memPutByte(field + 3L, overhaul$light);
+    }
+
+    @Unique private static byte overhaul$sixtyfourths(float offset) {
+        return (byte) Math.max(-128, Math.min(127, Math.round(offset * 64f)));
     }
 
     @Unique private void overhaul$write(long field) {
@@ -40,6 +58,8 @@ abstract class BufferBuilderBlockIds121Mixin implements BlazePackVertexTag {
         if (format != BlazePackBlockFormat.FORMAT) return;
         long field = beginElement(BlazePackBlockFormat.ELEMENT);
         if (field != -1L) overhaul$write(field);
+        long mid = beginElement(BlazePackBlockFormat.MID_ELEMENT);
+        if (mid != -1L) overhaul$writeMid(mid, x, y, z);
     }
 
     /** The block format's one-call vertex, which the game takes only for its own two formats, kept for this one too. */
@@ -60,6 +80,7 @@ abstract class BufferBuilderBlockIds121Mixin implements BlazePackVertexTag {
         MemoryUtil.memPutByte(vertex + 29L, normal(normalY));
         MemoryUtil.memPutByte(vertex + 30L, normal(normalZ));
         overhaul$write(vertex + BlazePackBlockFormat.ID_OFFSET);
+        overhaul$writeMid(vertex + BlazePackBlockFormat.MID_OFFSET, x, y, z);
         callback.cancel();
     }
 

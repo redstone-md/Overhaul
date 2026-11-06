@@ -82,7 +82,8 @@ final class BlazePackVertexInputs {
             case EntityColorEmulation.OVERLAY -> either(location, layout, "UV1", constants, NO_OVERLAY);
             case "mc_Entity" -> either(location, layout, BlazePackBlockIds.FIELD, constants, UNKNOWN_ID);
             case "at_tangent" -> constant(location, constants, TANGENT);
-            case "at_velocity", "at_midBlock" -> constant(location, constants, ZERO);
+            case "at_midBlock" -> either(location, layout, BlazePackBlockIds.MID_BLOCK, constants, ZERO);
+            case "at_velocity" -> constant(location, constants, ZERO);
             default -> throw new UnsupportedShaderException("Unbound pack vertex input: " + name);
         };
     }
@@ -107,6 +108,7 @@ final class BlazePackVertexInputs {
         return switch (format) {
             case VK_FORMAT_R16G16_SINT -> VK_FORMAT_R16G16_SSCALED;
             case VK_FORMAT_R16G16_UINT -> VK_FORMAT_R16G16_USCALED;
+            case VK_FORMAT_R8G8B8A8_SINT -> VK_FORMAT_R8G8B8A8_SSCALED;
             default -> format;
         };
     }
