@@ -83,12 +83,14 @@ public final class BlazePackFrame implements AutoCloseable {
         }
         if (configuration.equals(blocked)) return;
         RenderTarget main = minecraft.getMainRenderTarget();
+        renderer.gpuMark("start");
         try {
             if (runtime == null || width != main.width || height != main.height || !configuration.equals(installed)) {
                 install(configuration, main.width, main.height);
             }
             uniforms.capture(new BlazePackCapture(minecraft, camera, partial, view, projection, width, height), pack);
             runtime.beginFrame(renderer.packCommands(), frame(main), uniforms);
+            renderer.gpuMark("packBegin");
             if (scene != null) {
                 scene.begin(renderer.target(main.frameBufferId));
                 scene.distantCamera(view, uniforms.distantProjection(distantProjection));
@@ -96,6 +98,7 @@ public final class BlazePackFrame implements AutoCloseable {
             if (shadows != null) {
                 shadows.render(minecraft, sections, uniforms, camera, light, frame(main));
                 scene.shadowsDone();
+                renderer.gpuMark("shadow");
             }
             active = true;
         } catch (RuntimeException | IOException failure) {
@@ -121,8 +124,10 @@ public final class BlazePackFrame implements AutoCloseable {
     /** Idempotent within a frame: the game calls this before every translucent section layer it draws. */
     public void afterOpaque() {
         if (!active) return;
+        renderer.gpuMark("opaque");
         try {
             runtime.afterOpaque(renderer.packCommands(), frame(minecraft.getMainRenderTarget()), uniforms);
+            renderer.gpuMark("deferred");
             if (scene != null) scene.afterOpaque();
         } catch (RuntimeException failure) {
             fail(installed, failure);
@@ -146,9 +151,12 @@ public final class BlazePackFrame implements AutoCloseable {
         if (!active) return;
         active = false;
         if (scene != null) scene.end();
+        renderer.gpuMark("translucent");
         try {
             runtime.render(renderer.packCommands(), frame(minecraft.getMainRenderTarget()), uniforms);
+            renderer.gpuMark("composite");
             if (scene != null) scene.drawOnTop();
+            renderer.gpuMark("onTop");
             uniforms.complete();
         } catch (RuntimeException failure) {
             fail(installed, failure);

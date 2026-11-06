@@ -76,6 +76,7 @@ public final class BlazeDhFrame {
         if (!opaque && scene.holdDistant(() -> drawThroughPack(renderer, params, false, containers))) return;
         BlazeSectionBatch batch = scene.distant(opaque);
         if (batch == null) return;
+        if (opaque) renderer.gpuMark("beforeDistant");
         var buffers = BlazeGlBoundary.buffers();
         try {
             for (int index = 0; index < containers.size(); index++) {
@@ -90,6 +91,7 @@ public final class BlazeDhFrame {
             }
         } finally {
             scene.distantDone(batch, opaque);
+            if (opaque) renderer.gpuMark("distant");
         }
     }
 

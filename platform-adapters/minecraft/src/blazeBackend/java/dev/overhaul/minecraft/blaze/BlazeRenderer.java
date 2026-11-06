@@ -33,6 +33,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazeSectionOcclusion occlusion;
     private boolean occlusionFailed,compactFailed;
     private BlazeDh dh;
+    private BlazeGpuTimer gpuTimer;
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
@@ -84,6 +85,7 @@ public final class BlazeRenderer implements AutoCloseable {
             backBuffer=new BlazeTarget(context,allocator,commands,Math.max(1,width),Math.max(1,height),true);
             backBuffer.attach(queue);
             presenter=new SwapchainPresenter(context,width,height);this.width=width;this.height=height;
+            if(BlazeGpuTimer.ENABLED){gpuTimer=new BlazeGpuTimer(context);closeWith(gpuTimer);}
             state.viewport(0,0,Math.max(0,width),Math.max(0,height));
         }catch(RuntimeException|Error failure){try{close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
     }
@@ -160,6 +162,8 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     public BlazeDh dhIfUsed(){return dh;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
+    /** Names the GPU work queued since the previous mark; only under -Doverhaul.blaze.gpuStats. */
+    public void gpuMark(String label){if(gpuTimer==null)return;BlazeQueue.Operation mark=gpuTimer.mark(label);if(mark!=null)enqueue(mark);}
     /** Pack graphs take their place in the frame queue and never wait for the GPU. */
     public PackRecording.Recorder packRecorder(){requireOpen();return recording->enqueue(new BlazePackRecording(recording));}
     /**
@@ -311,7 +315,7 @@ public final class BlazeRenderer implements AutoCloseable {
     /** Counts presented frames, for work that must make one choice per frame. */
     public long frame(){return frames;}
     /** A swapchain the surface outgrew without a size change, as when the window moves to another monitor, is rebuilt here: the game sends no resize for it. */
-    public void present(){requireOpen();frames++;queue.flush();long start=BlazeStats.start();if(width>0&&height>0&&presenter.suspended())presenter.configure(width,height,mode);if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}BlazeStats.present(start);}
+    public void present(){requireOpen();frames++;gpuMark("gui");queue.flush();if(gpuTimer!=null)gpuTimer.endFrame();long start=BlazeStats.start();if(width>0&&height>0&&presenter.suspended())presenter.configure(width,height,mode);if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}gpuMark("present");BlazeStats.present(start);}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Blaze3D device is closed");}
     @Override public void close(){
         if(closed)return;
