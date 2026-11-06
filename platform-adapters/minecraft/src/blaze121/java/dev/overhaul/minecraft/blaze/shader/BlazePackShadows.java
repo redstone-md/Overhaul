@@ -56,6 +56,10 @@ final class BlazePackShadows {
     private long[] contents = new long[0], contentsAt = new long[0];
     private BlazeMesh[] meshes = new BlazeMesh[0];
     private int casterCount;
+    /** Per layer, the casters that have a mesh in it, so each pass walks only meshes it draws. */
+    private final BlazeMesh[][] layerMeshes = new BlazeMesh[LAYERS.length][0];
+    private final int[][] layerCasters = new int[LAYERS.length][0];
+    private final int[] layerCounts = new int[LAYERS.length];
     private double keptX, keptY, keptZ;
     private float lightX, lightY, lightZ;
     private long keptAt = -1;
@@ -93,6 +97,7 @@ final class BlazePackShadows {
     private void collect(ViewArea sections, double x, double y, double z) {
         if (sections == null) {
             casterCount = 0;
+            Arrays.fill(layerCounts, 0);
             kept = false;
             return;
         }
@@ -129,6 +134,7 @@ final class BlazePackShadows {
             for (int layer = 0; layer < height; layer++) collect(base + layer * width, minX, minZ, (float) (origins[(base + layer * width) * 3 + 1] - y),
                     limit, margin, bounded && side != FrustumIntersection.INSIDE, now);
         }
+        split();
         kept = reuse && !incomplete;
         keptAt = now;
         keptX = x;
@@ -158,6 +164,27 @@ final class BlazePackShadows {
         if (layers == 0) return;
         if (layers != seen[index]) remember(index, layers);
         casters[casterCount++] = index;
+    }
+
+    private void split() {
+        for (int layer = 0; layer < LAYERS.length; layer++) {
+            if (layerMeshes[layer].length < casterCount) {
+                layerMeshes[layer] = new BlazeMesh[casters.length];
+                layerCasters[layer] = new int[casters.length];
+            }
+            BlazeMesh[] into = layerMeshes[layer];
+            int[] owners = layerCasters[layer];
+            int count = 0;
+            for (int at = 0; at < casterCount; at++) {
+                int index = casters[at];
+                BlazeMesh mesh = meshes[index * LAYERS.length + layer];
+                if (mesh == null) continue;
+                into[count] = mesh;
+                owners[count++] = index;
+            }
+            Arrays.fill(into, count, Math.max(count, Math.min(layerCounts[layer], into.length)), null);
+            layerCounts[layer] = count;
+        }
     }
 
     /** A buffer keeps its mesh until it closes, so the meshes stand until the section's layers change. */
@@ -200,11 +227,11 @@ final class BlazePackShadows {
     private void cast(int layer, String program, double x, double y, double z) {
         scene.shadowLayer(program);
         BlazeSectionBatch batch = scene.shadowSections(view, projection);
-        int[] origins = this.origins;
-        for (int at = 0; at < casterCount; at++) {
-            int index = casters[at];
-            BlazeMesh mesh = meshes[index * LAYERS.length + layer];
-            if (mesh == null) continue;
+        int[] origins = this.origins, owners = layerCasters[layer];
+        BlazeMesh[] meshes = layerMeshes[layer];
+        for (int at = 0, count = layerCounts[layer]; at < count; at++) {
+            int index = owners[at];
+            BlazeMesh mesh = meshes[at];
             float offsetX = (float) (origins[index * 3] - x), offsetY = (float) (origins[index * 3 + 1] - y), offsetZ = (float) (origins[index * 3 + 2] - z);
             if (batch != null) {
                 batch.add(mesh, offsetX, offsetY, offsetZ);
