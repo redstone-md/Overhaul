@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Vanilla loop bodies stay in place for other mods; they only receive shorter lists. The translucent resort loop keeps the whole list. */
 @Mixin(LevelRenderer.class)
@@ -55,5 +56,11 @@ abstract class LevelRendererSections121Mixin implements BlazeLayerLists {
             @At(value="FIELD",target="Lnet/minecraft/client/renderer/LevelRenderer;visibleSections:Lit/unimi/dsi/fastutil/objects/ObjectArrayList;",ordinal=2)})
     private ObjectArrayList<RenderSection> overhaul$layerSections(ObjectArrayList<RenderSection> visible,@Local(argsOnly=true) RenderType layer){
         return overhaul$sections.layer(visible,layer);
+    }
+
+    @Inject(method="countRenderedSections",at=@At("HEAD"),cancellable=true)
+    private void overhaul$renderedSections(CallbackInfoReturnable<Integer> callback){
+        int rendered=overhaul$sections.rendered(visibleSections);
+        if(rendered>=0)callback.setReturnValue(rendered);
     }
 }

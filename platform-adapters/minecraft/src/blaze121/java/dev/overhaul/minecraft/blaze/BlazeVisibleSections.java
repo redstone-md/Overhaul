@@ -19,7 +19,7 @@ public final class BlazeVisibleSections {
     private Layer[] layers=new Layer[8];
     private final Layer withBlockEntities=new Layer();
     private ObjectArrayList<RenderSection> source;
-    private int scanned;
+    private int scanned,rendered;
     private boolean tables;
     private ObjectArrayList<RenderSection> dirtySource;
     private int dirtySize;
@@ -55,6 +55,7 @@ public final class BlazeVisibleSections {
         this.tables=tables;
         for(Layer layer:layers)if(layer!=null)layer.cursor=0;
         withBlockEntities.cursor=0;
+        int rendered=0;
         for(int index=0,size=visible.size();index<size;index++){
             RenderSection section=visible.get(index);
             BlazeSectionBuffers flat=tables?(BlazeSectionBuffers)(Object)section:null;
@@ -62,6 +63,7 @@ public final class BlazeVisibleSections {
             if((contents&BlazeCompiledContents.BLOCK_ENTITIES)!=0)withBlockEntities.put(section);
             contents&=~(BlazeCompiledContents.BLOCK_ENTITIES|BlazeCompiledContents.KNOWN);
             if(contents==0)continue;
+            rendered++;
             for(;contents!=0;contents&=contents-1){
                 int id=Long.numberOfTrailingZeros(contents);
                 if(tables){
@@ -76,6 +78,7 @@ public final class BlazeVisibleSections {
         withBlockEntities.sections.size(withBlockEntities.cursor);
         source=visible;
         scanned=visible.size();
+        this.rendered=rendered;
         scannedAt=now;
     }
 
@@ -97,6 +100,11 @@ public final class BlazeVisibleSections {
         if(!tables||!scanned(visible))return null;
         int id=type.getChunkLayerId();
         return id<0||id>=layers.length||layers[id]==null?Layer.EMPTY:layers[id];
+    }
+
+    /** Sections with geometry in any layer, as the debug screen counts them every frame; -1 when the list no longer stands. */
+    public int rendered(ObjectArrayList<RenderSection> visible){
+        return scanned(visible)?rendered:-1;
     }
 
     private Layer layerOf(int id){
