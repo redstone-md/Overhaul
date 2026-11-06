@@ -78,6 +78,8 @@ public final class BlazeDhFrame {
         if (batch == null) return;
         if (opaque) renderer.gpuMark("beforeDistant");
         var buffers = BlazeGlBoundary.buffers();
+        lastIndexName = 0;
+        lastIndexBuffer = null;
         try {
             for (int index = 0; index < containers.size(); index++) {
                 LodBufferContainer container = containers.get(index);
@@ -95,6 +97,10 @@ public final class BlazeDhFrame {
         }
     }
 
+    /** DH shares one quad index buffer between containers: looked up once per pass instead of once per container. */
+    private static int lastIndexName;
+    private static dev.overhaul.vulkan.GpuBuffer lastIndexBuffer;
+
     private static void add(BlazeRenderer renderer, BlazeGlBuffers buffers, BlazeSectionBatch batch, GLVertexBuffer vertices, float x, float y, float z) {
         GlQuadIndexBuffer indices = vertices.getQuadIBO();
         if (indices == null) return;
@@ -103,7 +109,12 @@ public final class BlazeDhFrame {
             int count = vertices.getVertexCount();
             if (count == 0 || vertices.getId() == 0 || indices.getId() == 0) return;
             var vertexBuffer = buffers.device(renderer, vertices.getId());
-            var indexBuffer = buffers.device(renderer, indices.getId());
+            int indexName = indices.getId();
+            if (indexName != lastIndexName) {
+                lastIndexBuffer = buffers.device(renderer, indexName);
+                lastIndexName = indexName;
+            }
+            var indexBuffer = lastIndexBuffer;
             if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);
         } finally {
             vertices.renderStampLock.unlock(vertexStamp);
