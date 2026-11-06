@@ -29,9 +29,8 @@ The remapped jar is in `build/fabric-1.21.1-blaze/libs/` and needs Fabric Loader
 | Fabric 1.20.1 | Yes, vanilla and Complementary, in `Overhaul Fabric 120 Test` |
 | Forge 1.20.1 (47.4.10) | Yes, vanilla and Complementary, in `Overhaul Forge 120 Test` |
 
-The 1.20.1 tier has mesh uploads, terrain batching and shader packs (shadows, hand, bobbing).
-It has no section-scan reuse, entity occlusion or settings screen yet; the pack is picked
-in `config/overhaul-shaderpack.properties`. On Forge 52.1.21, a world copied from a Fabric instance
+The 1.20.1 tier has mesh uploads, terrain batching, shader packs (shadows, hand, bobbing)
+and the settings screen. It has no section-scan reuse or entity occlusion yet. On Forge 52.1.21, a world copied from a Fabric instance
 crashes the server with `Can not retrieve LootModifierManager until resources have loaded once`,
 with or without Overhaul. A world created in that instance works.
 
@@ -137,5 +136,5 @@ own debug string.
 - Sky mapping.
 - A crash in OpenAL.
 - Hi-Z occlusion on the GPU.
-- Port the remaining 1.21.1 tier features (section-scan reuse, occlusion, settings screen) to 1.20.1.
+- Port the remaining 1.21.1 tier features (section-scan reuse, occlusion) to 1.20.1.
 - With F3 open, about 0.1 to 0.2 ms of GPU time stands between 1.9x and the 2x target. Without F3 it is past 2x.
