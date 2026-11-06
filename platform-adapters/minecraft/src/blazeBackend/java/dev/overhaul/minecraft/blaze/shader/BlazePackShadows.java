@@ -51,6 +51,8 @@ final class BlazePackShadows {
      * shadow snap and a TIGHT_TURN of about a quarter degree at 256 blocks.
      */
     private static final float TIGHT_MARGIN = 4, TIGHT_DRIFT = 0.5f, TIGHT_TURN = 0.99999f;
+    /** Room around a caster for shadow filtering, view bobbing and a pack's soft shadow spread when testing its reach. */
+    private static final float REACH_PAD = 4;
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
     private Object[] indexed = new Object[0];
@@ -77,7 +79,8 @@ final class BlazePackShadows {
     private int gathered, tightGathered = -1;
     private double tightX, tightY, tightZ;
     private float tightLightX, tightLightY, tightLightZ;
-    private final Matrix4f tightProjection = new Matrix4f();
+    private final Matrix4f tightProjection = new Matrix4f(), player = new Matrix4f(), tightPlayer = new Matrix4f();
+    private final BlazeShadowReach reach = new BlazeShadowReach();
     private long keptAt = -1;
     private boolean kept, incomplete;
     private int seenMoves = -1;
@@ -93,6 +96,7 @@ final class BlazePackShadows {
     void render(Minecraft minecraft, ViewArea sections, BlazePackUniforms uniforms, Camera camera, LightTexture light, PackGraphRuntime.Frame frame) {
         uniforms.shadowView(view);
         uniforms.shadowProjection(projection);
+        uniforms.viewProjection(player);
         var position = camera.getPosition();
         collect(sections, position.x, position.y, position.z);
         tighten(position.x, position.y, position.z);
@@ -185,7 +189,8 @@ final class BlazePackShadows {
     /** True when the last tight test, widened by its margin, still covers this frame's casters and light. */
     private boolean tightStill(double x, double y, double z) {
         return tightGathered == gathered && Math.abs(x - tightX) <= TIGHT_DRIFT && Math.abs(y - tightY) <= TIGHT_DRIFT
-                && Math.abs(z - tightZ) <= TIGHT_DRIFT && projection.equals(tightProjection) && facing(tightLightX, tightLightY, tightLightZ, TIGHT_TURN);
+                && Math.abs(z - tightZ) <= TIGHT_DRIFT && projection.equals(tightProjection) && facing(tightLightX, tightLightY, tightLightZ, TIGHT_TURN)
+                && (!BlazeOptimization.SHADOW_REACH.on() || player.equals(tightPlayer));
     }
 
     private void collect(int index, float minX, float minZ, float minY, double limit, float margin, boolean test, long now) {
@@ -220,10 +225,16 @@ final class BlazePackShadows {
             tightLightY = view.m12();
             tightLightZ = view.m22();
             tightProjection.set(projection);
+            tightPlayer.set(player);
         }
         frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
         double limit = multiplier > 0 ? settings.distance() * multiplier + 16 + margin : Double.MAX_VALUE;
+        // The light's frustum is orthographic here, so its depth is 2 / m22 at most whichever depth range it maps to.
+        boolean reaching = BlazeOptimization.SHADOW_REACH.on() && projection.m22() != 0;
+        float pad = margin + REACH_PAD;
+        if (reaching) reach.set(player, -view.m02(), -view.m12(), -view.m22(), 2 / Math.abs(projection.m22())
+                / (float) Math.sqrt(view.m02() * view.m02() + view.m12() * view.m12() + view.m22() * view.m22()));
         if (inside.length != indexed.length) inside = new boolean[indexed.length];
         int[] origins = this.origins;
         boolean columns = BlazeOptimization.SHADOW_COLUMNS.on();
@@ -235,6 +246,9 @@ final class BlazePackShadows {
                 int at = columnBase[column] * 3;
                 float minX = (float) (origins[at] - x), bottom = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
                 side = frustum.intersectAab(minX - margin, bottom - margin, minZ - margin, minX + 16 + margin, bottom + height * 16 + margin, minZ + 16 + margin);
+                if (reaching && side != FrustumIntersection.OUTSIDE && !reach.reaches(minX - pad, bottom - pad, minZ - pad, minX + 16 + pad, bottom + height * 16 + pad, minZ + 16 + pad)) {
+                    side = FrustumIntersection.OUTSIDE;
+                }
             }
             boolean whole = side == FrustumIntersection.INSIDE, outside = !whole && side != FrustumIntersection.INTERSECT;
             for (int at = from; at < to; at++) {
@@ -245,7 +259,8 @@ final class BlazePackShadows {
                 }
                 float minX = (float) (origins[index * 3] - x), minY = (float) (origins[index * 3 + 1] - y), minZ = (float) (origins[index * 3 + 2] - z);
                 inside[index] = Math.abs(minX + 8) <= limit && Math.abs(minY + 8) <= limit && Math.abs(minZ + 8) <= limit
-                        && (whole || frustum.testAab(minX - margin, minY - margin, minZ - margin, minX + 16 + margin, minY + 16 + margin, minZ + 16 + margin));
+                        && (whole || frustum.testAab(minX - margin, minY - margin, minZ - margin, minX + 16 + margin, minY + 16 + margin, minZ + 16 + margin))
+                        && (!reaching || reach.reaches(minX - pad, minY - pad, minZ - pad, minX + 16 + pad, minY + 16 + pad, minZ + 16 + pad));
             }
         }
     }

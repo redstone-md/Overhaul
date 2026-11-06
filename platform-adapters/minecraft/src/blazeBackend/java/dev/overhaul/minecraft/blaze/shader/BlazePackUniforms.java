@@ -91,6 +91,11 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         return celestial.shadowProjection(into);
     }
 
+    /** The player's projection times its camera-relative view, as captured for this frame. */
+    org.joml.Matrix4f viewProjection(org.joml.Matrix4f into) {
+        return into.set(modelViewProjection);
+    }
+
     org.joml.Matrix4f distantProjection(org.joml.Matrix4f into) {
         return distant.projection(into);
     }

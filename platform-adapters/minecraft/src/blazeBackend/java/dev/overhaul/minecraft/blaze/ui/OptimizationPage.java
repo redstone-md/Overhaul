@@ -134,6 +134,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
         labels.put(BlazeOptimization.SHADOW_COLUMNS, "Shadow casters by column");
         labels.put(BlazeOptimization.SHADOW_TIGHT_REUSE, "Reused shadow frustum test");
+        labels.put(BlazeOptimization.SHADOW_REACH, "Shadow casters by view");
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
         return labels;
     }
