@@ -84,12 +84,19 @@ without it that view is 262, 2.06x. An earlier
 pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
 A later back to back pair, after `shadowReach`, gave horizon 259 against 134 (1.93x) and looking
 down 273 against 121 (2.26x): the horizon run landed in the slow clock mode. The newest pair gave
-horizon 269 against 125 (2.15x) and looking down 252 against 128 (1.97x).
+horizon 269 against 125 (2.15x) and looking down 252 against 128 (1.97x). After `pixelRows`
+the pair is horizon 281 against 133 (2.11x) and looking down 252 against 121 (2.08x).
 
-GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
-3.7 ms. Only the pixel-bound phases move (opaque, deferred, composite), so it looks like
-GPU clocks. With F3 open the run always lands in the slow mode: the extra CPU work leaves
-the GPU idle gaps and it clocks down. Without F3 Overhaul is about 2.2x.
+GPU time varies from one launch to the next, about 3.3 to 3.7 ms, and only the pixel-bound
+phases move (opaque, deferred, composite). It is not the clocks: nvidia-smi during a run shows
+2790 to 2812 MHz in P0 at 98 to 99% load the whole time, capped by the 250 W power limit
+(throttle reason 0x400). Without F3 Overhaul is about 2.2x.
+
+Screenshots: the F2 readback packed 8 MB a byte at a time, about 10 ms per shot. `pixelRows`
+copies whole rows (about 1.3 ms). An earlier run showed the looking-down frame time rising
+from 3.85 to 4.15 ms after the screenshots and staying there. With `pixelRows` and gpuStats the
+down view held 3.8 ms before and after, and no pass grew, so that drift did not come back.
+Giving the swapchain one more image than `minImageCount + 1` changed nothing.
 
 At the horizon the GPU is the limit now: about 4.0 ms of GPU work per frame and
 0.15 to 0.25 ms idle between frames. GPU time per phase:
@@ -98,7 +105,7 @@ At the horizon the GPU is the limit now: about 4.0 ms of GPU work per frame and
 | --- | --- |
 | Shadow | 0.42 (0.69 before `shadowReach`) |
 | Distant Horizons terrain | 0.99 |
-| Opaque terrain | 0.93 (0.75 in the fast clock mode) |
+| Opaque terrain | 0.93 (0.75 in a fast launch) |
 | Deferred | 0.47 |
 | Composite | 0.86 |
 | Translucent | 0.08 |
@@ -110,7 +117,7 @@ options, the top of the view still reaches about 5° below the horizon, so nearl
 
 `-Doverhaul.blaze.gpuStats=true` logs a `Blaze GPU ms per frame` line every 600
 frames. It also stamps every shader pack graph pass (`pass:<name>`) and the opaque shadow casters
-(`shadowOpaque`). At the horizon in the fast clock mode (3.48 ms total): opaque shadow casters 0.30,
+(`shadowOpaque`). At the horizon in a fast launch (3.48 ms total): opaque shadow casters 0.30,
 the shadowtex1 copy 0.02, distant 0.98, opaque 0.77, deferred1 0.25, composite1 0.25, the other
 composites 0.05 to 0.07 each, final 0.03. The whole mipmap chain is about 0.13 ms and all clears about
 0.04 ms, so neither is worth a rewrite. Each mark ends the open render pass, so frames run slightly slower while it is on. Prism keeps
@@ -184,5 +191,5 @@ own debug string.
 - GPU occlusion (`gpuOcclusion`) is in but off by default: a compute pass tests each section against the newest
   queued depth tiles and zeroes its instance count. With Complementary and F3 it measured on par with the CPU test
   (horizon about 238 fps both ways, looking down 218 on vs 228 off), so terrain stays on the CPU readback test.
-- With F3 open the 2x target is reached (2.11x horizon, 2.02x looking down, back to back). The run is GPU-bound, so GPU clock
-  modes still swing single runs by about 5 to 10%.
+- With F3 open the 2x target is reached (2.11x horizon, 2.08x looking down, back to back). The run is GPU-bound at
+  steady clocks, and per-launch GPU time still swings single runs by about 5 to 10%.
