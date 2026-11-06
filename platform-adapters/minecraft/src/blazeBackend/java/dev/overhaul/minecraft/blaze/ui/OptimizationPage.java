@@ -16,12 +16,12 @@ final class OptimizationPage extends SettingsPage {
     private static final List<Group> GROUPS = List.of(
             new Group("Terrain", List.of(BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
                     BlazeOptimization.SECTION_LISTS, BlazeOptimization.SECTION_TABLE, BlazeOptimization.SECTION_BOUNDS,
-                    BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID)),
+                    BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS)),
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
-                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE)),
+                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS,
                     BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
@@ -126,6 +126,9 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.ENTITY_CLASS_SCANS, "Skipped entity class scans");
         labels.put(BlazeOptimization.ENTITY_LIGHT, "Entity light per tick");
         labels.put(BlazeOptimization.HUD_CACHE, "HUD at 30 Hz");
+        labels.put(BlazeOptimization.DEBUG_TEXT, "F3 text at 10 Hz");
+        labels.put(BlazeOptimization.SECTION_RUN_KEYS, "Shared terrain draw keys");
+        labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
         return labels;
     }
 }
