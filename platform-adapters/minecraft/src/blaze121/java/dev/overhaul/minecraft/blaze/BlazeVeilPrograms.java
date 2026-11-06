@@ -62,6 +62,7 @@ public final class BlazeVeilPrograms {
         String name = vertex.name() + " + " + fragment.name();
         try {
             programs.linkForeign(program, name, programs.compiler().compileModern(vertex.name(), fragment.name(), vertex.code(), fragment.code()));
+            BlazeGlVertexArrays.declare(program, vertex.code());
             reportBlocks(name, vertex.code());
             reportBlocks(name, fragment.code());
         } catch (RuntimeException failure) {

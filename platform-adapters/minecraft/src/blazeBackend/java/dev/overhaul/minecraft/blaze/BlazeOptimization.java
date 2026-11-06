@@ -67,6 +67,7 @@ public enum BlazeOptimization {
     DH_SHARED_PAGES("dhSharedPages", "Distant Horizons vertex buffers drawn by a shader pack share device pages, so the LODs of a pass draw as one indirect multi-draw per page instead of one draw per LOD"),
     DH_DEVICE_CACHE("dhDeviceCache", "Each Distant Horizons vertex buffer keeps the device buffer it resolved to instead of looking it up by name every frame"),
     SHADOW_DRAWS("shadowDraws", "Shadow casters' draw fields copied into flat per-layer tables when they are gathered, so frames that keep them draw without reading each mesh; needs packShadowReuse"),
+    RAW_DRAWS("rawDraws", "Mod draws from raw OpenGL vertex arrays, such as Veil's lights, particles and skins, drawn natively instead of dropped"),
     MERGED_BARRIERS("mergedBarriers", "Image layout changes over several mips or layers recorded as one barrier instead of one per mip and layer"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 

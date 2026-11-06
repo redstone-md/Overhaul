@@ -116,7 +116,11 @@ final class BlazeGlBuffers {
         };
     }
 
-    private int bound(int target) { return bindings.get(target); }
+    /** The buffer name bound to a target, as a vertex array reads it when a pointer is recorded. */
+    synchronized int bound(int target) { return bindings.get(target); }
+
+    /** Rebinds a target without a call from the mod, as binding a vertex array restores its element buffer. */
+    synchronized void bind(int target, int name) { bindings.put(target, name); }
 
     private Store store(int name) { return stores.computeIfAbsent(name, (int ignored) -> new Store()); }
 

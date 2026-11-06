@@ -25,7 +25,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS, BlazeOptimization.HEAD_CURIOS,
-                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES)));
+                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES, BlazeOptimization.RAW_DRAWS)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
 
     OptimizationPage(Runnable refresh) {
@@ -145,6 +145,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");
         labels.put(BlazeOptimization.DH_SHARED_PAGES, "Distant Horizons shared pages");
         labels.put(BlazeOptimization.MERGED_BARRIERS, "Merged image barriers");
+        labels.put(BlazeOptimization.RAW_DRAWS, "Native raw mod draws");
         labels.put(BlazeOptimization.SHADOW_DRAWS, "Flat shadow draw fields");
         return labels;
     }

@@ -176,6 +176,8 @@ public final class BlazeRenderer implements AutoCloseable {
     }
     public BlazeDh dh(){requireOpen();if(dh==null)dh=new BlazeDh(this);return dh;}
     public BlazeDh dhIfUsed(){return dh;}
+    private BlazeRawDraws rawDraws;
+    BlazeRawDraws rawDraws(){requireOpen();if(rawDraws==null)rawDraws=new BlazeRawDraws(this);return rawDraws;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
     /** Names the GPU work queued since the previous mark; only under -Doverhaul.blaze.gpuStats. */
     public void gpuMark(String label){if(gpuTimer==null)return;BlazeQueue.Operation mark=gpuTimer.mark(label);if(mark!=null)enqueue(mark);}
@@ -379,6 +381,7 @@ public final class BlazeRenderer implements AutoCloseable {
         for(BlazeMesh mesh:new ArrayList<>(meshes))failure=release(mesh::close,failure);
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);
+        if(rawDraws!=null)failure=release(rawDraws::close,failure);
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
         for(BlazeBufferPool.Slice slice:new ArrayList<>(glSharedBuffers))failure=release(slice::close,failure);glSharedBuffers.clear();
         if(glStorage!=null)failure=release(glStorage::close,failure);

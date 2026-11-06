@@ -83,6 +83,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
         BlazeGlBuffers buffers = new BlazeGlBuffers();
         BlazeGlRoutes.install(answers, buffers);
         buffers.install(answers);
+        if (BlazeOptimization.RAW_DRAWS.on()) new BlazeGlVertexArrays(buffers).install(answers);
         active = buffers;
     }
 
@@ -110,18 +111,21 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private long address(String name) {
         Answer answer = answers.get(name);
         if (answer != null) return new Entry(name, answer).address();
-        if (UNTRANSLATED_PREFIXES.stream().anyMatch(name::startsWith)) {
-            AtomicInteger calls = new AtomicInteger();
-            return new Entry(name, arguments -> {
-                // Walking the stack on every draw would be costly, and the renderers involved show up within the first calls.
-                if (calls.getAndIncrement() < CALLER_SAMPLES) {
-                    String caller = caller();
-                    reportOnce(name + caller, "OpenGL draw " + name + " from " + caller + " has no native Vulkan path; it draws nothing");
-                }
-                return 0;
-            }).address();
-        }
+        if (UNTRANSLATED_PREFIXES.stream().anyMatch(name::startsWith)) return new Entry(name, untranslated(name)).address();
         return inert;
+    }
+
+    /** Draws nothing and names the calling renderer once, so a mod renderer without a native path is visible in the log. */
+    static Answer untranslated(String name) {
+        AtomicInteger calls = new AtomicInteger();
+        return arguments -> {
+            // Walking the stack on every draw would be costly, and the renderers involved show up within the first calls.
+            if (calls.getAndIncrement() < CALLER_SAMPLES) {
+                String caller = caller();
+                reportOnce(name + caller, "OpenGL draw " + name + " from " + caller + " has no native Vulkan path; it draws nothing");
+            }
+            return 0;
+        };
     }
 
     private static String caller() {
