@@ -8,6 +8,7 @@ import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackRenderTargets;
 import dev.overhaul.shader.pack.PackShadowSettings;
+import dev.overhaul.shader.pack.ShaderPackProgram;
 import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import dev.overhaul.vulkan.PackGraphRuntime;
@@ -37,7 +38,7 @@ final class BlazePackDraw implements BlazeProgramShape {
     private final int modelView, modelViewInverse, modelViewProjection, normalMatrix, projection, projectionInverse, textureMatrix, alphaCutoff;
     private final Matrix4f model = new Matrix4f(), perspective = new Matrix4f(), written = new Matrix4f(), scratch = new Matrix4f();
     private final Matrix3f normal = new Matrix3f();
-    private final boolean shadow;
+    private final boolean shadow, sectioned;
     private BlazeProgramCompiler.Program source;
     private int sourceModelView, sourceProjection, sourceChunkOffset, sourceTextureMatrix;
     private boolean projectionWritten;
@@ -45,10 +46,19 @@ final class BlazePackDraw implements BlazeProgramShape {
     private int phase = -1;
 
     BlazePackDraw(BlazePackScene scene, CompiledShaderPack.Program program) {
+        this(scene, program, program.code(), false);
+    }
+
+    /**
+     * @param compiled the code this draw runs; the program still names it, so its targets, textures and uniforms resolve
+     * @param sectioned the code reads each terrain section's offset per instance, so one draw covers a whole layer
+     */
+    BlazePackDraw(BlazePackScene scene, CompiledShaderPack.Program program, ShaderPackProgram compiled, boolean sectioned) {
         this.scene = scene;
         this.program = program;
+        this.sectioned = sectioned;
         shadow = program.stage() == CompiledShaderPack.Stage.SHADOW;
-        code = new BlazeProgramCompiler.Program(program.code().vertex(), program.code().fragment(), program.code().descriptors());
+        code = new BlazeProgramCompiler.Program(compiled.vertex(), compiled.fragment(), compiled.descriptors());
         ProgramBindings bindings = code.bindings();
         values = new UniformBlock(bindings);
         bytes = ByteBuffer.allocateDirect(Math.max(16, bindings.uniformBytes())).order(ByteOrder.nativeOrder());
@@ -203,12 +213,12 @@ final class BlazePackDraw implements BlazeProgramShape {
 
     @Override
     public List<NativeGraphicsPipeline.Binding> bindings(BlazeMeshState.Layout layout) {
-        return BlazePackVertexInputs.bindings(layout);
+        return sectioned ? BlazePackVertexInputs.sectionBindings(layout) : BlazePackVertexInputs.bindings(layout);
     }
 
     @Override
     public List<NativeGraphicsPipeline.Attribute> attributes(BlazeMeshState.Layout layout) {
-        return BlazePackVertexInputs.attributes(code.bindings(), layout);
+        return sectioned ? BlazePackVertexInputs.sectionAttributes(code.bindings(), layout) : BlazePackVertexInputs.attributes(code.bindings(), layout);
     }
 
     @Override

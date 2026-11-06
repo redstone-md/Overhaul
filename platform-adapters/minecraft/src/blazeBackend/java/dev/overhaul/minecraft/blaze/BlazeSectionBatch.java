@@ -40,6 +40,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private BlazeMeshState.Layout firstLayout;
     private int firstTopology;
     private boolean ordered;
+    private Runnable failed;
     /** Written out of order and then copied whole, since the mapped memory behind a slice is slow to touch piecemeal. */
     private ByteBuffer commandBytes, positionBytes;
 
@@ -50,13 +51,15 @@ public final class BlazeSectionBatch implements AutoCloseable {
     /**
      * @param compact the shader's program for compact meshes, null when there is none and such meshes wait for their rebuild
      * @param ordered keep the given draw order exactly, as blending needs; otherwise sections group by buffer
+     * @param failed told when the layer cannot draw, which then drops it; null lets the failure through
      */
-    void begin(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, boolean ordered) {
-        target = owner.currentTarget();
+    void begin(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, boolean ordered, BlazeTarget target, Runnable failed) {
+        this.target = target;
         state = owner.drawState().snapshot();
         this.shader = shader;
         this.compact = compact;
         this.ordered = ordered;
+        this.failed = failed;
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {
@@ -98,6 +101,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
         shader = null;
         compact = null;
         state = null;
+        failed = null;
     }
 
     private void finish() {
@@ -106,6 +110,10 @@ public final class BlazeSectionBatch implements AutoCloseable {
         firstLayout = null;
         try {
             if (count != 0) enqueue(mesh);
+        } catch (RuntimeException failure) {
+            if (failed == null) throw failure;
+            BlazeGlBoundary.reportOnce("section batch " + failure.getMessage(), "A batched terrain layer was dropped and draws section by section from now on: " + failure);
+            failed.run();
         } finally {
             count = 0;
             runs.clear();
@@ -124,6 +132,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
             throw failure;
         }
         BlazeShaderSnapshot captured = BlazeCompactSection.compact(mesh) ? shader.withProgram(compact) : shader;
+        draw = draw.withConstants(owner.vertexConstants(captured.program()));
         BlazeTerrainPass pass;
         try {
             pass = new BlazeTerrainPass(owner, target, state, (bytes, width, height) -> bytes.put(captured.uniforms()), captured.program(),
@@ -160,7 +169,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
         commands.write(commandBytes);
         positions.write(positionBytes);
         BlazeStats.sections(count, runs.size());
-        return new Draw(runs.toArray(new Run[0]), starts, lengths, commands, positions);
+        return new Draw(runs.toArray(new Run[0]), starts, lengths, commands, positions, 0);
     }
 
     private static ByteBuffer scratch(ByteBuffer held, int bytes) {
@@ -174,14 +183,24 @@ public final class BlazeSectionBatch implements AutoCloseable {
         commandBytes = positionBytes = null;
     }
 
-    private record Draw(Run[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions) implements BlazeTerrainPass.Draw {
+    /** @param constants the pack's fixed vertex inputs, bound third; 0 for a game program, which has none */
+    private record Draw(Run[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions, long constants) implements BlazeTerrainPass.Draw {
+        Draw withConstants(long buffer) {
+            return new Draw(runs, starts, lengths, commands, positions, buffer);
+        }
+
         @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
             try (MemoryStack stack = VulkanStack.push()) {
-                var buffers = stack.mallocLong(2);
-                var bindOffsets = stack.mallocLong(2);
+                int bound = constants == 0 ? 2 : 3;
+                var buffers = stack.mallocLong(bound);
+                var bindOffsets = stack.mallocLong(bound);
                 long indirect = commands.buffer().handle();
                 buffers.put(1, positions.buffer().handle());
                 bindOffsets.put(1, positions.offset());
+                if (constants != 0) {
+                    buffers.put(2, constants);
+                    bindOffsets.put(2, 0);
+                }
                 for (int index = 0; index < runs.length; index++) {
                     Run run = runs[index];
                     buffers.put(0, run.vertices.handle());

@@ -121,7 +121,8 @@ public final class BlazeRenderer implements AutoCloseable {
     public boolean batchesSections(BlazeShaderAccess shader){
         requireOpen();
         if(shader==null||!context.indirectFirstInstance()||drawingNowhere())return false;
-        if(packScene!=null&&packScene.routes(currentTarget()))return false;
+        boolean routed=packScene!=null&&packScene.routes(currentTarget());
+        if(routed&&(!BlazeOptimization.SECTION_BATCH.on()||!packScene.batchesSections()))return false;
         BlazeProgramCompiler.Program program=shader.overhaul$sectionProgram();
         if(program==null)return false;
         shapes.computeIfAbsent(program,key->new BlazeSectionShape(key.bindings()));
@@ -133,7 +134,11 @@ public final class BlazeRenderer implements AutoCloseable {
     }
     public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
         requireOpen();if(sections==null){sections=new BlazeSectionBatch(this);closeWith(sections);}
-        sections.begin(shader.overhaul$sectionSnapshot(),compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered);return sections;
+        BlazeShaderSnapshot game=shader.overhaul$sectionSnapshot();
+        BlazePackScene.Sections pack=packScene!=null&&packScene.routes(currentTarget())?packScene.sections(game):null;
+        if(pack!=null)sections.begin(pack.shader(),null,ordered,pack.target(),pack.failed());
+        else sections.begin(game,compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered,currentTarget(),null);
+        return sections;
     }
     /** Whether a terrain mesh uploaded now may be compact: a pack's programs and the section-by-section path read full vertices. */
     public boolean compactsSections(){

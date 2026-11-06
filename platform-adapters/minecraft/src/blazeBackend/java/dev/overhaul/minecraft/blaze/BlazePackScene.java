@@ -1,9 +1,11 @@
 package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.overhaul.shader.compile.ShadercCompiler;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackIdMap;
 import dev.overhaul.shader.pack.PackProgramFallbacks;
+import dev.overhaul.shader.pack.PackSectionOffsets;
 import dev.overhaul.vulkan.GpuBuffer;
 import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
@@ -30,13 +32,15 @@ public final class BlazePackScene implements AutoCloseable {
     /** Rain and snow draw with the particle shader; while the game draws weather that shader goes by this name. */
     static final String WEATHER = "overhaul_weather";
     private record TargetKey(List<GpuImageView> colors, GpuImageView depth) {}
+    /** A batched terrain layer's pack side; {@code failed} sends the program back to the section-by-section path. */
+    record Sections(BlazeShaderSnapshot shader, BlazeTarget target, Runnable failed) {}
     private final BlazeRenderer renderer;
     private final CompiledShaderPack pack;
     private final PackGraphRuntime runtime;
     private final PackGraphRuntime.Uniforms uniforms;
     private final Map<String, CompiledShaderPack.Program> programs = new HashMap<>(), shadowPrograms = new HashMap<>();
     private final Map<String, BlazePackDraw> byShader = new HashMap<>();
-    private final Map<CompiledShaderPack.Program, BlazePackDraw> byProgram = new HashMap<>();
+    private final Map<CompiledShaderPack.Program, BlazePackDraw> byProgram = new HashMap<>(), sectioned = new HashMap<>();
     private final Map<TargetKey, BlazeTarget> targets = new HashMap<>();
     private final Map<String, Object> shadowTextures = new HashMap<>();
     private final List<AutoCloseable> owned = new ArrayList<>();
@@ -46,6 +50,7 @@ public final class BlazePackScene implements AutoCloseable {
     private BlazeTarget main, plain;
     private BlazePackDraw caster;
     private BlazeDrawState.Snapshot shadowRaster;
+    private ShadercCompiler compiler;
     private int phase;
     private boolean open, opaqueDone, weather, hand;
 
@@ -180,6 +185,50 @@ public final class BlazePackScene implements AutoCloseable {
         renderer.draw(mesh, plain(), game);
     }
 
+    /** Whether the terrain shader now active can draw its layer in one batch; the first ask compiles the variant. */
+    boolean batchesSections() {
+        return sectionDraw() != null;
+    }
+
+    /** Null keeps the layer on the section-by-section path. */
+    Sections sections(BlazeShaderSnapshot game) {
+        BlazePackDraw draw = sectionDraw();
+        if (draw == null) return null;
+        String shader = RenderSystem.getShader().getName();
+        try {
+            draw.prepare(phase, runtime, uniforms);
+            return new Sections(draw.snapshot(game, BlazePackSelection.alphaCutoff(shader)), draw.target(), () -> sectioned.put(draw.program, null));
+        } catch (RuntimeException failure) {
+            BlazeGlBoundary.reportOnce("pack sections " + draw.program.name(), "Pack program " + draw.program.name() + " draws terrain section by section: " + failure);
+            sectioned.put(draw.program, null);
+            return null;
+        }
+    }
+
+    private BlazePackDraw sectionDraw() {
+        if (hand || weather || !BlazeOptimization.PACK_SECTION_BATCH.on()) return null;
+        // Asked before the layer binds its program, so the terrain shader itself names the draw.
+        var current = RenderSystem.getShader();
+        String shader = current == null ? null : current.getName();
+        if (shader == null || BlazePackSelection.onTop(shader)) return null;
+        BlazePackDraw draw = select(shader);
+        if (draw == null) return null;
+        if (sectioned.containsKey(draw.program)) return sectioned.get(draw.program);
+        BlazePackDraw batched = null;
+        try {
+            if (compiler == null) compiler = new ShadercCompiler();
+            var code = PackSectionOffsets.compile(pack, draw.program, compiler);
+            if (code != null) {
+                batched = new BlazePackDraw(this, draw.program, code, true);
+                renderer.shape(batched.code, batched);
+            }
+        } catch (RuntimeException failure) {
+            BlazeGlBoundary.reportOnce("pack sections " + draw.program.name(), "Pack program " + draw.program.name() + " draws terrain section by section: " + failure);
+        }
+        sectioned.put(draw.program, batched);
+        return batched;
+    }
+
     private void nextPhase() {
         phase++;
         plain = null;
@@ -266,6 +315,10 @@ public final class BlazePackScene implements AutoCloseable {
         onTop.clear();
         renderer.packScene(null);
         for (BlazePackDraw draw : byProgram.values()) renderer.forgetProgram(draw.code);
+        for (BlazePackDraw draw : sectioned.values()) if (draw != null) renderer.forgetProgram(draw.code);
+        sectioned.clear();
+        if (compiler != null) compiler.close();
+        compiler = null;
         for (BlazeTarget target : targets.values()) target.close();
         targets.clear();
         for (AutoCloseable resource : owned) {

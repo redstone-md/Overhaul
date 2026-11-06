@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze;
 import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
+import dev.overhaul.shader.pack.PackSectionOffsets;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -33,42 +34,63 @@ final class BlazePackVertexInputs {
         return List.of(new NativeGraphicsPipeline.Binding(0, layout.stride(), 0), new NativeGraphicsPipeline.Binding(1, STRIDE, 1));
     }
 
+    /**
+     * A batched terrain layer: slot 1 holds one section offset per draw, picked by each draw's first instance, so the
+     * constants move to slot 2 with no stride and every instance reads the same values.
+     */
+    static List<NativeGraphicsPipeline.Binding> sectionBindings(BlazeMeshState.Layout layout) {
+        return List.of(new NativeGraphicsPipeline.Binding(0, layout.stride(), 0), new NativeGraphicsPipeline.Binding(1, BlazeSectionShape.OFFSET_BYTES, 1),
+                new NativeGraphicsPipeline.Binding(2, 0, 1));
+    }
+
     static List<NativeGraphicsPipeline.Attribute> attributes(ProgramBindings bindings, BlazeMeshState.Layout layout) {
+        return attributes(bindings, layout, 1);
+    }
+
+    static List<NativeGraphicsPipeline.Attribute> sectionAttributes(ProgramBindings bindings, BlazeMeshState.Layout layout) {
+        return attributes(bindings, layout, 2);
+    }
+
+    private static List<NativeGraphicsPipeline.Attribute> attributes(ProgramBindings bindings, BlazeMeshState.Layout layout, int constants) {
         List<NativeGraphicsPipeline.Attribute> result = new ArrayList<>();
         for (var input : bindings.attributes().entrySet()) {
             String type = bindings.attributeTypes().get(input.getKey());
             if (type != null && !type.equals("float") && !type.startsWith("vec")) throw new UnsupportedShaderException("Integer pack vertex input: " + input.getKey());
-            result.add(attribute(input.getKey(), input.getValue(), layout));
+            result.add(attribute(input.getKey(), input.getValue(), layout, constants));
         }
         return List.copyOf(result);
     }
 
-    private static NativeGraphicsPipeline.Attribute attribute(String name, int location, BlazeMeshState.Layout layout) {
+    private static NativeGraphicsPipeline.Attribute attribute(String name, int location, BlazeMeshState.Layout layout, int constants) {
         return switch (name) {
+            case PackSectionOffsets.ATTRIBUTE -> {
+                if (constants == 1) throw new UnsupportedShaderException("Section offset input outside a batched terrain draw");
+                yield new NativeGraphicsPipeline.Attribute(location, 1, VK_FORMAT_R32G32B32_SFLOAT, 0);
+            }
             case "overhaulLegacyVertex" -> {
                 var position = field(layout, "Position");
                 if (position == null) throw new UnsupportedShaderException("Mesh without positions reached a pack program");
                 yield new NativeGraphicsPipeline.Attribute(location, 0, position.nativeFormat(), position.offset());
             }
-            case "overhaulLegacyColor" -> either(location, layout, "Color", ONE);
-            case "overhaulLegacyNormal" -> either(location, layout, "Normal", UP);
-            case "overhaulLegacyTexCoord0", "mc_midTexCoord" -> either(location, layout, "UV0", TEXTURE);
-            case "overhaulLegacyTexCoord1" -> either(location, layout, "UV2", LIGHT);
-            case EntityColorEmulation.OVERLAY -> either(location, layout, "UV1", NO_OVERLAY);
-            case "mc_Entity" ->either(location, layout, BlazePackBlockIds.FIELD, UNKNOWN_ID);
-            case "at_tangent" -> constant(location, TANGENT);
-            case "at_velocity", "at_midBlock" -> constant(location, ZERO);
+            case "overhaulLegacyColor" -> either(location, layout, "Color", constants, ONE);
+            case "overhaulLegacyNormal" -> either(location, layout, "Normal", constants, UP);
+            case "overhaulLegacyTexCoord0", "mc_midTexCoord" -> either(location, layout, "UV0", constants, TEXTURE);
+            case "overhaulLegacyTexCoord1" -> either(location, layout, "UV2", constants, LIGHT);
+            case EntityColorEmulation.OVERLAY -> either(location, layout, "UV1", constants, NO_OVERLAY);
+            case "mc_Entity" -> either(location, layout, BlazePackBlockIds.FIELD, constants, UNKNOWN_ID);
+            case "at_tangent" -> constant(location, constants, TANGENT);
+            case "at_velocity", "at_midBlock" -> constant(location, constants, ZERO);
             default -> throw new UnsupportedShaderException("Unbound pack vertex input: " + name);
         };
     }
 
-    private static NativeGraphicsPipeline.Attribute either(int location, BlazeMeshState.Layout layout, String source, int fallback) {
+    private static NativeGraphicsPipeline.Attribute either(int location, BlazeMeshState.Layout layout, String source, int constants, int fallback) {
         var field = field(layout, source);
-        return field == null ? constant(location, fallback) : new NativeGraphicsPipeline.Attribute(location, 0, floating(field.nativeFormat()), field.offset());
+        return field == null ? constant(location, constants, fallback) : new NativeGraphicsPipeline.Attribute(location, 0, floating(field.nativeFormat()), field.offset());
     }
 
-    private static NativeGraphicsPipeline.Attribute constant(int location, int index) {
-        return new NativeGraphicsPipeline.Attribute(location, 1, VK_FORMAT_R32G32B32A32_SFLOAT, index * CONSTANT_BYTES);
+    private static NativeGraphicsPipeline.Attribute constant(int location, int slot, int index) {
+        return new NativeGraphicsPipeline.Attribute(location, slot, VK_FORMAT_R32G32B32A32_SFLOAT, index * CONSTANT_BYTES);
     }
 
     /** Game shaders read lightmap coordinates as integers; a pack's gl_MultiTexCoord1 reads the same bits as floats. */
