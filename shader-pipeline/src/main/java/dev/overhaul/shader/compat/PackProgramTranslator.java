@@ -24,6 +24,13 @@ public final class PackProgramTranslator {
     private static final Set<String> BUILTINS = Set.of("gl_Position", "gl_FragCoord", "gl_FrontFacing",
             "gl_FragDepth", "gl_VertexID", "gl_InstanceID", "gl_PointCoord", "gl_PointSize",
             "gl_FragColor", "gl_FragData");
+    private static final Set<String> COMPUTE_BUILTINS = Set.of("gl_GlobalInvocationID","gl_LocalInvocationID","gl_WorkGroupID",
+            "gl_NumWorkGroups","gl_LocalInvocationIndex","gl_WorkGroupSize");
+    /** Sampled types a pack may declare; storage images come from {@link PackStorageImages#IMAGE_TYPES}. */
+    private static final Set<String> SAMPLER_TYPES = Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D");
+    private static final Pattern LOCAL_SIZE = Pattern.compile("\\blayout\\s*\\(([^)]*local_size_[xyz][^)]*)\\)\\s*in\\s*;");
+    private static final Pattern WORK_GROUPS = Pattern.compile("\\bconst\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
+    private static final Pattern WORK_GROUPS_RENDER = Pattern.compile("\\bconst\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)");
     private static final Map<String, Integer> SIZES = Map.ofEntries(
             Map.entry("float",4), Map.entry("int",4), Map.entry("bool",4),
             Map.entry("vec2",8), Map.entry("vec3",12), Map.entry("vec4",16),
@@ -33,7 +40,14 @@ public final class PackProgramTranslator {
             Map.entry("texture2D","texture"),Map.entry("texture2DProj","textureProj"),
             Map.entry("texture2DLod","textureLod"),Map.entry("texture2DProjLod","textureProjLod"),
             Map.entry("texture2DLodARB","textureLod"),Map.entry("texture2DProjLodARB","textureProjLod"),
-            Map.entry("texture2DGradARB","textureGrad"),Map.entry("texture2DProjGradARB","textureProjGrad"));
+            Map.entry("texture2DGradARB","textureGrad"),Map.entry("texture2DProjGradARB","textureProjGrad"),
+            Map.entry("texture3D","texture"),Map.entry("texture3DLod","textureLod"),Map.entry("texelFetch3D","texelFetch"));
+
+    private final Map<String,String> imageFormats;
+
+    public PackProgramTranslator() { this(Map.of()); }
+    /** {@code imageFormats} names each pack image's GLSL format, for storage declarations that do not state one. */
+    public PackProgramTranslator(Map<String,String> imageFormats) { this.imageFormats = Map.copyOf(imageFormats); }
 
     public TranslatedProgram translate(String vertex, String fragment) {
         return translate(vertex,fragment,CoordinateConvention.NATIVE_VULKAN);
@@ -50,6 +64,8 @@ public final class PackProgramTranslator {
         vs=PackExtensions.lower(vs);fs=PackExtensions.lower(fs);
         if (coordinates == null) throw new NullPointerException("coordinates");
         rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
+        Map<String,PackStorageImages.Storage> storage = PackStorageImages.empty();
+        vs = PackStorageImages.lift(vs,storage); fs = PackStorageImages.lift(fs,storage);
         var declarations = PackDeclarationNormalizer.declarations(vs,fs);
         vs = declarations.vertex(); fs = declarations.fragment();
         if (coordinates != CoordinateConvention.NATIVE_VULKAN) {
@@ -59,7 +75,7 @@ public final class PackProgramTranslator {
             boolean reversed=coordinates==CoordinateConvention.OPENGL_REVERSED_DEPTH_TARGET;
             vs = LegacyShaderContract.lower(vs,true,gameFramebuffer,reversed); fs = LegacyShaderContract.lower(fs,false,gameFramebuffer,reversed);
         }
-        validateBuiltins(vs); validateBuiltins(fs);
+        validateBuiltins(vs,Set.of()); validateBuiltins(fs,Set.of());
         Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>();
         Map<String,String> attributes = new TreeMap<>(), vertexVaryings = new TreeMap<>(), fragmentVaryings = new TreeMap<>();
         scan(vs, true, uniforms, samplers, attributes, vertexVaryings);
@@ -70,6 +86,50 @@ public final class PackProgramTranslator {
             }
         }
         Map<String,Integer> attributeLocations = locations(attributes), varyingLocations = locations(vertexVaryings);
+        ProgramBindings bindings = bindings(uniforms,samplers,attributeLocations,varyingLocations,attributes);
+        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings,storage),
+                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings,storage),bindings,coordinates);
+    }
+
+    /**
+     * A compute program: uniforms, samplers and storage images only. Its dispatch size comes from the pack's
+     * {@code workGroups} or {@code workGroupsRender} constant, read before the constants are compiled away.
+     */
+    public TranslatedCompute translateCompute(String source) {
+        String cs = PackExtensions.lower(stripComments(source));
+        rejectUnprocessedDirectives(cs);
+        Map<String,PackStorageImages.Storage> storage = PackStorageImages.empty();
+        cs = PackDeclarationNormalizer.declarations(PackStorageImages.lift(cs,storage),"").vertex();
+        validateBuiltins(cs,COMPUTE_BUILTINS);
+        Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>(), attributes = new TreeMap<>(), varyings = new TreeMap<>();
+        scan(cs,false,uniforms,samplers,attributes,varyings);
+        if (!attributes.isEmpty() || !varyings.isEmpty()) throw unsupported("Compute programs have no attributes or varyings");
+        ProgramBindings bindings = bindings(uniforms,samplers,Map.of(),Map.of(),Map.of());
+        int[] local = localSize(cs);
+        Matcher groups = WORK_GROUPS.matcher(cs), render = WORK_GROUPS_RENDER.matcher(cs);
+        int[] workGroups = groups.find() ? new int[]{Integer.parseInt(groups.group(1)),Integer.parseInt(groups.group(2)),Integer.parseInt(groups.group(3))} : null;
+        float[] scale = workGroups == null && render.find() ? new float[]{Float.parseFloat(render.group(1)),Float.parseFloat(render.group(2))} : null;
+        if (workGroups == null && scale == null) scale = new float[]{1,1};
+        cs = LOCAL_SIZE.matcher(cs).replaceAll("");
+        String body = rewrite(cs,false,uniforms,samplers,Map.of(),Map.of(),bindings,storage);
+        return new TranslatedCompute(insertBodyPreamble(body,"layout(local_size_x="+local[0]+",local_size_y="+local[1]+",local_size_z="+local[2]+") in;\n"),
+                bindings,local,workGroups,scale);
+    }
+    private static int[] localSize(String source) {
+        int[] size = {1,1,1};
+        Matcher matcher = LOCAL_SIZE.matcher(source);
+        if (!matcher.find()) throw unsupported("Compute program declares no local_size");
+        for (String part : matcher.group(1).split(",")) {
+            String[] pair = part.split("=");
+            if (pair.length != 2) throw unsupported("Unsupported compute layout: "+matcher.group(1));
+            int axis = switch (pair[0].trim()) { case "local_size_x" -> 0; case "local_size_y" -> 1; case "local_size_z" -> 2; default -> throw unsupported("Unsupported compute layout: "+part.trim()); };
+            try { size[axis] = Integer.parseInt(pair[1].trim()); } catch (NumberFormatException failure) { throw unsupported("Compute local size must be a literal: "+part.trim()); }
+        }
+        if (matcher.find()) throw unsupported("Compute program declares local_size twice");
+        return size;
+    }
+    private static ProgramBindings bindings(Map<String,String> uniforms, Map<String,String> samplers, Map<String,Integer> attributeLocations,
+                                            Map<String,Integer> varyingLocations, Map<String,String> attributes) {
         Map<String,Integer> samplerBindings = new LinkedHashMap<>();
         for (String name : samplers.keySet()) samplerBindings.put(name, samplerBindings.size()+1);
         Map<String,ProgramBindings.Uniform> layout = new LinkedHashMap<>();
@@ -81,9 +141,7 @@ public final class PackProgramTranslator {
             layout.put(uniform.getKey(), new ProgramBindings.Uniform(type, offset, size));
             offset += size;
         }
-        ProgramBindings bindings = new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes,samplers);
-        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings),
-                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings),bindings,coordinates);
+        return new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes,samplers);
     }
 
     private static void rejectUnprocessedDirectives(String source) {
@@ -97,9 +155,9 @@ public final class PackProgramTranslator {
         return source.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("(?m)//.*$", "");
     }
 
-    private static void validateBuiltins(String source) {
+    private static void validateBuiltins(String source, Set<String> extra) {
         Matcher matcher = BUILTIN.matcher(source);
-        while (matcher.find()) if (!BUILTINS.contains(matcher.group())) {
+        while (matcher.find()) if (!BUILTINS.contains(matcher.group()) && !extra.contains(matcher.group())) {
             throw unsupported("Unsupported fixed-function or stage builtin: " + matcher.group());
         }
         if (Pattern.compile("\\bftransform\\s*\\(").matcher(source).find()) {
@@ -114,7 +172,7 @@ public final class PackProgramTranslator {
         while (matcher.find()) {
             String qualifier = matcher.group(1), kind = matcher.group(2), type = matcher.group(3), name = matcher.group(4);
             if (kind.equals("uniform")) {
-                if (type.equals("sampler2D")||type.equals("sampler2DShadow")) put(samplers,name,type);
+                if (SAMPLER_TYPES.contains(type) || PackStorageImages.IMAGE_TYPES.contains(type)) put(samplers,name,type);
                 else if (SIZES.containsKey(type)) put(uniforms,name,type);
                 else throw unsupported("Unsupported uniform type: " + type);
                 if (samplers.containsKey(name) && uniforms.containsKey(name)) throw unsupported("Conflicting uniform: " + name);
@@ -161,9 +219,9 @@ public final class PackProgramTranslator {
     }
     private static int align(int value, int alignment) { return (value+alignment-1)/alignment*alignment; }
 
-    private static String rewrite(String source, boolean vertex, Map<String,String> uniforms,
+    private String rewrite(String source, boolean vertex, Map<String,String> uniforms,
                                   Map<String,String> samplers, Map<String,String> attributes,
-                                  Map<String,String> varyings, ProgramBindings bindings) {
+                                  Map<String,String> varyings, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage) {
         String body = DECLARATION.matcher(source).replaceAll("").replaceAll("(?m)^\\s*#version[^\\r\\n]*", "");
         // Legacy packs commonly name a sampler "texture", now also a GLSL function.
         for (String sampler : samplers.keySet()) {
@@ -183,8 +241,12 @@ public final class PackProgramTranslator {
             }
             prefix.append("};\n");
         }
-        for (String sampler : samplers.keySet()) prefix.append("layout(set=0,binding=")
-                .append(bindings.samplers().get(sampler)).append(") uniform ").append(samplers.get(sampler)).append(" overhaulSampler_").append(sampler).append(";\n");
+        for (String sampler : samplers.keySet()) {
+            String type = samplers.get(sampler);
+            int binding = bindings.samplers().get(sampler);
+            if (PackStorageImages.IMAGE_TYPES.contains(type)) prefix.append(PackStorageImages.declaration(sampler,type,binding,storage.get(sampler),imageFormats));
+            else prefix.append("layout(set=0,binding=").append(binding).append(") uniform ").append(type).append(" overhaulSampler_").append(sampler).append(";\n");
+        }
         if (vertex) for (Map.Entry<String,String> attribute : attributes.entrySet()) prefix.append("layout(location=")
                 .append(bindings.attributes().get(attribute.getKey())).append(") in ").append(attribute.getValue())
                 .append(' ').append(attribute.getKey()).append(";\n");
@@ -218,4 +280,6 @@ public final class PackProgramTranslator {
 
     private static UnsupportedShaderException unsupported(String message) { return new UnsupportedShaderException(message); }
     public record TranslatedProgram(String vertex, String fragment, ProgramBindings bindings, CoordinateConvention coordinates) {}
+    /** {@code workGroups} is null when the dispatch scales with the screen by {@code workGroupsRender}. */
+    public record TranslatedCompute(String source, ProgramBindings bindings, int[] localSize, int[] workGroups, float[] workGroupsRender) {}
 }

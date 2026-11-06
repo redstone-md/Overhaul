@@ -53,5 +53,13 @@ public final class SpirvInterface {
         boolean block=descriptors.contains(0);
         return new ProgramBindings(block?declared.uniforms():Map.of(),block?declared.uniformBytes():0,samplers,attributes,declared.varyings(),types,samplerTypes);
     }
+    /** A compute program has one stage and no interface, so only its descriptors filter the declared bindings. */
+    public static ProgramBindings activeCompute(ProgramBindings declared,SpirvBinary compute){
+        Set<Integer> descriptors=new SpirvInterface(compute,Set.of()).descriptors;
+        Map<String,Integer> samplers=new LinkedHashMap<>();Map<String,String> samplerTypes=new LinkedHashMap<>();
+        for(var sampler:declared.samplers().entrySet())if(descriptors.contains(sampler.getValue())){samplers.put(sampler.getKey(),sampler.getValue());samplerTypes.put(sampler.getKey(),declared.samplerTypes().get(sampler.getKey()));}
+        boolean block=descriptors.contains(0);
+        return new ProgramBindings(block?declared.uniforms():Map.of(),block?declared.uniformBytes():0,samplers,Map.of(),Map.of(),Map.of(),samplerTypes);
+    }
     private static ShaderCompilationException invalid(){return new ShaderCompilationException("Malformed compiled SPIR-V interface");}
 }

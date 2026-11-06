@@ -49,12 +49,18 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
     /** With a dynamic cutoff the fragment also discards below {@link FragmentAlphaTest#CUTOFF}, set by each draw. */
     public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,
                                              CoordinateConvention coordinates,ShaderPackProperties.AlphaTest alphaTest,boolean dynamicCutoff) {
+        return compile(name,vertex,fragment,compiler,coordinates,alphaTest,dynamicCutoff,java.util.Map.of());
+    }
+
+    /** {@code imageFormats} gives the format of each {@code image.*} a storage declaration may name without one. */
+    public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,CoordinateConvention coordinates,
+                                             ShaderPackProperties.AlphaTest alphaTest,boolean dynamicCutoff,java.util.Map<String,String> imageFormats) {
         var framebuffer = FramebufferBindings.parse(fragment);
         String source=PackShadowSettings.stripDirectives(fragment);
         if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
         String vertexSource=PackShadowSettings.stripDirectives(vertex);
         if(EntityColorEmulation.needed(source)){source=EntityColorEmulation.fragment(source);vertexSource=EntityColorEmulation.vertex(vertexSource);}
-        var translated = new PackProgramTranslator().translate(vertexSource,source, coordinates);
+        var translated = new PackProgramTranslator(imageFormats).translate(vertexSource,source, coordinates);
         String lowered=FragmentAlphaTest.lower(translated.fragment(),alphaTest);
         if(dynamicCutoff)lowered=FragmentAlphaTest.lowerCutoff(lowered);
         SpirvBinary compiledVertex=compiler.compile(name+".vsh",translated.vertex(),ShaderStage.VERTEX);

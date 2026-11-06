@@ -12,8 +12,12 @@ import java.util.TreeSet;
  * Deterministic discovery; dimension folders replace, rather than merge with, root programs.
  * {@code diagnostics} block the pack, while {@code warnings} describe what it runs without.
  */
-public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics, List<PackDiagnostic> warnings, PackIdMap ids) {
-    public ShaderPackCatalog { programs = List.copyOf(programs); diagnostics = List.copyOf(diagnostics); warnings = List.copyOf(warnings); }
+public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics, List<PackDiagnostic> warnings, PackIdMap ids,
+                                List<String> computes) {
+    public ShaderPackCatalog { programs = List.copyOf(programs); diagnostics = List.copyOf(diagnostics); warnings = List.copyOf(warnings); computes = List.copyOf(computes); }
+    public ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics, List<PackDiagnostic> warnings, PackIdMap ids) {
+        this(programs,properties,diagnostics,warnings,ids,List.of());
+    }
     public ShaderPackCatalog(List<Program> programs, ShaderPackProperties properties, List<String> diagnostics) {
         this(programs,properties,diagnostics,List.of(),PackIdMap.empty());
     }
@@ -37,13 +41,13 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
         for (String key : properties.unsupportedProperties()) diagnostics.add("Unsupported pack property: "+key);
         for (String key : properties.ignoredProperties()) warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROPERTY,key,"Set by the pack but not honored; default behavior applies"));
         Map<String,Boolean> merged = discovered.merged(options);
-        Set<String> names = new TreeSet<>();
+        Set<String> names = new TreeSet<>(), computes = new TreeSet<>();
         for (String path : paths) {
             if (!path.startsWith(prefix)) continue;
             String relative = path.substring(prefix.length());
             if (relative.contains("/")) continue;
             if (relative.endsWith(".vsh") || relative.endsWith(".fsh")) names.add(path.substring(0,path.length()-4));
-            else if (relative.endsWith(".csh")) warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,path,"Compute program is not run; features that depend on it stay off"));
+            else if (relative.endsWith(".csh")) compute(path,properties,merged,computes,warnings);
             else if (relative.matches(".*\\.(gsh|tcs|tes)$")) diagnostics.add("Unsupported shader stage: "+path);
         }
         List<Program> programs = new ArrayList<>();
@@ -55,7 +59,20 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
             catch (UnsupportedShaderException failure) { diagnostics.add(name+": "+failure.getMessage()); }
         }
         PackIdMap ids = PackIdMap.load(pack,paths,discovered.defines(options,macros),warnings);
-        return new ShaderPackCatalog(programs,properties,diagnostics,warnings,ids);
+        return new ShaderPackCatalog(programs,properties,diagnostics,warnings,ids,List.copyOf(computes));
+    }
+
+    /** Kept when the program it belongs to is enabled and runs between fullscreen passes; setup programs are not run. */
+    private static void compute(String path, ShaderPackProperties properties, Map<String,Boolean> merged, Set<String> computes, List<PackDiagnostic> warnings) {
+        String base = PackComputeProgram.base(path);
+        String program = path.substring(0,path.lastIndexOf('/')+1)+base;
+        try {
+            var stage = CompiledShaderPack.stage(base);
+            if (stage == CompiledShaderPack.Stage.GBUFFER || stage == CompiledShaderPack.Stage.SHADOW) throw new UnsupportedShaderException("not a fullscreen stage");
+            if (properties.program(program,merged).enabled()) computes.add(path);
+        } catch (UnsupportedShaderException failure) {
+            warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,path,"Compute program is not run: "+failure.getMessage()));
+        }
     }
 
     /** A properties file that cannot be evaluated is reported like any other blocking pack feature. */

@@ -25,7 +25,7 @@ public final class PackSectionOffsets {
         if (vertex == null) return null;
         var alphaTest = program.state().alphaTest();
         return ShaderPackProgram.compile(program.name(), vertex, sources.fragment(), compiler, program.code().coordinates(),
-                alphaTest.orElse(null), program.stage() == CompiledShaderPack.Stage.GBUFFER && alphaTest.isEmpty());
+                alphaTest.orElse(null), program.stage() == CompiledShaderPack.Stage.GBUFFER && alphaTest.isEmpty(), pack.images().formats());
     }
 
     static String lower(String vertex) {

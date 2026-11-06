@@ -32,9 +32,16 @@ public final class CompiledShaderPack {
     private final PackSmoothing smoothing;
     private final PackIdMap ids;
     private final boolean vanillaClouds;
-    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms,PackIdMap ids,boolean vanillaClouds){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;this.ids=ids;this.vanillaClouds=vanillaClouds;
+    private final PackImages images;
+    private final List<PackComputeProgram> computes;
+    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms,PackIdMap ids,boolean vanillaClouds,
+                               PackImages images,List<PackComputeProgram> computes){this.images=images;this.computes=List.copyOf(computes);this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;this.ids=ids;this.vanillaClouds=vanillaClouds;
         List<String> texts=new ArrayList<>();for(Sources value:sources.values()){texts.add(value.vertex());texts.add(value.fragment());}smoothing=PackSmoothing.scan(texts);}
     public List<Program> programs(){return programs;}
+    /** Storage images the pack declares with {@code image.*}. */
+    public PackImages images(){return images;}
+    /** Compute programs in dispatch order: stage, ordinal, then letter. */
+    public List<PackComputeProgram> computes(){return computes;}
     /** False when the pack draws its own sky clouds and turns the game's off with {@code clouds=off}. */
     public boolean vanillaClouds(){return vanillaClouds;}
     public PackSmoothing smoothing(){return smoothing;}
@@ -64,6 +71,7 @@ public final class CompiledShaderPack {
         PackTextures.Builder textures=new PackTextures.Builder(catalog.properties());
         Map<String,Sources> sources=new java.util.LinkedHashMap<>();long sourceCharacters=0;
         PackPreprocessor preprocessor=new PackPreprocessor(source,compiler,macros,options);
+        PackImages images=PackImages.parse(catalog.properties().values());
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
             if(!discovered.state().enabled())continue;
             String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
@@ -73,22 +81,30 @@ public final class CompiledShaderPack {
             if(distant){String vertex=PackDhPrograms.lower(expanded.vertex());if(vertex==null)throw new UnsupportedShaderException("Distant Horizons program has no main: "+discovered.name());expanded=new Sources(vertex,expanded.fragment());}
             sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length();if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),expanded);
-            programs.add(compileProgram(discovered,expanded,compiler,targets,shadow,textures));
+            programs.add(compileProgram(discovered,expanded,compiler,targets,shadow,textures,images.formats()));
         }
+        List<PackComputeProgram> computes=new ArrayList<>();
+        for(String path:catalog.computes())computes.add(PackComputeProgram.compile(path,preprocessor,compiler,images.formats()));
+        computes.sort(Comparator.comparing(PackComputeProgram::stage).thenComparingInt(PackComputeProgram::ordinal).thenComparing(PackComputeProgram::suffix));
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
         return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings,PackCustomUniforms.parse(catalog.properties().values()),catalog.ids(),
-                !"off".equalsIgnoreCase(catalog.properties().values().getOrDefault("clouds","").trim()));
+                !"off".equalsIgnoreCase(catalog.properties().values().getOrDefault("clouds","").trim()),images,computes);
     }
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
         stage(discovered.name().substring(discovered.name().lastIndexOf('/')+1));
         return new Sources(lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)));
     }
+    static String lowerSource(String source){return lower(source);}
     private static String lower(String source){return PackUnusedUniforms.strip(PackUniformDefaults.lower(PackCoreProfile.lower(source)));}
     /** One program of a generation, recorded into the builders that aggregate pack-wide requirements. */
     public static Program compileProgram(ShaderPackCatalog.Program discovered,Sources sources,ShadercCompiler compiler,
                                          PackRenderTargets.Builder targets,PackShadowSettings.Builder shadow,PackTextures.Builder textures){
+        return compileProgram(discovered,sources,compiler,targets,shadow,textures,Map.of());
+    }
+    public static Program compileProgram(ShaderPackCatalog.Program discovered,Sources sources,ShadercCompiler compiler,
+                                         PackRenderTargets.Builder targets,PackShadowSettings.Builder shadow,PackTextures.Builder textures,Map<String,String> imageFormats){
         String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
         Stage stage=stage(name);
         String vertex=sources.vertex(),fragment=sources.fragment();
@@ -97,7 +113,7 @@ public final class CompiledShaderPack {
         textures.scan(vertex);textures.scan(fragment);
         var alphaTest=discovered.state().alphaTest();
         ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
-                alphaTest.orElse(null),stage==Stage.GBUFFER&&alphaTest.isEmpty());
+                alphaTest.orElse(null),stage==Stage.GBUFFER&&alphaTest.isEmpty(),imageFormats);
         boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
         for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)
             throw new UnsupportedShaderException("Buffer flip uses the wrong output namespace: "+discovered.name()+"."+target);
