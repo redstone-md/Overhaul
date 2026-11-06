@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
+import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.vulkan.NativeGraphicsPipeline;
@@ -15,9 +16,9 @@ import static org.lwjgl.vulkan.VK10.*;
  */
 final class BlazePackVertexInputs {
     private static final float[][] CONSTANTS = {
-        {0, 0, 0, 0}, {1, 1, 1, 1}, {0, 0, 1, 0}, {0, 0, 0, 1}, {240, 240, 0, 1}, {-1, -1, -1, -1}, {1, 0, 0, 1}
+        {0, 0, 0, 0}, {1, 1, 1, 1}, {0, 0, 1, 0}, {0, 0, 0, 1}, {240, 240, 0, 1}, {-1, -1, -1, -1}, {1, 0, 0, 1}, {0, 10, 0, 1}
     };
-    private static final int ZERO = 0, ONE = 1, UP = 2, TEXTURE = 3, LIGHT = 4, UNKNOWN_ID = 5, TANGENT = 6;
+    private static final int ZERO = 0, ONE = 1, UP = 2, TEXTURE = 3, LIGHT = 4, UNKNOWN_ID = 5, TANGENT = 6, NO_OVERLAY = 7;
     private static final int CONSTANT_BYTES = 16, STRIDE = CONSTANTS.length * CONSTANT_BYTES;
 
     private BlazePackVertexInputs() {}
@@ -53,7 +54,8 @@ final class BlazePackVertexInputs {
             case "overhaulLegacyNormal" -> either(location, layout, "Normal", UP);
             case "overhaulLegacyTexCoord0", "mc_midTexCoord" -> either(location, layout, "UV0", TEXTURE);
             case "overhaulLegacyTexCoord1" -> either(location, layout, "UV2", LIGHT);
-            case "mc_Entity" -> either(location, layout, BlazePackBlockIds.FIELD, UNKNOWN_ID);
+            case EntityColorEmulation.OVERLAY -> either(location, layout, "UV1", NO_OVERLAY);
+            case "mc_Entity" ->either(location, layout, BlazePackBlockIds.FIELD, UNKNOWN_ID);
             case "at_tangent" -> constant(location, TANGENT);
             case "at_velocity", "at_midBlock" -> constant(location, ZERO);
             default -> throw new UnsupportedShaderException("Unbound pack vertex input: " + name);

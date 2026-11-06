@@ -4,6 +4,7 @@ import dev.overhaul.shader.compat.FramebufferBindings;
 import dev.overhaul.shader.compat.PackProgramTranslator;
 import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.CoordinateConvention;
+import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.FragmentAlphaTest;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShaderStage;
@@ -51,7 +52,9 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
         var framebuffer = FramebufferBindings.parse(fragment);
         String source=PackShadowSettings.stripDirectives(fragment);
         if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
-        var translated = new PackProgramTranslator().translate(PackShadowSettings.stripDirectives(vertex),source, coordinates);
+        String vertexSource=PackShadowSettings.stripDirectives(vertex);
+        if(EntityColorEmulation.needed(source)){source=EntityColorEmulation.fragment(source);vertexSource=EntityColorEmulation.vertex(vertexSource);}
+        var translated = new PackProgramTranslator().translate(vertexSource,source, coordinates);
         String lowered=FragmentAlphaTest.lower(translated.fragment(),alphaTest);
         if(dynamicCutoff)lowered=FragmentAlphaTest.lowerCutoff(lowered);
         SpirvBinary compiledVertex=compiler.compile(name+".vsh",translated.vertex(),ShaderStage.VERTEX);

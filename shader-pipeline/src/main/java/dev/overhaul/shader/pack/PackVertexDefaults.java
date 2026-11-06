@@ -1,5 +1,6 @@
 package dev.overhaul.shader.pack;
 
+import dev.overhaul.shader.compat.EntityColorEmulation;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -8,11 +9,11 @@ import java.util.Set;
  * Vertex attributes packs read that captured geometry does not carry yet. Each gets a value that keeps
  * the program running without a block identity, so the materials and motion depending on them degrade:
  * mc_Entity reads one id per pipeline (-1 unless the caller supplies one), at_velocity and at_midBlock read zero, mc_midTexCoord
- * is the vertex's own texture coordinate, and at_tangent is an arbitrary tangent of the normal.
+ * is the vertex's own texture coordinate, at_tangent is an arbitrary tangent of the normal, and the entity colour overlay reads no overlay.
  */
 public final class PackVertexDefaults {
     private static final String NORMAL = "overhaulLegacyNormal", TEXCOORD = "overhaulLegacyTexCoord0";
-    private static final Set<String> NAMES = Set.of("mc_Entity","mc_midTexCoord","at_tangent","at_velocity","at_midBlock");
+    private static final Set<String> NAMES = Set.of("mc_Entity","mc_midTexCoord","at_tangent","at_velocity","at_midBlock",EntityColorEmulation.OVERLAY);
 
     private PackVertexDefaults() {}
 
@@ -34,6 +35,7 @@ public final class PackVertexDefaults {
     }
     private static String value(String attribute, Map<String,Integer> attributes, int blockId) {
         return switch (attribute) {
+            case EntityColorEmulation.OVERLAY -> "vec4(0.0,10.0,0.0,1.0)";
             case "mc_Entity" -> "vec4("+blockId+".0,-1.0,-1.0,-1.0)";
             case "mc_midTexCoord" -> attributes.containsKey(TEXCOORD) ? TEXCOORD : "vec4(0.0,0.0,0.0,1.0)";
             case "at_tangent" -> attributes.containsKey(NORMAL) ? tangent() : "vec4(1.0,0.0,0.0,1.0)";
