@@ -14,7 +14,7 @@ def tiers = [
                    tierMixins: [
                                 'VeilCompiledProgram121Mixin', 'VeilShaderCompiler121Mixin', 'LodestoneProgram121Mixin', 'VeilCompiledShader121Mixin', 'VeilShaderSource121Access',
                                 'VeilUniformCache121Mixin', 'VeilShaderProgram121Mixin', 'VeilUniform121Access', 'VeilTextureCache121Access',
-                                'VeilScreenQuad121Mixin', 'GlStateProgram121Mixin', 'ShaderInstanceProgram121Access', 'EffectInstanceProgram121Access',
+                                'VeilScreenQuad121Mixin', 'VeilPatchState121Mixin', 'GlStateProgram121Mixin', 'ShaderInstanceProgram121Access', 'EffectInstanceProgram121Access',
                                 'LevelEntityClasses121Mixin', 'EntitySectionManagerClasses121Mixin', 'EntityLight121Mixin', 'EntityDispatcherLight121Mixin',
                                 'LevelRendererSections121Mixin', 'LevelRendererDhFade121Mixin', 'ViewAreaColumns121Mixin', 'DhRenderList121Mixin',
                                 'BufferBuilderParticles121Mixin', 'ParticleQuads121Mixin', 'CompiledContents121Mixin',
