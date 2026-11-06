@@ -16,7 +16,7 @@ final class BlazeBufferPool implements AutoCloseable {
     private final long budget;
     private final List<Page> pages=new ArrayList<>();
     private long allocated;
-    private boolean closed;
+    private boolean closed,releaseIdle;
 
     BlazeBufferPool(GpuAllocator allocator,BlazeQueue queue,boolean host,int usage,int pageSize,long budget,int alignment){
         if(pageSize<1||budget<pageSize||alignment<1)throw new IllegalArgumentException("Invalid native buffer pool bounds");
@@ -39,6 +39,12 @@ final class BlazeBufferPool implements AutoCloseable {
         Page page=new Page(host?allocator.hostBuffer(capacity,usage):allocator.deviceBuffer(capacity,usage));
         pages.add(page);allocated+=capacity;return page.acquire(bytes,reserved);
     }
+    /** A page frees its memory once its last slice is released, for long-lived slices whose total rises and falls. */
+    BlazeBufferPool releasingIdlePages(){releaseIdle=true;return this;}
+    private void idle(Page page){
+        if(!releaseIdle||closed||!pages.remove(page))return;
+        allocated-=page.buffer.size();page.buffer.close();
+    }
     /** Every slice starts on a multiple of this. */
     int alignment(){return alignment;}
     private Slice find(int bytes,int reserved){for(Page page:pages){Slice slice=page.acquire(bytes,reserved);if(slice!=null)return slice;}return null;}
@@ -60,7 +66,7 @@ final class BlazeBufferPool implements AutoCloseable {
         void write(ByteBuffer source){if(released)throw new IllegalStateException("Expired native buffer slice owner");if(source.remaining()!=bytes)throw new IllegalArgumentException("Slice upload size differs");buffer().write(offset,source);}
         @Override public Pin retain(){if(released)throw new IllegalStateException("Expired native buffer slice owner");references=Math.addExact(references,1);return new Pin(this);}
         @Override public void retire(BlazeQueue queue){queue.retire(this);}
-        private void releaseReference(){if(--references==0)page.release(offset,reserved);}
+        private void releaseReference(){if(--references==0){page.release(offset,reserved);if(page.active==0)idle(page);}}
         @Override public void close(){if(!released){released=true;releaseReference();}}
     }
     final class Pin implements AutoCloseable {

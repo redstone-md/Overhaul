@@ -22,8 +22,15 @@ final class BlazeGlBuffers {
         long size;
         boolean mapped;
         GpuBuffer device;
+        /** Where this buffer's bytes start in {@link #device}: zero unless it shares a page with others. */
+        long base;
+        BlazeBufferPool.Slice slice;
+        Placed placed;
         BlazeRenderer owner;
     }
+
+    /** A buffer held on the device: the buffer to bind and the byte its contents start at. */
+    record Placed(GpuBuffer buffer, long base) {}
 
     private final Int2ObjectOpenHashMap<Store> stores = new Int2ObjectOpenHashMap<>();
     private final Int2IntOpenHashMap bindings = new Int2IntOpenHashMap();
@@ -61,7 +68,7 @@ final class BlazeGlBuffers {
             Store store = store(selector.name(arguments));
             long offset = arguments.pointer(1), size = arguments.pointer(2);
             if (inside(store, offset, size) && arguments.pointer(3) != 0) {
-                if (store.device != null) store.owner.writeGlDeviceBuffer(store.device, offset, arguments.pointer(3), size);
+                if (store.device != null) store.owner.writeGlDeviceBuffer(store.device, store.base + offset, arguments.pointer(3), size);
                 else MemoryUtil.memCopy(arguments.pointer(3), store.address + offset, size);
             }
             return 0;
@@ -118,16 +125,33 @@ final class BlazeGlBuffers {
      * Later writes are staged in order with draws. Null when the name has no storage.
      */
     synchronized GpuBuffer device(BlazeRenderer renderer, int name) {
-        Store store = stores.get(name);
-        if (store == null || (store.address == 0 && store.device == null)) return null;
-        if (store.device == null) adopt(renderer, store);
-        return store.device;
+        Placed placed = placed(renderer, name, false);
+        return placed == null ? null : placed.buffer();
     }
 
-    private static void adopt(BlazeRenderer renderer, Store store) {
-        store.device = renderer.newGlDeviceBuffer(store.size);
+    /**
+     * Like {@link #device}, but a buffer moved to the device now may share a page with others when {@code shared}, so
+     * draws from many such buffers bind one buffer. Callers of a shared buffer must start at its {@link Placed#base}.
+     */
+    synchronized Placed placed(BlazeRenderer renderer, int name, boolean shared) {
+        Store store = stores.get(name);
+        if (store == null || (store.address == 0 && store.device == null)) return null;
+        if (store.device == null) adopt(renderer, store, shared);
+        return store.placed;
+    }
+
+    private static void adopt(BlazeRenderer renderer, Store store, boolean shared) {
+        if (shared) {
+            store.slice = renderer.newGlSharedBuffer(store.size);
+            store.device = store.slice.buffer();
+            store.base = store.slice.offset();
+        } else {
+            store.device = renderer.newGlDeviceBuffer(store.size);
+            store.base = 0;
+        }
+        store.placed = new Placed(store.device, store.base);
         store.owner = renderer;
-        if (store.size > 0) renderer.writeGlDeviceBuffer(store.device, 0, store.address, store.size);
+        if (store.size > 0) renderer.writeGlDeviceBuffer(store.device, store.base, store.address, store.size);
         MemoryUtil.nmemFree(store.address);
         store.address = 0;
     }
@@ -135,8 +159,12 @@ final class BlazeGlBuffers {
     private void releaseDevice(Store store) {
         if (store.device == null) return;
         generation++;
-        store.owner.retireGlDeviceBuffer(store.device);
+        if (store.slice != null) store.owner.retireGlSharedBuffer(store.slice);
+        else store.owner.retireGlDeviceBuffer(store.device);
         store.device = null;
+        store.slice = null;
+        store.placed = null;
+        store.base = 0;
         store.owner = null;
     }
 
@@ -165,10 +193,10 @@ final class BlazeGlBuffers {
         if (!inside(source, fromOffset, size) || !inside(target, toOffset, size)) return 0;
         if (source.device != null) {
             // A device-held source can only be copied on the device, which pulls the destination there too.
-            if (target.device == null) adopt(source.owner, target);
-            source.owner.copyGlDeviceBuffer(source.device, fromOffset, target.device, toOffset, size);
+            if (target.device == null) adopt(source.owner, target, false);
+            source.owner.copyGlDeviceBuffer(source.device, source.base + fromOffset, target.device, target.base + toOffset, size);
         } else if (target.device != null) {
-            target.owner.writeGlDeviceBuffer(target.device, toOffset, source.address + fromOffset, size);
+            target.owner.writeGlDeviceBuffer(target.device, target.base + toOffset, source.address + fromOffset, size);
         } else {
             MemoryUtil.memCopy(source.address + fromOffset, target.address + toOffset, size);
         }

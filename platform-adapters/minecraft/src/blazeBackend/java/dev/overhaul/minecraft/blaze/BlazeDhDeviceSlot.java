@@ -14,14 +14,24 @@ public final class BlazeDhDeviceSlot {
     }
 
     private int name, generation;
-    private GpuBuffer device;
+    private BlazeGlBuffers.Placed device;
+    private BlazeSectionRun run;
 
-    GpuBuffer resolve(BlazeRenderer renderer, BlazeGlBuffers buffers, int name, int generation) {
+    BlazeGlBuffers.Placed resolve(BlazeRenderer renderer, BlazeGlBuffers buffers, int name, int generation, boolean shared) {
         if (device == null || this.name != name || this.generation != generation) {
-            device = buffers.device(renderer, name);
+            device = buffers.placed(renderer, name, shared);
             this.name = name;
             this.generation = generation;
         }
         return device;
+    }
+
+    /** The shared draw key of the resolved buffer with these indices, found once instead of interned every frame. */
+    BlazeSectionRun run(GpuBuffer indices, int indexBytes) {
+        GpuBuffer vertices = device.buffer();
+        if (run == null || run.vertices != vertices || run.indices != indices || run.indexBytes != indexBytes) {
+            run = BlazeSectionRun.of(vertices, 0, indices, indexBytes, true);
+        }
+        return run;
     }
 }

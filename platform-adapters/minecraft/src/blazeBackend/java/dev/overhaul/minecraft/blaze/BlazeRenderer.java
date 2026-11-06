@@ -23,6 +23,13 @@ public final class BlazeRenderer implements AutoCloseable {
     static final int FOREIGN_FRAMEBUFFERS=0x40000000;
     /** A multiple of both terrain strides, so one indirect draw reaches every section in a page by base vertex alone. */
     private static final int GEOMETRY_ALIGNMENT=160;
+    private static final int GL_BUFFER_USAGE=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    /** Distant Horizons vertices are 16 bytes, so every shared buffer starts on a whole vertex. */
+    static final int GL_SHARED_ALIGNMENT=16;
+    /** Pages free as soon as they empty, so the budget only bounds what mods hold at once, as their own buffers did. */
+    private static final int GL_SHARED_PAGE=32*1024*1024;
+    private static final long GL_SHARED_BUDGET=16L*1024*1024*1024;
+    private final Set<BlazeBufferPool.Slice> glSharedBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private final VulkanContext context;
     private final long windowHandle;
     private final BlazeDrawState state=new BlazeDrawState();
@@ -51,7 +58,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazePackScene packScene;
     private final java.util.Map<BlazeProgramCompiler.Program,BlazeProgramShape> shapes=new java.util.IdentityHashMap<>();
     private BlazeHostArena uniformArena,uploadArena,streamArena;
-    private BlazeBufferPool streamStorage;
+    private BlazeBufferPool streamStorage,glStorage;
     private BlazeSequenceIndices sequenceIndices;
     private BlazeDescriptors descriptors;
     private BlazeTransfers transfers;
@@ -83,6 +90,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
                 streamStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,4*1024*1024,256L*1024*1024,16);
                 streamArena=new BlazeHostArena(streamStorage,16);
+                glStorage=new BlazeBufferPool(allocator,queue,false,GL_BUFFER_USAGE,GL_SHARED_PAGE,GL_SHARED_BUDGET,GL_SHARED_ALIGNMENT).releasingIdlePages();
             }
             descriptors=new BlazeDescriptors(context,queue);transfers=new BlazeTransfers(context,queue,hostStorage,geometryStorage,uploadArena,streamArena);
             sequenceIndices=new BlazeSequenceIndices(transfers,queue);
@@ -179,11 +187,19 @@ public final class BlazeRenderer implements AutoCloseable {
     public ImmediateCommands packCommands(){requireOpen();if(!BlazeOptimization.PACK_FRAME_QUEUE.on())queue.flush();return commands;}
     GpuBuffer newGlDeviceBuffer(long size){
         requireOpen();
-        GpuBuffer buffer=allocator.deviceBuffer(Math.max(size,4),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        GpuBuffer buffer=allocator.deviceBuffer(Math.max(size,4),GL_BUFFER_USAGE);
         glDeviceBuffers.add(buffer);return buffer;
     }
     /** Captured terrain draws reach the queue first: the retirement must follow every draw that still reads the buffer. */
-    void retireGlDeviceBuffer(GpuBuffer buffer){requireOpen();if(terrain!=null)terrain.flush();if(dh!=null)dh.flush();glDeviceBuffers.remove(buffer);queue.retire(buffer);}
+    void retireGlDeviceBuffer(GpuBuffer buffer){requireOpen();flushCapturedDraws();glDeviceBuffers.remove(buffer);queue.retire(buffer);}
+    /** A mod buffer placed in a page it shares with others, so the draws of many bind one buffer. */
+    BlazeBufferPool.Slice newGlSharedBuffer(long size){
+        requireOpen();
+        BlazeBufferPool.Slice slice=glStorage.acquire(Math.toIntExact(Math.max(size,GL_SHARED_ALIGNMENT)));
+        glSharedBuffers.add(slice);return slice;
+    }
+    void retireGlSharedBuffer(BlazeBufferPool.Slice slice){requireOpen();flushCapturedDraws();glSharedBuffers.remove(slice);queue.retire(slice);}
+    private void flushCapturedDraws(){if(terrain!=null)terrain.flush();if(dh!=null)dh.flush();}
     void writeGlDeviceBuffer(GpuBuffer target,long offset,long source,long bytes){requireOpen();transfers.write(target,offset,source,bytes);}
     void copyGlDeviceBuffer(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes){requireOpen();transfers.copy(source,sourceOffset,target,targetOffset,bytes);}
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
@@ -342,6 +358,8 @@ public final class BlazeRenderer implements AutoCloseable {
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
+        for(BlazeBufferPool.Slice slice:new ArrayList<>(glSharedBuffers))failure=release(slice::close,failure);glSharedBuffers.clear();
+        if(glStorage!=null)failure=release(glStorage::close,failure);
         for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();lastPipeline=null;
         for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();
         if(rawFramebuffers!=null)failure=release(rawFramebuffers::close,failure);

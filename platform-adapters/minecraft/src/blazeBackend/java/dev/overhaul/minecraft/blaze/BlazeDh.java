@@ -53,10 +53,10 @@ public final class BlazeDh implements AutoCloseable {
     private record PipelineKey(BlazeProgramCompiler.Program program, NativeGraphicsPipeline.Depth depth, NativeGraphicsPipeline.Color color,
             NativeGraphicsPipeline.ColorLogic logic, int cull, int polygonMode, long renderPass) {}
 
-    private record Lod(GpuBuffer vertices, GpuBuffer indices, float x, float y, float z, int indexCount) implements BlazeTerrainPass.Draw {
+    private record Lod(GpuBuffer vertices, GpuBuffer indices, float x, float y, float z, int indexCount, int baseVertex) implements BlazeTerrainPass.Draw {
         @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
             BlazeTerrainPass.bindGeometry(command, pipelineLayout, vertices, indices, x, y, z);
-            vkCmdDrawIndexed(command, indexCount, 1, 0, 0, 0);
+            vkCmdDrawIndexed(command, indexCount, 1, 0, baseVertex, 0);
         }
     }
 
@@ -115,12 +115,14 @@ public final class BlazeDh implements AutoCloseable {
     public void draw(int vertices, int indices, int indexCount, float x, float y, float z) {
         if (owner.drawingNowhere()) return;
         var buffers = BlazeGlBoundary.buffers();
-        GpuBuffer vertexBuffer = buffers.device(owner, vertices), indexBuffer = buffers.device(owner, indices);
+        // A shader pack may have placed these vertices in a shared page before it was switched off.
+        BlazeGlBuffers.Placed vertexBuffer = buffers.placed(owner, vertices, false);
+        GpuBuffer indexBuffer = buffers.device(owner, indices);
         if (vertexBuffer == null || indexBuffer == null) return;
         // DH's setup leaves the lightmap on unit 0 and its block atlas on unit 1.
         if (pending == null) pending = new BlazeTerrainPass(owner, owner.currentTarget(), owner.drawState().snapshot(), this::terrainUniforms, terrain, this::pipeline,
                 name -> owner.textures().resolveBound(name.equals("uLightMap") ? 0 : 1), "uBlockAtlas");
-        pending.add(new Lod(vertexBuffer, indexBuffer, x, y, z, indexCount));
+        pending.add(new Lod(vertexBuffer.buffer(), indexBuffer, x, y, z, indexCount, (int) (vertexBuffer.base() / BlazePackDistant.MESH.layout().stride())));
     }
 
     public void end() { flush(); }

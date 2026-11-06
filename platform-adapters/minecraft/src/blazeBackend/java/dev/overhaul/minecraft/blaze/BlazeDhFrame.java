@@ -111,17 +111,26 @@ public final class BlazeDhFrame {
         if (count == 0 || vertexName == 0 || indexName == 0) return;
         // DH grows the shared buffer in place, so a new generation means a cached device buffer may be retired.
         int generation = buffers.generation();
-        var vertexBuffer = vertices instanceof BlazeDhDeviceSlot.Holder holder
-                ? holder.overhaul$deviceSlot().resolve(renderer, buffers, vertexName, generation)
-                : buffers.device(renderer, vertexName);
+        BlazeDhDeviceSlot slot = vertices instanceof BlazeDhDeviceSlot.Holder holder ? holder.overhaul$deviceSlot() : null;
+        var vertexBuffer = slot != null ? slot.resolve(renderer, buffers, vertexName, generation, SHARED_PAGES) : buffers.placed(renderer, vertexName, SHARED_PAGES);
         if (indexName != lastIndexName || generation != lastIndexGeneration || lastIndexBuffer == null) {
             lastIndexBuffer = buffers.device(renderer, indexName);
             lastIndexName = indexName;
             lastIndexGeneration = generation;
         }
         var indexBuffer = lastIndexBuffer;
-        if (vertexBuffer != null && indexBuffer != null) batch.add(BlazePackDistant.MESH, vertexBuffer, indexBuffer, (int) (count * 1.5), x, y, z);
+        if (vertexBuffer == null || indexBuffer == null) return;
+        BlazeMeshState mesh = BlazePackDistant.MESH;
+        int indexCount = (int) (count * 1.5);
+        if (!SHARED_PAGES) {
+            batch.add(mesh, vertexBuffer.buffer(), indexBuffer, indexCount, x, y, z);
+            return;
+        }
+        BlazeSectionRun run = slot != null ? slot.run(indexBuffer, mesh.indexBytes()) : BlazeSectionRun.of(vertexBuffer.buffer(), 0, indexBuffer, mesh.indexBytes(), true);
+        batch.add(mesh, run, (int) (vertexBuffer.base() / mesh.layout().stride()), indexCount, x, y, z);
     }
+
+    private static final boolean SHARED_PAGES = BlazeOptimization.DH_SHARED_PAGES.on();
 
     private static long pair(int high, int low) {
         return (long) high << 32 | low & 0xFFFFFFFFL;

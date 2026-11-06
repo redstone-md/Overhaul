@@ -105,7 +105,12 @@ public final class BlazeSectionBatch implements AutoCloseable {
      */
     void add(BlazeMeshState state, GpuBuffer vertices, GpuBuffer indices, int indexCount, float x, float y, float z) {
         if (indexCount == 0) return;
-        append(state, state.layout(), state.topology(), indexCount, 0, 0, BlazeSectionRun.of(vertices, 0, indices, state.indexBytes(), false), x, y, z);
+        add(state, BlazeSectionRun.of(vertices, 0, indices, state.indexBytes(), false), 0, indexCount, x, y, z);
+    }
+
+    /** A mesh another renderer placed at {@code baseVertex} of a buffer it shares, under that buffer's shared key. */
+    void add(BlazeMeshState state, BlazeSectionRun run, int baseVertex, int indexCount, float x, float y, float z) {
+        append(state, state.layout(), state.topology(), indexCount, 0, baseVertex, run, x, y, z);
     }
 
     private void append(BlazeMeshState state, BlazeMeshState.Layout layout, int topology, int indexCount, int firstIndex, int baseVertex,

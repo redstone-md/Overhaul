@@ -24,7 +24,7 @@ final class OptimizationPage extends SettingsPage {
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS,
-                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST)));
+                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
 
     OptimizationPage(Runnable refresh) {
@@ -139,6 +139,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
         labels.put(BlazeOptimization.PIXEL_ROWS, "Row copies for pixel reads");
         labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");
+        labels.put(BlazeOptimization.DH_SHARED_PAGES, "Distant Horizons shared pages");
         return labels;
     }
 }
