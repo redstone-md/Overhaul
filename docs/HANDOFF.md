@@ -138,5 +138,7 @@ own debug string.
   night. Fixed by reading block light from the high nibble.
 - A crash in OpenAL on one tester's machine: `OpenAL.dll` 1.23.1, `0xc0000409`, outside our
   code. Waiting on that machine's log.
-- Hi-Z occlusion on the GPU.
+- GPU occlusion (`gpuOcclusion`) is in but off by default: a compute pass tests each section against the newest
+  queued depth tiles and zeroes its instance count. With Complementary and F3 it measured on par with the CPU test
+  (horizon about 238 fps both ways, looking down 218 on vs 228 off), so terrain stays on the CPU readback test.
 - With F3 open the 2x target is reached (2.05x horizon, 2.0x looking down) but with little margin; GPU clock modes still swing runs by about 5%.
