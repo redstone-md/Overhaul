@@ -7,7 +7,10 @@ import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.pack.CompiledShaderPack;
 import dev.overhaul.shader.pack.PackCustomUniforms;
 import dev.overhaul.shader.pack.PackRenderStages;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.vulkan.PackGraphRuntime;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import org.joml.Matrix4f;
 
 /** One frame's camera in pack coordinates. A name nothing here owns fails loudly instead of reading as zero. */
@@ -38,6 +41,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
     void capture(BlazePackCapture capture, CompiledShaderPack pack) {
         width = capture.width();
         height = capture.height();
+        if (custom != pack.customUniforms()) plans.clear();
         custom = pack.customUniforms();
         environment.capture(capture);
         celestial.capture(capture, pack.shadow());
@@ -119,52 +123,108 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         };
     }
 
+    /**
+     * Each uniform's source, found once per block: the custom definitions and the providers that turned a name down are
+     * not asked again. Every provider decides by the name alone, so the answer holds until the pack changes.
+     */
+    private record Plan(String[] names, byte[] sources, PackCustomUniforms.Bound[] bound) {
+    }
+
+    private static final byte CUSTOM = 0, FRAME = 1, CELESTIAL = 2, ENVIRONMENT = 3, PRESENCE = 4, DISTANT = 5, PLAYER = 6;
+    private static final boolean PLANS = BlazeOptimization.UNIFORM_PLANS.on();
+    private final Map<UniformBlock, Plan> plans = new IdentityHashMap<>();
+
     @Override
     public void fill(CompiledShaderPack.Program program, UniformBlock values) {
-        for (String name : values.bindings().uniforms().keySet()) {
-            if (custom.fill(name, values)) continue;
-            switch (name) {
-                case "viewWidth" -> values.setFloat(name, width);
-                case "viewHeight", "overhaulViewportHeight" -> values.setFloat(name, height);
-                case "aspectRatio" -> values.setFloat(name, (float) width / height);
-                case "frameCounter" -> values.setInt(name, frame);
-                case "frameTime" -> values.setFloat(name, frameTime);
-                case "frameTimeCounter" -> values.setFloat(name, counter);
-                case "near" -> values.setFloat(name, near);
-                case "far" -> values.setFloat(name, far);
-                case "cameraPosition" -> values.setVector(name, (float) x, (float) y, (float) z);
-                case "previousCameraPosition" -> values.setVector(name, (float) previousX, (float) previousY, (float) previousZ);
-                case "fogColor" -> values.setVector(name, fog[0], fog[1], fog[2]);
-                case "cameraPositionInt" -> values.setIntVector(name, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
-                case "cameraPositionFract" -> values.setVector(name, (float) fraction(x), (float) fraction(y), (float) fraction(z));
-                case "previousCameraPositionInt" -> values.setIntVector(name, (int) Math.floor(previousX), (int) Math.floor(previousY), (int) Math.floor(previousZ));
-                case "previousCameraPositionFract" -> values.setVector(name, (float) fraction(previousX), (float) fraction(previousY), (float) fraction(previousZ));
-                case "overhaulFogColor" -> values.setVector(name, fog[0], fog[1], fog[2], fog[3]);
-                case "gbufferProjection" -> values.setMatrix(name, 4, projection);
-                case "gbufferProjectionInverse" -> values.setMatrix(name, 4, projectionInverse);
-                case "gbufferModelView" -> values.setMatrix(name, 4, view);
-                case "gbufferModelViewInverse" -> values.setMatrix(name, 4, viewInverse);
-                case "gbufferPreviousProjection" -> values.setMatrix(name, 4, previousProjection);
-                case "gbufferPreviousModelView" -> values.setMatrix(name, 4, previousView);
-                case "overhaulModelViewProjection" -> values.setMatrix(name, 4, program.scene() ? modelViewProjection : ORTHOGRAPHIC);
-                case "overhaulProjection" -> values.setMatrix(name, 4, program.scene() ? projection : ORTHOGRAPHIC);
-                case "overhaulProjectionInverse" -> values.setMatrix(name, 4, program.scene() ? projectionInverse : ORTHOGRAPHIC_INVERSE);
-                case "overhaulModelView" -> values.setMatrix(name, 4, program.scene() ? view : IDENTITY);
-                case "overhaulModelViewInverse" -> values.setMatrix(name, 4, program.scene() ? viewInverse : IDENTITY);
-                case "overhaulTextureMatrix0" -> values.setMatrix(name, 4, IDENTITY);
-                case "overhaulTextureMatrix1" -> values.setMatrix(name, 4, program.scene() ? LIGHTMAP_MATRIX : IDENTITY);
-                case "overhaulNormalMatrix" -> values.setMatrix(name, 3, program.scene() ? normal : NORMAL_IDENTITY);
-                case "alphaTestRef" -> values.setFloat(name, program.state().alphaTest().map(test -> test.reference()).orElse(0f));
-                case "entityColor" -> values.setVector(name, 0f, 0f, 0f, 0f); // no hurt tint yet: the overlay stays per vertex
-                case FragmentAlphaTest.CUTOFF -> values.setFloat(name, 0f); // each draw overwrites it
-                case "renderStage" ->values.setInt(name, PackRenderStages.of(program.name()));
-                default -> {
-                    if (!celestial.fill(name, values) && !environment.fill(name, values) && !presence.fill(name, values) && !distant.fill(name, values) && !player.fill(name, values)) {
-                        throw new UnsupportedShaderException("Unbound shader-pack uniform: " + name + " in " + program.name());
-                    }
-                }
+        Plan plan = PLANS ? plans.get(values) : null;
+        if (plan == null) {
+            plan = plan(program, values);
+            if (!PLANS) return;
+            // Blocks of draws rebuilt without a pack change are never asked for again; dropping all is cheaper than tracking them.
+            if (plans.size() >= 1024) plans.clear();
+            plans.put(values, plan);
+            return;
+        }
+        String[] names = plan.names;
+        byte[] sources = plan.sources;
+        for (int index = 0; index < names.length; index++) {
+            String name = names[index];
+            switch (sources[index]) {
+                case CUSTOM -> custom.fill(plan.bound[index], values);
+                case FRAME -> frame(name, program, values);
+                case CELESTIAL -> celestial.fill(name, values);
+                case ENVIRONMENT -> environment.fill(name, values);
+                case PRESENCE -> presence.fill(name, values);
+                case DISTANT -> distant.fill(name, values);
+                default -> player.fill(name, values);
             }
         }
+    }
+
+    /** Fills the block the slow way, noting which source answered each name. */
+    private Plan plan(CompiledShaderPack.Program program, UniformBlock values) {
+        String[] names = values.bindings().uniforms().keySet().toArray(new String[0]);
+        byte[] sources = new byte[names.length];
+        PackCustomUniforms.Bound[] bound = new PackCustomUniforms.Bound[names.length];
+        for (int index = 0; index < names.length; index++) {
+            String name = names[index];
+            bound[index] = custom.bind(name, values);
+            if (bound[index] != null) {
+                custom.fill(bound[index], values);
+                sources[index] = CUSTOM;
+            } else if (frame(name, program, values)) sources[index] = FRAME;
+            else if (celestial.fill(name, values)) sources[index] = CELESTIAL;
+            else if (environment.fill(name, values)) sources[index] = ENVIRONMENT;
+            else if (presence.fill(name, values)) sources[index] = PRESENCE;
+            else if (distant.fill(name, values)) sources[index] = DISTANT;
+            else if (player.fill(name, values)) sources[index] = PLAYER;
+            else throw new UnsupportedShaderException("Unbound shader-pack uniform: " + name + " in " + program.name());
+        }
+        return new Plan(names, sources, bound);
+    }
+
+    /** The uniforms this frame's camera and timing own; false for a name it does not. */
+    private boolean frame(String name, CompiledShaderPack.Program program, UniformBlock values) {
+        switch (name) {
+            case "viewWidth" -> values.setFloat(name, width);
+            case "viewHeight", "overhaulViewportHeight" -> values.setFloat(name, height);
+            case "aspectRatio" -> values.setFloat(name, (float) width / height);
+            case "frameCounter" -> values.setInt(name, frame);
+            case "frameTime" -> values.setFloat(name, frameTime);
+            case "frameTimeCounter" -> values.setFloat(name, counter);
+            case "near" -> values.setFloat(name, near);
+            case "far" -> values.setFloat(name, far);
+            case "cameraPosition" -> values.setVector(name, (float) x, (float) y, (float) z);
+            case "previousCameraPosition" -> values.setVector(name, (float) previousX, (float) previousY, (float) previousZ);
+            case "fogColor" -> values.setVector(name, fog[0], fog[1], fog[2]);
+            case "cameraPositionInt" -> values.setIntVector(name, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
+            case "cameraPositionFract" -> values.setVector(name, (float) fraction(x), (float) fraction(y), (float) fraction(z));
+            case "previousCameraPositionInt" -> values.setIntVector(name, (int) Math.floor(previousX), (int) Math.floor(previousY), (int) Math.floor(previousZ));
+            case "previousCameraPositionFract" -> values.setVector(name, (float) fraction(previousX), (float) fraction(previousY), (float) fraction(previousZ));
+            case "overhaulFogColor" -> values.setVector(name, fog[0], fog[1], fog[2], fog[3]);
+            case "gbufferProjection" -> values.setMatrix(name, 4, projection);
+            case "gbufferProjectionInverse" -> values.setMatrix(name, 4, projectionInverse);
+            case "gbufferModelView" -> values.setMatrix(name, 4, view);
+            case "gbufferModelViewInverse" -> values.setMatrix(name, 4, viewInverse);
+            case "gbufferPreviousProjection" -> values.setMatrix(name, 4, previousProjection);
+            case "gbufferPreviousModelView" -> values.setMatrix(name, 4, previousView);
+            case "overhaulModelViewProjection" -> values.setMatrix(name, 4, program.scene() ? modelViewProjection : ORTHOGRAPHIC);
+            case "overhaulProjection" -> values.setMatrix(name, 4, program.scene() ? projection : ORTHOGRAPHIC);
+            case "overhaulProjectionInverse" -> values.setMatrix(name, 4, program.scene() ? projectionInverse : ORTHOGRAPHIC_INVERSE);
+            case "overhaulModelView" -> values.setMatrix(name, 4, program.scene() ? view : IDENTITY);
+            case "overhaulModelViewInverse" -> values.setMatrix(name, 4, program.scene() ? viewInverse : IDENTITY);
+            case "overhaulTextureMatrix0" -> values.setMatrix(name, 4, IDENTITY);
+            case "overhaulTextureMatrix1" -> values.setMatrix(name, 4, program.scene() ? LIGHTMAP_MATRIX : IDENTITY);
+            case "overhaulNormalMatrix" -> values.setMatrix(name, 3, program.scene() ? normal : NORMAL_IDENTITY);
+            case "alphaTestRef" -> values.setFloat(name, program.state().alphaTest().map(test -> test.reference()).orElse(0f));
+            case "entityColor" -> values.setVector(name, 0f, 0f, 0f, 0f); // no hurt tint yet: the overlay stays per vertex
+            case FragmentAlphaTest.CUTOFF -> values.setFloat(name, 0f); // each draw overwrites it
+            case "renderStage" ->values.setInt(name, PackRenderStages.of(program.name()));
+            default -> {
+                return false;
+            }
+        }
+        return true;
     }
 
     void complete() {

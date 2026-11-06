@@ -130,6 +130,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SECTION_RUN_KEYS, "Shared terrain draw keys");
         labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
         labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
+        labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
         return labels;
     }
 }

@@ -157,12 +157,36 @@ public final class PackCustomUniforms {
 
     /** Coerces to the type the shader declared, since packs often declare it differently from the property. */
     public boolean fill(String name, UniformBlock block) {
+        Bound bound = bind(name, block);
+        if (bound == null) return false;
+        fill(bound, block);
+        return true;
+    }
+
+    /** The definition behind a uniform the block declares, resolved once; null when the name is not a custom uniform. */
+    public Bound bind(String name, UniformBlock block) {
         Definition definition = definitions.get(name);
-        if (definition == null || !definition.uniform) return false;
+        if (definition == null || !definition.uniform) return null;
         var uniform = block.bindings().uniforms().get(name);
-        if (uniform == null) return false;
-        double[] values = definition.values;
-        switch (uniform.type()) {
+        return uniform == null ? null : new Bound(name, definition, uniform.type());
+    }
+
+    /** A name already bound to its definition, so a fill skips both lookups. */
+    public static final class Bound {
+        private final String name, type;
+        private final Definition definition;
+
+        private Bound(String name, Definition definition, String type) {
+            this.name = name;
+            this.definition = definition;
+            this.type = type;
+        }
+    }
+
+    public void fill(Bound bound, UniformBlock block) {
+        String name = bound.name;
+        double[] values = bound.definition.values;
+        switch (bound.type) {
             case "float" -> block.setFloat(name,(float)values[0]);
             case "int" -> block.setInt(name,(int)values[0]);
             case "bool" -> block.setBoolean(name,values[0] != 0);
@@ -172,9 +196,8 @@ public final class PackCustomUniforms {
             case "ivec2" -> { require(name,values,2); block.setIntVector(name,(int)values[0],(int)values[1]); }
             case "ivec3" -> { require(name,values,3); block.setIntVector(name,(int)values[0],(int)values[1],(int)values[2]); }
             case "ivec4" -> { require(name,values,4); block.setIntVector(name,(int)values[0],(int)values[1],(int)values[2],(int)values[3]); }
-            default -> throw new UnsupportedShaderException("Custom uniform "+name+" is declared "+uniform.type());
+            default -> throw new UnsupportedShaderException("Custom uniform "+name+" is declared "+bound.type);
         }
-        return true;
     }
     private static void require(String name, double[] values, int size) {
         if (values.length != size) throw new UnsupportedShaderException("Custom uniform "+name+" has "+values.length+" components, shader declares "+size);
