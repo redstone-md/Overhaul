@@ -64,10 +64,12 @@ public final class BlazePrograms implements AutoCloseable {
         try{
             var vertex=stage(shader.getVertexProgram());var fragment=stage(shader.getFragmentProgram());
             if(vertex.type()!=Program.Type.VERTEX||fragment.type()!=Program.Type.FRAGMENT)throw new IllegalArgumentException("Shader stages have incompatible types");
-            entry.name=vertex.name()+" + "+fragment.name();
-            entry.program=compiler.compile(vertex.name(),fragment.name(),vertex.source(),fragment.source(),(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
+            var geometry=BlazeAttachedStages.takeGeometry(shader.getId());
+            entry.name=vertex.name()+(geometry==null?"":" + "+geometry.name())+" + "+fragment.name();
+            entry.program=compiler.compile(vertex.name(),geometry==null?null:geometry.name(),fragment.name(),vertex.source(),geometry==null?null:geometry.source(),fragment.source(),
+                    (requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
             bindLocations(entry);
-            if(SECTION_OFFSET.matcher(vertex.source()).find()){entry.vertexName=vertex.name();entry.fragmentName=fragment.name();entry.fragmentSource=fragment.source();entry.vertexSource=vertex.source();}
+            if(geometry==null&&SECTION_OFFSET.matcher(vertex.source()).find()){entry.vertexName=vertex.name();entry.fragmentName=fragment.name();entry.fragmentSource=fragment.source();entry.vertexSource=vertex.source();}
         }catch(RuntimeException|Error failure){programs.remove(shader.getId());throw failure;}
     }
     private static void bindLocations(Entry entry){

@@ -12,7 +12,7 @@ def tiers = [
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
                    loaderMixins: [neoforge: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin']],
                    tierMixins: [
-                                'VeilCompiledProgram121Mixin', 'VeilShaderCompiler121Mixin', 'VeilCompiledShader121Mixin', 'VeilShaderSource121Access',
+                                'VeilCompiledProgram121Mixin', 'VeilShaderCompiler121Mixin', 'LodestoneProgram121Mixin', 'VeilCompiledShader121Mixin', 'VeilShaderSource121Access',
                                 'VeilUniformCache121Mixin', 'VeilShaderProgram121Mixin', 'VeilUniform121Access', 'VeilTextureCache121Access',
                                 'VeilScreenQuad121Mixin', 'GlStateProgram121Mixin', 'ShaderInstanceProgram121Access', 'EffectInstanceProgram121Access',
                                 'LevelEntityClasses121Mixin', 'EntitySectionManagerClasses121Mixin', 'EntityLight121Mixin', 'EntityDispatcherLight121Mixin',
