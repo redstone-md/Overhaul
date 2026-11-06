@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
@@ -40,6 +41,11 @@ final class BlazePackShadows {
         for (int layer = 0; layer < LAYERS.length; layer++) casting |= 1L << (LAYER_IDS[layer] = LAYERS[layer].getChunkLayerId());
         CASTING = casting;
     }
+    /**
+     * Kept casters stand while the camera moves less than DRIFT blocks and the light turns less than about half a degree:
+     * the frustum is widened by MARGIN, which covers that drift, a pack's two-block shadow snap and the turn at 200 blocks.
+     */
+    private static final float MARGIN = 10, DRIFT = 4, TURN = 0.99996f;
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
     private SectionRenderDispatcher.RenderSection[] indexed = new SectionRenderDispatcher.RenderSection[0];
@@ -50,6 +56,10 @@ final class BlazePackShadows {
     private long[] contents = new long[0], contentsAt = new long[0];
     private BlazeMesh[] meshes = new BlazeMesh[0];
     private int casterCount;
+    private double keptX, keptY, keptZ;
+    private float lightX, lightY, lightZ;
+    private long keptAt = -1;
+    private boolean kept, incomplete;
     private int seenMoves = -1;
     private int width, height, depth;
 
@@ -81,9 +91,16 @@ final class BlazePackShadows {
      * A caster's layer meshes are looked up again only when its compiled state changed, so the passes read flat arrays.
      */
     private void collect(ViewArea sections, double x, double y, double z) {
+        if (sections == null) {
+            casterCount = 0;
+            kept = false;
+            return;
+        }
+        long now = BlazeVisibleSections.changes();
+        if (index(sections.sections)) kept = false;
+        if (still(now, x, y, z)) return;
         casterCount = 0;
-        if (sections == null) return;
-        index(sections.sections);
+        incomplete = false;
         // Without the grid mixin, or with a grid that does not cover the array, sections are walked as columns of one.
         if (sections instanceof BlazeSectionGrid grid) {
             width = grid.overhaul$gridWidth();
@@ -98,24 +115,41 @@ final class BlazePackShadows {
         boolean bounded = settings.fov() == null;
         if (bounded) frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
-        double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
+        boolean reuse = BlazeOptimization.PACK_SHADOW_REUSE.on();
+        float margin = reuse ? MARGIN : 0;
+        double limit = multiplier > 0 ? settings.distance() * multiplier + 16 + margin : Double.MAX_VALUE;
         int[] origins = this.origins;
-        long now = BlazeVisibleSections.changes();
         // Columns first: most fall outside the light's frustum whole, and one fully inside needs no test per section.
         for (int column = 0; column < width * depth; column++) {
             int base = column / width * height * width + column % width, at = base * 3;
             float minX = (float) (origins[at] - x), minZ = (float) (origins[at + 2] - z), bottom = (float) (origins[at + 1] - y);
             if (Math.abs(minX + 8) > limit || Math.abs(minZ + 8) > limit) continue;
-            int side = bounded ? frustum.intersectAab(minX, bottom, minZ, minX + 16, bottom + height * 16, minZ + 16) : FrustumIntersection.INSIDE;
+            int side = bounded ? frustum.intersectAab(minX - margin, bottom - margin, minZ - margin, minX + 16 + margin, bottom + height * 16 + margin, minZ + 16 + margin) : FrustumIntersection.INSIDE;
             if (side != FrustumIntersection.INSIDE && side != FrustumIntersection.INTERSECT) continue;
             for (int layer = 0; layer < height; layer++) collect(base + layer * width, minX, minZ, (float) (origins[(base + layer * width) * 3 + 1] - y),
-                    limit, bounded && side != FrustumIntersection.INSIDE, now);
+                    limit, margin, bounded && side != FrustumIntersection.INSIDE, now);
         }
+        kept = reuse && !incomplete;
+        keptAt = now;
+        keptX = x;
+        keptY = y;
+        keptZ = z;
+        lightX = view.m02();
+        lightY = view.m12();
+        lightZ = view.m22();
     }
 
-    private void collect(int index, float minX, float minZ, float minY, double limit, boolean test, long now) {
+    /** True when the casters kept from an earlier frame still cover this one. */
+    private boolean still(long now, double x, double y, double z) {
+        if (!kept || now != keptAt || Math.abs(x - keptX) > DRIFT || Math.abs(y - keptY) > DRIFT || Math.abs(z - keptZ) > DRIFT) return false;
+        float turn = view.m02() * lightX + view.m12() * lightY + view.m22() * lightZ;
+        float length = view.m02() * view.m02() + view.m12() * view.m12() + view.m22() * view.m22();
+        return turn > TURN * (float) Math.sqrt(length * (lightX * lightX + lightY * lightY + lightZ * lightZ));
+    }
+
+    private void collect(int index, float minX, float minZ, float minY, double limit, float margin, boolean test, long now) {
         if (Math.abs(minY + 8) > limit) return;
-        if (test && !frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16)) return;
+        if (test && !frustum.testAab(minX - margin, minY - margin, minZ - margin, minX + 16 + margin, minY + 16 + margin, minZ + 16 + margin)) return;
         if (contentsAt[index] != now) {
             contentsAt[index] = now;
             contents[index] = ((BlazeSectionBuffers) indexed[index]).overhaul$contents() & CASTING;
@@ -136,10 +170,12 @@ final class BlazePackShadows {
             meshes[index * LAYERS.length + layer] = mesh;
         }
         seen[index] = complete ? contents : 0;
+        if (!complete) incomplete = true;
     }
 
-    private void index(SectionRenderDispatcher.RenderSection[] all) {
-        if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return;
+    /** True when the sections were indexed again, which drops kept casters. */
+    private boolean index(SectionRenderDispatcher.RenderSection[] all) {
+        if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return false;
         // A section moved to a new origin is rebuilt through an empty state, so only a new array clears these.
         if (all != indexed) {
             contents = new long[all.length];
@@ -158,6 +194,7 @@ final class BlazePackShadows {
             origins[index * 3 + 1] = origin.getY();
             origins[index * 3 + 2] = origin.getZ();
         }
+        return true;
     }
 
     private void cast(int layer, String program, double x, double y, double z) {

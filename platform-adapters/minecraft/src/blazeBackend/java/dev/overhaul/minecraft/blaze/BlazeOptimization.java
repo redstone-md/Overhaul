@@ -48,7 +48,8 @@ public enum BlazeOptimization {
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame"),
     PACK_BLOCK_IDS("packBlockIds", "Terrain vertices carry the shader pack's block ids for mc_Entity; off, every block reads -1"),
     PACK_FRAME_QUEUE("packFrameQueue", "Shader pack passes recorded into the frame's command buffers instead of each waiting for the GPU"),
-    PACK_SECTION_BATCH("packSectionBatch", "Shader pack terrain as one indirect draw per layer, each section's offset read per instance; needs sectionBatch");
+    PACK_SECTION_BATCH("packSectionBatch", "Shader pack terrain as one indirect draw per layer, each section's offset read per instance; needs sectionBatch"),
+    PACK_SHADOW_REUSE("packShadowReuse", "Shadow casters kept between frames while the camera, the sun and the sections hold still, tested against a light frustum widened to cover the drift");
 
 
     private final String key, description;
