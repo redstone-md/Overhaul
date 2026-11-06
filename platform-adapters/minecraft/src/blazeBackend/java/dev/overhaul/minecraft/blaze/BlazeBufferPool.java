@@ -39,6 +39,8 @@ final class BlazeBufferPool implements AutoCloseable {
         Page page=new Page(host?allocator.hostBuffer(capacity,usage):allocator.deviceBuffer(capacity,usage));
         pages.add(page);allocated+=capacity;return page.acquire(bytes,reserved);
     }
+    /** Every slice starts on a multiple of this. */
+    int alignment(){return alignment;}
     private Slice find(int bytes,int reserved){for(Page page:pages){Slice slice=page.acquire(bytes,reserved);if(slice!=null)return slice;}return null;}
     private int align(int bytes){return Math.toIntExact(((long)bytes+alignment-1)/alignment*alignment);}
     @Override public void close(){

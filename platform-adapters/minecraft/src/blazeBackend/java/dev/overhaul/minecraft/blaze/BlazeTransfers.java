@@ -29,8 +29,24 @@ final class BlazeTransfers {
     BlazeBufferPool.Slice geometry(ByteBuffer source){
         return geometry(source.remaining(),(target,offset)->target.put(source.slice(source.position()+offset,target.remaining())));
     }
+    /**
+     * Vertices start on a multiple of their stride, so every section in a page binds the page at offset zero and the
+     * sections of one layer share one multi-draw per page instead of one per distinct leftover.
+     */
+    BlazeGeometryRange vertices(ByteBuffer source,int stride){
+        int alignment=geometry.alignment(),bytes=source.remaining();
+        if(!BlazeOptimization.STRIDE_OFFSETS.on()||alignment%stride==0)return geometry(source);
+        int slack=stride-gcd(alignment,stride);
+        BlazeBufferPool.Slice destination=geometry.acquire(bytes+slack);
+        int shift=(stride-destination.offset()%stride)%stride;
+        fill(destination,shift,bytes,(target,offset)->target.put(source.slice(source.position()+offset,target.remaining())));
+        return new BlazeShiftedRange(destination,shift);
+    }
+    private static int gcd(int a,int b){while(b!=0){int t=a%b;a=b;b=t;}return a;}
     BlazeBufferPool.Slice geometry(int bytes,BiConsumer<ByteBuffer,Integer> writer){
-        BlazeBufferPool.Slice destination=geometry.acquire(bytes);
+        return fill(geometry.acquire(bytes),0,bytes,writer);
+    }
+    private BlazeBufferPool.Slice fill(BlazeBufferPool.Slice destination,int base,int bytes,BiConsumer<ByteBuffer,Integer> writer){
         try{
             for(int offset=0;offset<bytes;){
                 int length=Math.min(MAX_CHUNK,bytes-offset);
@@ -40,7 +56,7 @@ final class BlazeTransfers {
                         ByteBuffer target=mapping.buffer();writer.accept(target,offset);
                         if(target.hasRemaining())throw new IllegalStateException("Geometry writer did not fill its bounded upload slice");
                     }
-                    BufferCopy operation=new BufferCopy(staging,destination,offset);staging=null;
+                    BufferCopy operation=new BufferCopy(staging,destination,base+offset);staging=null;
                     queue.add(operation,length);
                 }finally{if(staging!=null)staging.close();}
                 offset+=length;

@@ -60,6 +60,7 @@ public enum BlazeOptimization {
     SHADOW_REACH("shadowReach", "Shadow casters whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map; needs packShadowReuse"),
     SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable"),
     PIXEL_ROWS("pixelRows", "Screenshot and other RGBA pixel reads copied a row at a time instead of a byte at a time, so the GPU waits less"),
+    STRIDE_OFFSETS("strideOffsets", "Section vertices placed on a multiple of their stride, so a shader pack's wider vertices share one draw per buffer page instead of one per leftover offset"),
     DH_DEVICE_CACHE("dhDeviceCache", "Each Distant Horizons vertex buffer keeps the device buffer it resolved to instead of looking it up by name every frame"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
