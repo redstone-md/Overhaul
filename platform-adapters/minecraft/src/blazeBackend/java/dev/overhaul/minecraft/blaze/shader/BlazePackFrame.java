@@ -193,6 +193,7 @@ public final class BlazePackFrame implements AutoCloseable {
             runtime = new PackGraphRuntime(renderer.context(), renderer.allocator(), compiled, targetWidth, targetHeight, compiler, BlazePackScene.worldPrograms(compiled), false);
             if (BlazeOptimization.PACK_FRAME_QUEUE.on()) runtime.recordInto(renderer.packRecorder());
             runtime.reuseGraphShapes(BlazeOptimization.PACK_GRAPH_SHAPES.on());
+            runtime.resolveGameTextures(this::gameTexture);
             if (BlazePackScene.drawsWorld(compiled)) scene = new BlazePackScene(renderer, compiled, runtime, uniforms);
             if (scene != null && scene.castsShadows()) shadows = new BlazePackShadows(renderer, scene, runtime, compiled.shadow());
             pack = compiled;
@@ -215,6 +216,14 @@ public final class BlazePackFrame implements AutoCloseable {
             failure.addSuppressed(secondary);
             return failure;
         }
+    }
+
+    /** The game texture at {@code location}, such as the block atlas, as the game samples it; null when it has none. */
+    private PackGraphRuntime.GameTexture gameTexture(String location) {
+        var key = net.minecraft.resources.ResourceLocation.tryParse(location);
+        if (key == null) return null;
+        var sampled = renderer.textures().resolve(minecraft.getTextureManager().getTexture(key).getId());
+        return new PackGraphRuntime.GameTexture(sampled.view(), sampled.sampler());
     }
 
     private PackGraphRuntime.Frame frame(RenderTarget main) {

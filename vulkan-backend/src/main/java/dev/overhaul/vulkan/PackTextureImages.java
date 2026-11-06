@@ -24,7 +24,7 @@ final class PackTextureImages implements AutoCloseable {
             initialized=true;
         }catch(RuntimeException|Error failure){close();throw failure;}
     }
-    boolean overrides(CompiledShaderPack.Program program,String sampler){return metadata.image(program,sampler)!=null;}
+    boolean overrides(CompiledShaderPack.Program program,String sampler){return metadata.image(program,sampler)!=null||metadata.gameTexture(program,sampler)!=null;}
     GpuImageView view(CompiledShaderPack.Program program,String sampler){
         var texture=texture(program,sampler);return texture==null?null:texture.nativeView();
     }

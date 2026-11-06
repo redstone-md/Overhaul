@@ -121,6 +121,11 @@ final class BlazePackDraw implements BlazeProgramShape {
             samplers.put(name, new BlazeTextures.Sampled(runtime.packImage(code.bindings(), name), storage ? 0 : runtime.packImageSampler(name), true));
             return;
         }
+        var game = runtime.gameTexture(program, name);
+        if (game != null) {
+            samplers.put(name, new BlazeTextures.Sampled(game.view(), game.sampler()));
+            return;
+        }
         GpuImageView custom = runtime.customTexture(program, name);
         if (custom != null) {
             samplers.put(name, new BlazeTextures.Sampled(custom, runtime.customSamplerHandle(program, name)));

@@ -10,8 +10,13 @@ import java.util.Random;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Complete immutable 2D pack assets; neither a pack path nor an open archive escapes loading. */
+/**
+ * Complete immutable 2D pack assets; neither a pack path nor an open archive escapes loading. A value such as
+ * {@code minecraft:textures/atlas/blocks.png} names a game texture instead, which the platform binds by location.
+ */
 public final class PackTextures {
+    private static final Pattern LOCATION=Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
+    private static final String GAME="<game>";
     private static final Pattern NOISE=Pattern.compile("\\bconst\\s+int\\s+noiseTextureResolution\\s*=\\s*([^;]+);");
     private static final String NOISE_IMAGE="<procedural-noise>";
     private static final long MAX_DECODED=134_217_728,MAX_ENCODED=67_108_864;
@@ -29,6 +34,7 @@ public final class PackTextures {
     private final Map<String,String> global;
     private final Map<String,Set<Integer>> deactivated;
     private final Map<String,Map<String,Image>> inputs;
+    private final Map<String,Map<String,String>> games;
     private final String noise;
     private PackTextures(Builder builder,Map<String,Image> images,java.util.List<CompiledShaderPack.Program> programs){
         this.images=Map.copyOf(images);bindings=Map.copyOf(builder.bindings);global=Map.copyOf(builder.global);noise=builder.noise;
@@ -41,28 +47,38 @@ public final class PackTextures {
             for(var entry:program.state().flips().entrySet())if(entry.getValue()){int index=PackRenderTargets.colorIndex(entry.getKey());if(index>=0)prior.add(index);}
         }
         deactivated=Map.copyOf(snapshots);
-        Map<String,Map<String,Image>> resolved=new LinkedHashMap<>();
+        Map<String,Map<String,Image>> resolved=new LinkedHashMap<>();Map<String,Map<String,String>> located=new LinkedHashMap<>();
         for(var program:programs){
-            Map<String,Image> samplers=new LinkedHashMap<>();
+            Map<String,Image> samplers=new LinkedHashMap<>();Map<String,String> locations=new LinkedHashMap<>();
             for(String name:program.code().descriptors().samplers().keySet()){
-                Image image=resolve(program,name);if(image!=null)samplers.put(name,image);
+                String path=resolve(program,name);if(path==null)continue;
+                if(path.startsWith(GAME))locations.put(name,path.substring(GAME.length()));
+                else{Image image=images.get(path);if(image!=null)samplers.put(name,image);}
             }
-            resolved.put(program.name(),Map.copyOf(samplers));
+            resolved.put(program.name(),Map.copyOf(samplers));located.put(program.name(),Map.copyOf(locations));
         }
-        inputs=Map.copyOf(resolved);
+        inputs=Map.copyOf(resolved);games=Map.copyOf(located);
     }
     public Map<String,Image> images(){return images;}
     /** Stage overrides precede added custom samplers and the default noise image. */
     public Image image(CompiledShaderPack.Program program,String sampler){
         Map<String,Image> samplers=inputs.get(program.name());return samplers==null?null:samplers.get(sampler);
     }
-    private Image resolve(CompiledShaderPack.Program program,String sampler){
+    /** The game texture location a program's sampler names, or null when it is a pack image or unbound. */
+    public String gameTexture(CompiledShaderPack.Program program,String sampler){
+        Map<String,String> samplers=games.get(program.name());return samplers==null?null:samplers.get(sampler);
+    }
+    /** Every game texture location some program samples. */
+    public Set<String> gameTextures(){
+        Set<String> locations=new java.util.TreeSet<>();for(var samplers:games.values())locations.addAll(samplers.values());return Set.copyOf(locations);
+    }
+    private String resolve(CompiledShaderPack.Program program,String sampler){
         String path=null;int color=PackRenderTargets.colorIndex(sampler);
         if(color<0||!deactivated.getOrDefault(program.name(),Set.of()).contains(color))for(String alias:aliases(program,sampler)){
             path=bindings.get(new Binding(stage(program.stage()),alias));if(path!=null)break;
         }
         if(path==null)path=global.get(sampler);if(path==null&&sampler.equals("noisetex"))path=noise;
-        return path==null?null:images.get(path);
+        return path;
     }
     private static java.util.List<String> aliases(CompiledShaderPack.Program program,String name){
         int color=PackRenderTargets.colorIndex(name);
@@ -100,7 +116,7 @@ public final class PackTextures {
         private boolean needsNoise;
         public Builder(ShaderPackProperties properties)throws IOException{
             for(var entry:new java.util.TreeMap<>(properties.values()).entrySet()){
-                String key=entry.getKey();if(!property(key))continue;String path=path(entry.getValue());paths.add(path);
+                String key=entry.getKey();if(!property(key))continue;String path=path(entry.getValue());if(!path.startsWith(GAME))paths.add(path);
                 if(key.equals("texture.noise")){noise=path;continue;}
                 if(key.startsWith("customTexture.")){global.put(key.substring(14),path);continue;}
                 String[] parts=key.split("\\.");
@@ -146,6 +162,7 @@ public final class PackTextures {
             return new PackTextures(this,loaded,programs);
         }
         private static String path(String value)throws IOException{
+            if(LOCATION.matcher(value).matches()&&!value.startsWith("<"))return GAME+value;
             if(value.isBlank()||value.indexOf(':')>=0||value.chars().anyMatch(Character::isWhitespace)||!value.toLowerCase(java.util.Locale.ROOT).endsWith(".png"))
                 throw unsupported("Only pack-local PNG custom textures are bound: "+value);
             return ShaderPackSource.normalize(value);

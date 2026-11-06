@@ -26,8 +26,11 @@ public final class PackGraphRuntime implements AutoCloseable {
     public record Frame(GpuImageView color,GpuImageView depth,PackRenderTargets.Color fog,Map<String,GpuImageView> textures){
         public Frame{java.util.Objects.requireNonNull(color);java.util.Objects.requireNonNull(fog);textures=Map.copyOf(textures);}
     }
+    /** A game texture a pack names by location, with the sampler the game reads it through. */
+    public record GameTexture(GpuImageView view,long sampler){}
     private final VulkanContext context;
     private final CompiledShaderPack pack;
+    private java.util.function.Function<String,GameTexture> games=location->null;
     private final PackTargetSwaps swaps=new PackTargetSwaps();
     private PackFrameGraph.Shapes shapes=new PackFrameGraph.Shapes();
     private final Map<CompiledShaderPack.Program,PackFullscreenPass> passes=new LinkedHashMap<>();
@@ -213,6 +216,11 @@ public final class PackGraphRuntime implements AutoCloseable {
         }
         for(int index:sampledShadowColors)shadows.generateColor(plan,index,mipmaps);
         for(String samplerName:bindings.samplers().keySet()){
+            GameTexture game=gameTexture(program,samplerName);
+            if(game!=null){
+                String name=plan.read(game.view());samples.put(samplerName,name);uses.put(name,usage);
+                sampleModes.put(samplerName,game.sampler());continue;
+            }
             GpuImageView custom=customTexture(program,samplerName);
             if(custom!=null){
                 String name=plan.read(custom);samples.put(samplerName,name);uses.put(name,usage);
@@ -247,6 +255,16 @@ public final class PackGraphRuntime implements AutoCloseable {
     public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}
     public GpuImageView customTexture(CompiledShaderPack.Program program,String name){requireOpen();return customTextures.view(program,name);}
     public long customSamplerHandle(CompiledShaderPack.Program program,String name){requireOpen();return customTextures.sampler(program,name);}
+    /** Looks up the game textures packs name by location; it is asked again each frame, so a reloaded texture is seen. */
+    public void resolveGameTextures(java.util.function.Function<String,GameTexture> resolver){requireOpen();games=java.util.Objects.requireNonNull(resolver);}
+    /** The game texture a program's sampler names, or null when it names none. */
+    public GameTexture gameTexture(CompiledShaderPack.Program program,String name){
+        requireOpen();String location=pack.textures().gameTexture(program,name);if(location==null)return null;
+        GameTexture texture=games.apply(location);
+        if(texture==null)throw new UnsupportedShaderException("Game texture is unavailable: "+location);
+        if(program.code().descriptors().comparisonSampler(name))throw new UnsupportedShaderException("Game texture cannot serve a depth comparison sampler: "+name);
+        return texture;
+    }
     /** True when a scene binding reads or writes a pack {@code image.*} rather than a graph image. */
     public boolean packImageBinding(dev.overhaul.shader.compat.ProgramBindings bindings,String name){requireOpen();return packImages.owns(bindings,name);}
     /** The pack image a binding names, in GENERAL layout; storage bindings name the image, sampled ones its sampler. */
