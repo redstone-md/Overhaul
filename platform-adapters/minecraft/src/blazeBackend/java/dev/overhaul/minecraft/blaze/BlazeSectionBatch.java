@@ -46,6 +46,8 @@ public final class BlazeSectionBatch implements AutoCloseable {
     private int firstTopology;
     private boolean ordered;
     private Runnable failed;
+    /** Tests this layer's sections on the GPU before they draw; null when the caller tested them or nothing may. */
+    private BlazeSectionOcclusion cull;
     /** Written out of order and then copied whole, since the mapped memory behind a slice is slow to touch piecemeal. */
     private ByteBuffer commandBytes, positionBytes;
 
@@ -66,7 +68,13 @@ public final class BlazeSectionBatch implements AutoCloseable {
         this.compact = compact;
         this.ordered = ordered;
         this.failed = failed;
+        cull = null;
         return this;
+    }
+
+    /** Lets the GPU drop this layer's sections that the occlusion's latest queued depth hides; until {@link #end}. */
+    void cullBy(BlazeSectionOcclusion occlusion) {
+        cull = occlusion;
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {
@@ -172,6 +180,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
         compact = null;
         state = null;
         failed = null;
+        cull = null;
     }
 
     private void finish() {
@@ -215,6 +224,14 @@ public final class BlazeSectionBatch implements AutoCloseable {
             throw failure;
         }
         pass.add(draw);
+        if (cull != null) {
+            try {
+                cull.cull(draw.commands(), draw.positions(), count);
+            } catch (RuntimeException | Error failure) {
+                pass.close();
+                throw failure;
+            }
+        }
         owner.enqueue(pass);
     }
 

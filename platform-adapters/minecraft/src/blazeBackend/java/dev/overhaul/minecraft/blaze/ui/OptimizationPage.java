@@ -14,7 +14,7 @@ import net.minecraft.network.chat.Component;
 final class OptimizationPage extends SettingsPage {
     private static final Map<BlazeOptimization, String> LABELS = labels();
     private static final List<Group> GROUPS = List.of(
-            new Group("Terrain", List.of(BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
+            new Group("Terrain", List.of(BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.GPU_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
                     BlazeOptimization.SECTION_LISTS, BlazeOptimization.SECTION_TABLE, BlazeOptimization.SECTION_BOUNDS,
                     BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS, BlazeOptimization.SECTION_DRAWS)),
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
@@ -101,6 +101,7 @@ final class OptimizationPage extends SettingsPage {
         Map<BlazeOptimization, String> labels = new EnumMap<>(BlazeOptimization.class);
         labels.put(BlazeOptimization.SECTION_BATCH, "Batched terrain draws");
         labels.put(BlazeOptimization.SECTION_OCCLUSION, "Terrain occlusion");
+        labels.put(BlazeOptimization.GPU_OCCLUSION, "Terrain occlusion on the GPU");
         labels.put(BlazeOptimization.ENTITY_OCCLUSION, "Entity occlusion");
         labels.put(BlazeOptimization.BLOCK_ENTITY_OCCLUSION, "Block entity occlusion");
         labels.put(BlazeOptimization.COMPACT_SECTIONS, "Compact terrain vertices");

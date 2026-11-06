@@ -50,10 +50,13 @@ abstract class LevelRendererSectionBatch121Mixin {
         boolean forward = layer != RenderType.translucent();
         BlazeRenderer renderer = BlazeFrontend.require();
         BlazeSectionBatch batch = renderer.beginSections((BlazeShaderAccess) RenderSystem.getShader(), !forward);
-        BlazeSectionOcclusion occlusion = renderer.occlusion();
+        BlazeSectionOcclusion capture = renderer.occlusion(), occlusion = capture;
         boolean listed = (Object) this instanceof BlazeLayerLists lists && lists.overhaul$layerListed();
         int layerId = BlazeChunkLayers.id(layer);
-        if (occlusion != null) occlusion.prepare(x, y, z);
+        if (capture != null) {
+            capture.prepare(x, y, z);
+            if (capture.handTo(batch)) occlusion = null;
+        }
         BlazeVisibleSections.Layer table = (Object) this instanceof BlazeLayerLists lists ? lists.overhaul$layerTable(layer) : null;
         if (table != null) {
             boolean flat = table.draws();
@@ -77,6 +80,6 @@ abstract class LevelRendererSectionBatch121Mixin {
         }
         batch.end();
         // After the last opaque terrain layer and before anything that moves: only terrain may hide terrain.
-        if (occlusion != null && layer == RenderType.cutout()) occlusion.capture(renderer.currentTarget(), modelView, projection, x, y, z);
+        if (capture != null && layer == RenderType.cutout()) capture.capture(renderer.currentTarget(), modelView, projection, x, y, z);
     }
 }

@@ -56,18 +56,23 @@ public enum BlazeOptimization {
     POOL_RANGES("poolRanges", "Free ranges of per-frame buffer pages kept in sorted arrays instead of a tree of boxed offsets"),
     UNIFORM_PLANS("uniformPlans", "Shader pack uniforms filled from the source each name resolved to the first time instead of asking every source again"),
     SHADOW_COLUMNS("shadowColumns", "Kept shadow casters tested against each frame's light frustum a column at a time, section by section only where the frustum cuts the column"),
-    SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable");
-
+    SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable"),
+    GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
-    private final boolean enabled;
+    private final boolean fallback, enabled;
 
     BlazeOptimization(String key, String description) {
+        this(key, description, true);
+    }
+
+    BlazeOptimization(String key, String description, boolean fallback) {
         this.key = key;
         this.description = description;
+        this.fallback = fallback;
         String value = System.getProperty("overhaul.opt." + key);
         if (value == null) value = Settings.FILE_VALUES.getProperty(key);
-        enabled = value == null || !value.trim().equalsIgnoreCase("false");
+        enabled = read(value, fallback);
         if (!enabled) LoggerFactory.getLogger(BlazeOptimization.class).info("Overhaul optimisation off: {}", key);
     }
 
@@ -90,8 +95,13 @@ public enum BlazeOptimization {
 
     /** What the file asks for now, which differs from {@link #on()} until the game restarts. */
     public boolean saved() {
-        String value = Settings.FILE_VALUES.getProperty(key);
-        return value == null || !value.trim().equalsIgnoreCase("false");
+        return read(Settings.FILE_VALUES.getProperty(key), fallback);
+    }
+
+    private static boolean read(String value, boolean fallback) {
+        if (value == null) return fallback;
+        String trimmed = value.trim();
+        return trimmed.equalsIgnoreCase("true") || !trimmed.equalsIgnoreCase("false") && fallback;
     }
 
     /** Rewrites each line in place, so comments and order the player left in the file survive. */
@@ -130,7 +140,7 @@ public enum BlazeOptimization {
             try (Writer writer = Files.newBufferedWriter(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 if (created) writer.write("# Set a line to false and restart the game to measure without that optimisation.\n");
                 for (BlazeOptimization option : values()) {
-                    if (!Settings.FILE_VALUES.containsKey(option.key)) writer.write("# " + option.description + "\n" + option.key + "=true\n");
+                    if (!Settings.FILE_VALUES.containsKey(option.key)) writer.write("# " + option.description + "\n" + option.key + "=" + option.fallback + "\n");
                 }
             }
         } catch (IOException failure) {

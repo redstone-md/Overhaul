@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import dev.overhaul.core.culling.SoftwareDepthBuffer;
 import dev.overhaul.vulkan.GpuAllocator;
+import dev.overhaul.vulkan.GpuBuffer;
 import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.VulkanContext;
 import org.joml.Matrix4f;
@@ -25,8 +26,17 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     /** Depth this recent says as much as the next frame's would, and every capture costs a readback and a new pyramid. */
     private static final long MIN_CAPTURE_NANOS = 10_000_000L;
 
+    private final VulkanContext context;
+    private final BlazeQueue queue;
     private final BlazeDepthTiles tiles;
     private final float[] viewProjection = new float[16];
+    /** The newest queued capture, which GPU tests queued after it read; the CPU's copy above lags it by a fence. */
+    private float[] queuedViewProjection;
+    private double queuedX, queuedY, queuedZ;
+    private int queuedWide, queuedHigh;
+    private long queuedAt;
+    private BlazeSectionCull cull;
+    private boolean cullFailed;
     /**
      * Verdicts by section, as origin then stamp and answer in neighbouring longs: layers ask about the same sections, and
      * only the camera or new depth can change an answer. Two sections sharing a slot only means one gets asked again.
@@ -42,7 +52,40 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
     private float grow;
 
     BlazeSectionOcclusion(VulkanContext context, GpuAllocator allocator, BlazeQueue queue) {
+        this.context = context;
+        this.queue = queue;
         tiles = new BlazeDepthTiles(context, allocator, queue);
+    }
+
+    /**
+     * Hands this layer's section tests to the batch when the GPU makes them; the caller then tests no section itself.
+     * Call after {@link #prepare}.
+     */
+    public boolean handTo(BlazeSectionBatch batch) {
+        if (!BlazeOptimization.GPU_OCCLUSION.on() || cullFailed) return false;
+        if (cull == null) {
+            try {
+                cull = new BlazeSectionCull(context, queue);
+            } catch (RuntimeException failure) {
+                cullFailed = true;
+                BlazeGlBoundary.reportOnce("section cull", "Terrain occlusion tests stay on the CPU: " + failure.getMessage());
+                return false;
+            }
+        }
+        batch.cullBy(this);
+        return true;
+    }
+
+    /** Queues the GPU test of these section draws, made against the camera last prepared; nothing when no capture applies. */
+    void cull(BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions, int count) {
+        GpuBuffer latest = tiles.latest();
+        if (latest == null || queuedViewProjection == null || System.nanoTime() - queuedAt > MAX_AGE_NANOS) return;
+        double dx = preparedX - queuedX, dy = preparedY - queuedY, dz = preparedZ - queuedZ, move = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (move > MAX_MOVE) return;
+        int tilesWide = (queuedWide + BlazeDepthTiles.TILE_PIXELS - 1) / BlazeDepthTiles.TILE_PIXELS;
+        int tilesHigh = (queuedHigh + BlazeDepthTiles.TILE_PIXELS - 1) / BlazeDepthTiles.TILE_PIXELS;
+        cull.enqueue(commands, positions, count, latest, new BlazeSectionCull.View(queuedViewProjection, (float) dx, (float) dy, (float) dz,
+                (float) move + MARGIN, tilesWide, tilesHigh, queuedWide, queuedHigh));
     }
 
     /** Called for each layer with the camera now; decides whether this layer's tests can mean anything. */
@@ -132,7 +175,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
         requestedAt = now;
         float[] matrix = new Matrix4f(projection).mul(modelView).get(new float[16]);
         int wide = target.width(), high = target.height();
-        tiles.capture(view, wide, high, (farthest, size) -> {
+        boolean queued = tiles.capture(view, wide, high, (farthest, size) -> {
             if (depth == null || depth.width() != size[0] || depth.height() != size[1]) depth = new SoftwareDepthBuffer(size[0], size[1]);
             depth.load(farthest);
             System.arraycopy(matrix, 0, viewProjection, 0, 16);
@@ -144,9 +187,18 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
             capturedAt = System.nanoTime();
             stamp++;
         });
+        if (!queued) return;
+        queuedViewProjection = matrix;
+        queuedX = x;
+        queuedY = y;
+        queuedZ = z;
+        queuedWide = wide;
+        queuedHigh = high;
+        queuedAt = now;
     }
 
     @Override public void close() {
+        if (cull != null) cull.close();
         tiles.close();
     }
 }

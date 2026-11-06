@@ -51,6 +51,8 @@ final class BlazeDepthTiles implements AutoCloseable {
     private final ArrayDeque<Readback> free = new ArrayDeque<>();
     private final Readback[] all = new Readback[READBACKS];
     private long setLayout, pipelineLayout, pipeline, pool;
+    /** The tiles of the newest queued capture; GPU work queued after it reads them in order. */
+    private GpuBuffer latest;
 
     BlazeDepthTiles(VulkanContext context, GpuAllocator allocator, BlazeQueue queue) {
         this.context = context;
@@ -102,14 +104,23 @@ final class BlazeDepthTiles implements AutoCloseable {
         }
     }
 
-    /** @param done receives the tiles, row 0 first as the image stores them, valid for the call only */
-    void capture(GpuImageView depth, int pixelsWide, int pixelsHigh, BiConsumer<FloatBuffer, int[]> done) {
+    /** The tile buffer of the newest queued capture, null before the first. */
+    GpuBuffer latest() {
+        return latest;
+    }
+
+    /**
+     * @param done receives the tiles, row 0 first as the image stores them, valid for the call only
+     * @return whether a capture was queued; false while every readback is still with the GPU
+     */
+    boolean capture(GpuImageView depth, int pixelsWide, int pixelsHigh, BiConsumer<FloatBuffer, int[]> done) {
         Readback readback = free.poll();
-        if (readback == null) return;
+        if (readback == null) return false;
         int tilesWide = (pixelsWide + TILE_PIXELS - 1) / TILE_PIXELS, tilesHigh = (pixelsHigh + TILE_PIXELS - 1) / TILE_PIXELS;
         int[] tiles = {tilesWide, tilesHigh};
         readback.point(depth, tilesWide * tilesHigh * Float.BYTES);
         queue.add(new Reduce(readback, depth, new int[]{pixelsWide, pixelsHigh, tilesWide, tilesHigh}), 0);
+        latest = readback.buffer;
         queue.retire(() -> {
             try (var mapped = readback.buffer.mapRange(0, readback.buffer.size(), true, false)) {
                 done.accept(mapped.buffer().order(ByteOrder.nativeOrder()).asFloatBuffer().limit(tilesWide * tilesHigh), tiles);
@@ -117,6 +128,7 @@ final class BlazeDepthTiles implements AutoCloseable {
                 free.add(readback);
             }
         });
+        return true;
     }
 
     @Override public void close() {
@@ -142,10 +154,14 @@ final class BlazeDepthTiles implements AutoCloseable {
             this.set = set;
         }
 
-        /** Only a readback no submission still uses gets here, so its set and buffer can change. */
+        /**
+         * Only a readback no submission still writes gets here, so its set can change. Section culls queued later may
+         * still read its buffer, so a buffer of the wrong size retires behind them instead of closing.
+         */
         private void point(GpuImageView depth, int bytes) {
             if (buffer != null && buffer.size() != bytes) {
-                buffer.close();
+                if (buffer == latest) latest = null;
+                queue.retire(buffer);
                 buffer = null;
             }
             if (buffer == null) buffer = allocator.hostBuffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -175,13 +191,16 @@ final class BlazeDepthTiles implements AutoCloseable {
         @Override public void record(VkCommandBuffer command) {
             images.transition(command, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             try (MemoryStack stack = VulkanStack.push()) {
+                // Section culls queued earlier may still read these tiles from a previous capture.
+                vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, null, null, null);
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(readback.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, stack.ints(size));
                 vkCmdDispatch(command, (size[2] + 7) / 8, (size[3] + 7) / 8, 1);
-                var barrier = VkBufferMemoryBarrier.calloc(1, stack).sType$Default().srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT).dstAccessMask(VK_ACCESS_HOST_READ_BIT)
+                var barrier = VkBufferMemoryBarrier.calloc(1, stack).sType$Default().srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_HOST_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
                         .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).buffer(readback.buffer.handle()).offset(0).size(VK_WHOLE_SIZE);
-                vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, null, barrier, null);
+                vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, null, barrier, null);
             }
         }
 
