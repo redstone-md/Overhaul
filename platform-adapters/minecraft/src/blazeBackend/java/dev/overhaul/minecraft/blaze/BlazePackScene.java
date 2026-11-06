@@ -62,7 +62,7 @@ public final class BlazePackScene implements AutoCloseable {
     private BlazeDrawState.Snapshot shadowRaster;
     private ShadercCompiler compiler;
     private int phase;
-    private boolean open, opaqueDone, weather, hand, sky;
+    private boolean open, opaqueDone, weather, hand, sky, entityShadows;
 
     public BlazePackScene(BlazeRenderer renderer, CompiledShaderPack pack, PackGraphRuntime runtime, PackGraphRuntime.Uniforms uniforms) {
         this.renderer = renderer;
@@ -264,17 +264,26 @@ public final class BlazePackScene implements AutoCloseable {
         if (caster != null) renderer.draw(mesh, caster.target(), caster.cast(modelView, projection, shadowTextures), shadowRaster);
     }
 
+    /** Brackets the game's entity draws made from the light camera, which the caster of the current layer draws into the shadow map. */
+    public void castEntities(boolean casting) {
+        entityShadows = casting;
+    }
+
     /** The shadow composite passes ran and may have flipped shadow colours, which gbuffer programs then sample. */
     public void shadowsDone() {
         nextPhase();
     }
 
     boolean routes(BlazeTarget target) {
-        return open && !programs.isEmpty() && target == main;
+        return open && (entityShadows || !programs.isEmpty() && target == main);
     }
 
     void draw(BlazeMesh mesh, BlazeShaderSnapshot game) {
         String shader = activeShader();
+        if (entityShadows) {
+            castEntity(mesh, game, shader);
+            return;
+        }
         if (weather && "particle".equals(shader)) shader = WEATHER;
         if (shader != null && BlazePackSelection.onTop(shader)) {
             BlazePass pass = renderer.capture(mesh, main, game);
@@ -293,6 +302,17 @@ public final class BlazePackScene implements AutoCloseable {
             }
         }
         renderer.draw(mesh, plain(), game);
+    }
+
+    /** The game's own matrices are the light camera's here, so the caster keeps them with the entity's own textures. */
+    private void castEntity(BlazeMesh mesh, BlazeShaderSnapshot game, String shader) {
+        if (caster == null) return;
+        try {
+            renderer.draw(mesh, caster.target(), caster.snapshot(game, shader == null ? 0.1f : BlazePackSelection.alphaCutoff(shader)), shadowRaster);
+        } catch (RuntimeException failure) {
+            BlazeGlBoundary.reportOnce("pack entity shadows " + caster.program.name(), "Pack program " + caster.program.name() + " cannot cast entity shadows: " + failure);
+            caster = null;
+        }
     }
 
     /** Whether the terrain shader now active can draw its layer in one batch; the first ask compiles the variant. */

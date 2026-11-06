@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze.shader;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import org.joml.Matrix4fc;
 import dev.overhaul.minecraft.blaze.BlazeLoader121;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.LivingEntity;
@@ -16,5 +18,16 @@ final class BlazePackGame {
 
     static float downfall(Biome biome) {
         return BlazeLoader121.downfall(biome);
+    }
+
+    /** Puts the game's model-view matrix at {@code view} until {@link #restoreModelView}. */
+    static void modelView(Matrix4fc view) {
+        RenderSystem.getModelViewStack().pushMatrix().set(view);
+        RenderSystem.applyModelViewMatrix();
+    }
+
+    static void restoreModelView() {
+        RenderSystem.getModelViewStack().popMatrix();
+        RenderSystem.applyModelViewMatrix();
     }
 }

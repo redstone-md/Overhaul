@@ -1,5 +1,7 @@
 package dev.overhaul.minecraft.blaze.shader;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import org.joml.Matrix4fc;
 import com.google.gson.JsonElement;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -27,5 +29,17 @@ final class BlazePackGame {
             lastBiome = biome;
         }
         return lastDownfall;
+    }
+
+    /** Puts the game's model-view matrix at {@code view} until {@link #restoreModelView}. */
+    static void modelView(Matrix4fc view) {
+        RenderSystem.getModelViewStack().pushPose();
+        RenderSystem.getModelViewStack().last().pose().set(view);
+        RenderSystem.applyModelViewMatrix();
+    }
+
+    static void restoreModelView() {
+        RenderSystem.getModelViewStack().popPose();
+        RenderSystem.applyModelViewMatrix();
     }
 }

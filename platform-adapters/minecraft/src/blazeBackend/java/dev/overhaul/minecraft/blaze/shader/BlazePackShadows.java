@@ -27,7 +27,7 @@ import org.joml.Matrix4f;
 /**
  * Draws terrain from the pack's light camera into its shadow map, before the frame's gbuffers read that map. The game's
  * own visibility list follows the player's camera, so casters come from every built section the light can see. A
- * section the game has never built casts nothing until it does; entities do not cast yet.
+ * section the game has never built casts nothing until it does. Entities cast with the opaque terrain.
  */
 final class BlazePackShadows {
     private final BlazeRenderer renderer;
@@ -83,6 +83,7 @@ final class BlazePackShadows {
     private float tightLightX, tightLightY, tightLightZ;
     private final Matrix4f tightProjection = new Matrix4f(), player = new Matrix4f(), tightPlayer = new Matrix4f();
     private final BlazeShadowReach reach = new BlazeShadowReach();
+    private final BlazePackEntityShadows entities = new BlazePackEntityShadows();
     private long keptAt = -1;
     private boolean kept, incomplete;
     private int seenMoves = -1;
@@ -96,7 +97,7 @@ final class BlazePackShadows {
         for (int layer = 0; layer < LAYERS.length; layer++) layerMeshes[layer] = new BlazeDrawTable();
     }
 
-    void render(Minecraft minecraft, ViewArea sections, BlazePackUniforms uniforms, Camera camera, LightTexture light, PackGraphRuntime.Frame frame) {
+    void render(Minecraft minecraft, ViewArea sections, BlazePackUniforms uniforms, Camera camera, float partial, LightTexture light, PackGraphRuntime.Frame frame) {
         uniforms.shadowView(view);
         uniforms.shadowProjection(projection);
         uniforms.viewProjection(player);
@@ -109,6 +110,9 @@ final class BlazePackShadows {
         cast(0, "shadow_solid", position.x, position.y, position.z);
         cast(1, "shadow_cutout", position.x, position.y, position.z);
         cast(2, "shadow_cutout", position.x, position.y, position.z);
+        scene.shadowLayer("shadow_entities");
+        float multiplier = settings.renderMultiplier();
+        entities.cast(minecraft, scene, camera, partial, view, projection, settings.fov() == null, multiplier > 0 ? settings.distance() * multiplier : settings.distance());
         renderer.gpuMark("shadowOpaque");
         runtime.snapshotOpaqueShadow(renderer.packCommands());
         cast(3, "shadow_water", position.x, position.y, position.z);

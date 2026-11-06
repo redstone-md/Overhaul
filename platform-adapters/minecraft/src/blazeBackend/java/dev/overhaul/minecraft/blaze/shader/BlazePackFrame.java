@@ -96,7 +96,7 @@ public final class BlazePackFrame implements AutoCloseable {
                 scene.distantCamera(view, uniforms.distantProjection(distantProjection));
             }
             if (shadows != null) {
-                shadows.render(minecraft, sections, uniforms, camera, light, frame(main));
+                shadows.render(minecraft, sections, uniforms, camera, partial, light, frame(main));
                 scene.shadowsDone();
                 renderer.gpuMark("shadow");
             }
