@@ -147,8 +147,11 @@ own debug string.
 
 ## Open items
 
-- BSL flicker while walking, reported by a tester. Ten walk frames on 2026-11-06 were steady; not reproduced.
-- A flash with Complementary. Not reproduced in the same walk check.
+- BSL flicker while walking, reported by a tester. Ten spectator walk frames, then 24 frames of a survival
+  walk on the ground with the hand in view (150 ms apart), on 2026-11-06 were steady; not reproduced.
+- A flash with Complementary. The same 24-frame ground walk showed no flash: sky and mid-screen brightness
+  stayed within 3 levels, and the two jumps in the ground band are grass and flowers entering view.
+  Both need the tester's steps, settings or a recording to go further.
 - Sky mapping matches Iris at noon, sunset, night and sunrise for BSL and Complementary.
 - Distant Horizons LODs drawn through a pack had block and sky light swapped and stayed lit at
   night. Fixed by reading block light from the high nibble.
