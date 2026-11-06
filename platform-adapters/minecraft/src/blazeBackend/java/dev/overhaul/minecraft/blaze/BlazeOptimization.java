@@ -39,6 +39,7 @@ public enum BlazeOptimization {
     SECTION_TABLE("sectionTable", "Terrain draws read flat per-layer tables of meshes and positions built by the section scan"),
     SECTION_BOUNDS("sectionBounds", "Frustum test over flat section bounds instead of the graph's linked nodes"),
     ENTITY_SCANS("entityScans", "Cataclysm and Alex's Caves camera effect entity scans once a tick instead of every frame"),
+    HEAD_CURIOS("headCurios", "Youkai's Feasts camellia head check answered once per tick per entity instead of searching curios every frame"),
     SECTION_SCAN_REUSE("sectionScanReuse", "Visible section walks skipped while no section or the visible list has changed"),
     DH_CLOUDS("dhClouds", "Distant Horizons cloud movement updated at 60 Hz"),
     DH_RENDER_LIST("dhRenderList", "Distant Horizons visible buffer list built without hashing each buffer"),

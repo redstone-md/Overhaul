@@ -24,7 +24,7 @@ final class OptimizationPage extends SettingsPage {
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
-            new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS,
+            new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS, BlazeOptimization.HEAD_CURIOS,
                     BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
 
@@ -122,6 +122,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SECTION_TABLE, "Terrain draw tables");
         labels.put(BlazeOptimization.SECTION_BOUNDS, "Flat frustum test");
         labels.put(BlazeOptimization.ENTITY_SCANS, "Camera effect scans per tick");
+        labels.put(BlazeOptimization.HEAD_CURIOS, "Youkai camellia check per tick");
         labels.put(BlazeOptimization.SECTION_SCAN_REUSE, "Reused section walks");
         labels.put(BlazeOptimization.DH_CLOUDS, "Distant Horizons clouds at 60 Hz");
         labels.put(BlazeOptimization.DH_RENDER_LIST, "Distant Horizons render list");
