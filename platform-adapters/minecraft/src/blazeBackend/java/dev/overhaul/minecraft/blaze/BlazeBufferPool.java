@@ -68,46 +68,57 @@ final class BlazeBufferPool implements AutoCloseable {
         Pin share(){slice.references=Math.addExact(slice.references,1);return new Pin(slice);}
         @Override public void close(){if(slice!=null){Slice old=slice;slice=null;old.releaseReference();}}
     }
-    /** Free ranges by offset for coalescing, and by size so an acquire takes the smallest fit without walking fragments. */
+    /**
+     * Free ranges by offset for coalescing, and by size so an acquire takes the smallest fit without walking fragments.
+     * Both orders are sorted long arrays when {@link BlazeOptimization#POOL_RANGES} is on: the boxed tree the offsets
+     * lived in cost a pointer chase per level on every acquire.
+     */
+    private static final boolean FLAT=BlazeOptimization.POOL_RANGES.on();
     private final class Page {
         private final GpuBuffer buffer;
-        private final TreeMap<Integer,Integer> free=new TreeMap<>();
-        /** Sorted size<<32|offset keys: a binary search finds the best fit with no allocation, and pages hold few fragments. */
-        private long[] bySize=new long[16];
-        private int fragments;
+        private final TreeMap<Integer,Integer> free=FLAT?null:new TreeMap<>();
+        /** offset<<32|size keys. */
+        private final BlazeSortedLongs byOffset=FLAT?new BlazeSortedLongs():null;
+        /** size<<32|offset keys: a binary search finds the best fit with no allocation. */
+        private final BlazeSortedLongs bySize=new BlazeSortedLongs();
         private int active;
         private Page(GpuBuffer buffer){this.buffer=buffer;add(0,buffer.size());}
         private Slice acquire(int bytes,int reserved){
-            if(fragments==0||bySize[fragments-1]>>>32<reserved)return null;
-            long fit=bySize[slot((long)reserved<<32)];
+            int fragments=bySize.size();
+            if(fragments==0||bySize.get(fragments-1)>>>32<reserved)return null;
+            long fit=bySize.get(bySize.slot((long)reserved<<32));
             int offset=(int)fit,size=(int)(fit>>>32);
             remove(offset,size);
             if(size!=reserved)add(offset+reserved,size-reserved);
             active++;return new Slice(this,offset,bytes,reserved);
         }
         private void release(int offset,int size){
+            if(FLAT){releaseFlat(offset,size);return;}
             var before=free.lowerEntry(offset);
             if(before!=null&&before.getKey()+before.getValue()==offset){offset=before.getKey();size+=before.getValue();remove(before.getKey(),before.getValue());}
             var after=free.ceilingEntry(offset);
             if(after!=null&&offset+size==after.getKey()){size+=after.getValue();remove(after.getKey(),after.getValue());}
             add(offset,size);active--;
         }
+        private void releaseFlat(int offset,int size){
+            int at=byOffset.slot((long)offset<<32);
+            if(at>0){
+                long before=byOffset.get(at-1);int start=(int)(before>>>32),length=(int)before;
+                if(start+length==offset){remove(start,length);offset=start;size+=length;at--;}
+            }
+            if(at<byOffset.size()){
+                long after=byOffset.get(at);int start=(int)(after>>>32),length=(int)after;
+                if(offset+size==start){remove(start,length);size+=length;}
+            }
+            add(offset,size);active--;
+        }
         private void add(int offset,int size){
-            free.put(offset,size);
-            long key=(long)size<<32|offset;int at=slot(key);
-            if(fragments==bySize.length)bySize=java.util.Arrays.copyOf(bySize,fragments*2);
-            System.arraycopy(bySize,at,bySize,at+1,fragments-at);bySize[at]=key;fragments++;
+            if(FLAT)byOffset.add((long)offset<<32|size);else free.put(offset,size);
+            bySize.add((long)size<<32|offset);
         }
         private void remove(int offset,int size){
-            free.remove(offset);
-            int at=slot((long)size<<32|offset);
-            System.arraycopy(bySize,at+1,bySize,at,fragments-at-1);fragments--;
-        }
-        /** First index whose key is at least the one given. */
-        private int slot(long key){
-            int low=0,high=fragments;
-            while(low<high){int mid=(low+high)>>>1;if(bySize[mid]<key)low=mid+1;else high=mid;}
-            return low;
+            if(FLAT)byOffset.remove((long)offset<<32|size);else free.remove(offset);
+            bySize.remove((long)size<<32|offset);
         }
     }
 }

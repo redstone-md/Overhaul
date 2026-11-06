@@ -21,7 +21,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
-                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT)),
+                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS,
                     BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
@@ -129,6 +129,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.DEBUG_TEXT, "F3 text at 10 Hz");
         labels.put(BlazeOptimization.SECTION_RUN_KEYS, "Shared terrain draw keys");
         labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
+        labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
         return labels;
     }
 }
