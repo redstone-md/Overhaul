@@ -112,7 +112,7 @@ final class BlazePackShadows {
         cast(2, "shadow_cutout", position.x, position.y, position.z);
         scene.shadowLayer("shadow_entities");
         float multiplier = settings.renderMultiplier();
-        entities.cast(minecraft, scene, camera, partial, view, projection, settings.fov() == null, multiplier > 0 ? settings.distance() * multiplier : settings.distance());
+        entities.cast(minecraft, scene, camera, partial, view, projection, settings, settings.fov() == null, multiplier > 0 ? settings.distance() * multiplier : settings.distance());
         renderer.gpuMark("shadowOpaque");
         runtime.snapshotOpaqueShadow(renderer.packCommands());
         cast(3, "shadow_water", position.x, position.y, position.z);

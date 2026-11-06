@@ -95,7 +95,7 @@ public final class ShaderPackProperties {
             boolean pipeline = key.matches("program\\.[A-Za-z0-9_/-]+\\.enabled")
                     || key.matches("(?:blend|alphaTest)\\.[A-Za-z0-9_/-]+(?:\\.(?:"+BUFFER+"))?")
                     || key.matches("flip\\.[A-Za-z0-9_/-]+\\.(?:"+BUFFER+")")
-                    || key.matches("size\\.buffer\\.(?:"+COLOR_BUFFER+")") || PackTextures.property(key)
+                    || key.matches("size\\.buffer\\.(?:"+COLOR_BUFFER+")") || key.matches("shadow(?:Entities|Player|BlockEntities)") || PackTextures.property(key)
                     || PackCustomUniforms.property(key) || PackImages.property(key);
             if (!pipeline && !PackPropertyPolicy.ignored(key) && !key.startsWith("screen") && !key.startsWith("profile.") && !key.equals("sliders")) result.add(key);
         }

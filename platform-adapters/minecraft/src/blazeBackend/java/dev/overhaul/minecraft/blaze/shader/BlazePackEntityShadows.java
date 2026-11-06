@@ -30,7 +30,9 @@ final class BlazePackEntityShadows {
     private boolean failed;
 
     /** Casts every entity and block entity within {@code limit} blocks of the camera, tested against the light's frustum when it has one. */
-    void cast(Minecraft minecraft, BlazePackScene scene, Camera camera, float partial, Matrix4f view, Matrix4f projection, boolean bounded, double limit) {
+    void cast(Minecraft minecraft, BlazePackScene scene, Camera camera, float partial, Matrix4f view, Matrix4f projection,
+              dev.overhaul.shader.pack.PackShadowSettings casters, boolean bounded, double limit) {
+        if (!casters.entities() && !casters.player() && !casters.blockEntities()) return;
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         // The game points the dispatcher at its camera only once it draws entities, after the first shadow pass.
         if (failed || minecraft.level == null || dispatcher.camera == null) return;
@@ -49,6 +51,7 @@ final class BlazePackEntityShadows {
         PoseStack pose = new PoseStack();
         try {
             for (Entity entity : minecraft.level.entitiesForRendering()) {
+                if (!casters.entities() && !(casters.player() && entity instanceof net.minecraft.world.entity.player.Player)) continue;
                 if (entity.isRemoved() || !entity.shouldRender(x, y, z)) continue;
                 // As the game does: an entity that has not ticked yet has no previous position to blend from.
                 if (entity.tickCount == 0) {
@@ -65,7 +68,7 @@ final class BlazePackEntityShadows {
                 dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
                         dispatcher.getPackedLightCoords(entity, partial));
             }
-            blockEntities(minecraft, partial, pose, buffers, x, y, z, bounded, limit);
+            if (casters.blockEntities()) blockEntities(minecraft, partial, pose, buffers, x, y, z, bounded, limit);
         } catch (RuntimeException failure) {
             failed = true;
             LOG.warn("Entities stop casting pack shadows", failure);

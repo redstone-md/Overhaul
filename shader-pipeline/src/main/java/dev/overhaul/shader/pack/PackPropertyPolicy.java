@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  */
 final class PackPropertyPolicy {
     private static final Set<String> IGNORED = Set.of("clouds","dhClouds","oldHandLight","dynamicHandLight","oldLighting",
-            "shadowTerrain","shadowTranslucent","shadowEntities","shadowPlayer","shadowBlockEntities","shadowLightBlockEntities",
+            "shadowTerrain","shadowTranslucent","shadowLightBlockEntities",
             "underwaterOverlay","sun","moon","stars","sky","vignette","rain.depth","beacon.beam.depth","separateAo",
             "voxelizeLightBlocks","frustum.culling","occlusion.culling","shadow.culling","shadow.enabled","dhShadow.enabled",
             "particles.before.deferred","separateEntityDraws","prepareBeforeShadow","supportsColorCorrection",

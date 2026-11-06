@@ -13,6 +13,7 @@ public final class PackShadowSettings {
     private final Float fov;
     private final boolean[] nearestDepth,nearestColor,mipmappedDepth,mipmappedColor;
     private final PackRenderTargets colors;
+    private final boolean entities,player,blockEntities;
     private PackShadowSettings(Builder builder){
         resolution=builder.integer("shadowMapResolution",1024,1,16384);
         distance=builder.number("shadowDistance",160);renderMultiplier=builder.number("shadowDistanceRenderMul",-1);
@@ -24,10 +25,13 @@ public final class PackShadowSettings {
         nearestDepth=builder.nearestDepth.clone();nearestColor=builder.nearestColor.clone();
         mipmappedDepth=builder.mipmappedDepth.clone();mipmappedColor=builder.mipmappedColor.clone();
         colors=builder.colors.build();
+        // As Iris: entities and block entities cast unless the pack says not; the player alone only when asked.
+        entities=builder.flag("shadowEntities",true);player=builder.flag("shadowPlayer",false);blockEntities=builder.flag("shadowBlockEntities",true);
     }
     private PackShadowSettings(PackShadowSettings source,int resolution,float distance){
         this.resolution=resolution;this.distance=distance;renderMultiplier=1;interval=source.interval;near=source.near;far=source.far;sunPathRotation=source.sunPathRotation;fov=source.fov;
         nearestDepth=source.nearestDepth;nearestColor=source.nearestColor;mipmappedDepth=source.mipmappedDepth;mipmappedColor=source.mipmappedColor;colors=source.colors;
+        entities=source.entities;player=source.player;blockEntities=source.blockEntities;
     }
     /** An owned policy replaces only the camera extent, so caster bounds honour its distance exactly. */
     public PackShadowSettings withCamera(int resolution,float distance){
@@ -43,6 +47,11 @@ public final class PackShadowSettings {
     public float sunPathRotation(){return sunPathRotation;}
     public Float fov(){return fov;}
     public PackRenderTargets colors(){return colors;}
+    /** Every entity casts. */
+    public boolean entities(){return entities;}
+    /** With {@link #entities()} off, the player still casts. */
+    public boolean player(){return player;}
+    public boolean blockEntities(){return blockEntities;}
     public boolean nearestDepth(int index){return nearestDepth[index];}
     public boolean nearestColor(int index){return nearestColor[index];}
     public boolean mipmappedDepth(int index){return mipmappedDepth[index];}
@@ -61,7 +70,8 @@ public final class PackShadowSettings {
         private final boolean[] nearestDepth=new boolean[2],nearestColor=new boolean[2],mipmappedDepth=new boolean[2],mipmappedColor=new boolean[2];
         private final PackRenderTargets.Builder colors;
         private final java.util.Set<Integer> explicitClearColors=new java.util.HashSet<>();
-        public Builder(ShaderPackProperties properties){colors=new PackRenderTargets.Builder(properties);}
+        private final Map<String,String> properties;
+        public Builder(ShaderPackProperties properties){colors=new PackRenderTargets.Builder(properties);this.properties=properties.values();}
         public void scan(String source){
             String text=source.replaceAll("(?m)//.*$","");var matcher=DIRECTIVE.matcher(text);
             while(matcher.find()){
@@ -95,6 +105,14 @@ public final class PackShadowSettings {
         public PackShadowSettings build(){
             for(int index=0;index<2;index++)if(!explicitClearColors.contains(index))colors.scan("const vec4 colortex"+index+"ClearColor = vec4(1.0);");
             return new PackShadowSettings(this);
+        }
+        private boolean flag(String name,boolean fallback){
+            String value=properties.get(name);
+            if(value==null)return fallback;
+            value=value.trim();
+            if(value.equalsIgnoreCase("true"))return true;
+            if(value.equalsIgnoreCase("false"))return false;
+            throw invalid("Expected true or false: "+name+" = "+value);
         }
         private int integer(String name,int fallback,int min,int max){
             try{int value=PackLiterals.integer(directives.getOrDefault(name,Integer.toString(fallback)));if(value<min||value>max)throw invalid("Shadow resolution exceeds ["+min+","+max+"]");return value;}
