@@ -100,7 +100,12 @@ libraries.each { library ->
         destinationDirectory = layout.buildDirectory.dir('runtime')
         duplicatesStrategy = DuplicatesStrategy.FAIL
         inputs.file library.source
-        from({ zipTree(library.source.get()) }) { exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA' }
+        from({ zipTree(library.source.get()) }) {
+            exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+            // A natives descriptor opens a package that holds no classes; Forge's jar-in-jar reader rejects that,
+            // so there the jar loads as the automatic module named below.
+            if (target.loader == 'forge' && library.classifier) exclude '**/module-info.class'
+        }
         from(generated.map { it.dir(library.key.toString()) })
         manifest.from(generated.map { it.file("${library.key}.mf") })
         manifest.attributes('FMLModType': 'GAMELIBRARY', 'Automatic-Module-Name': library.module, 'Multi-Release': 'true')
