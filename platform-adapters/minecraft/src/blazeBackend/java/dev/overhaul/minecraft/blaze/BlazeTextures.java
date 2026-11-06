@@ -42,6 +42,9 @@ public final class BlazeTextures implements AutoCloseable {
     private final BlazePixelStore pixels=new BlazePixelStore();
     private final int[] bindings=new int[32];
     private BlazeTexture incomplete;
+    /** Cleared cube, array and 3D views, made the first time a sampler of that dimension asks. */
+    private final GpuImageView[] blanks=new GpuImageView[3];
+    private final GpuImage[] blankImages=new GpuImage[3];
     private int next=1,active;
     private int proxyWidth,proxyHeight,proxyInternal;
     private boolean closed;
@@ -207,6 +210,34 @@ public final class BlazeTextures implements AutoCloseable {
         transfers.mipmaps(texture.image(),texture.baseLevel(),0);texture.defineMipmaps(texture.baseLevel()+1);
     }
     public Sampled resolveBound(int unit){return sampled(boundId(unit));}
+    /**
+     * As {@link #resolve(Object)} for a sampler of the given GLSL type. Names hold 2D storage only, so a cube, array
+     * or 3D sampler reads a cleared view of its own dimension unless the value already is one.
+     */
+    public Sampled resolve(Object value,String type){
+        int wanted=viewType(type);
+        if(wanted==VK_IMAGE_VIEW_TYPE_2D)return resolve(value);
+        if(value instanceof Sampled ready&&ready.view()!=null&&ready.view().viewType()==wanted)return ready;
+        return new Sampled(blank(wanted),incomplete().sampler().handle());
+    }
+    private static int viewType(String type){
+        if(type==null)return VK_IMAGE_VIEW_TYPE_2D;
+        if(type.endsWith("samplerCube")||type.endsWith("samplerCubeShadow"))return VK_IMAGE_VIEW_TYPE_CUBE;
+        if(type.endsWith("sampler2DArray")||type.endsWith("sampler2DArrayShadow"))return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        return type.endsWith("sampler3D")?VK_IMAGE_VIEW_TYPE_3D:VK_IMAGE_VIEW_TYPE_2D;
+    }
+    private GpuImageView blank(int viewType){
+        int slot=viewType==VK_IMAGE_VIEW_TYPE_CUBE?0:viewType==VK_IMAGE_VIEW_TYPE_2D_ARRAY?1:2;
+        if(blanks[slot]!=null)return blanks[slot];
+        int usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        GpuImage image=slot==2?allocator.createVolume(ImageFormat.RGBA8_UNORM,1,1,1,usage)
+                :allocator.createImage(ImageFormat.RGBA8_UNORM,1,1,1,slot==0?6:1,usage,slot==0?VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0);
+        try{
+            for(int layer=0;layer<image.layers();layer++)clearColor(image,0,layer,0,0,0,1);
+            blankImages[slot]=image;
+            return blanks[slot]=image.view(0,1,0,image.layers(),viewType,image.format().aspectMask());
+        }catch(RuntimeException|Error failure){blankImages[slot]=null;image.close();throw failure;}
+    }
     private Sampled sampled(int id){
         var texture=texture(id);if(!texture.complete())texture=incomplete();var view=texture.view();
         if(queue==null)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)if(view.image().layout(mip,view.baseLayer())!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
@@ -252,6 +283,7 @@ public final class BlazeTextures implements AutoCloseable {
         if(closed)return;requireOpen();Throwable failure=null;
         for(var texture:textures)if(texture!=null)try{texture.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
         if(incomplete!=null)try{incomplete.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{incomplete=null;}
+        for(int slot=0;slot<blankImages.length;slot++)if(blankImages[slot]!=null)try{blankImages[slot].close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}finally{blankImages[slot]=null;blanks[slot]=null;}
         try{samplers.close();}catch(RuntimeException|Error error){if(failure==null)failure=error;else failure.addSuppressed(error);}
         Arrays.fill(textures,null);Arrays.fill(bindings,0);closed=true;
         if(failure instanceof RuntimeException error)throw error;if(failure instanceof Error error)throw error;

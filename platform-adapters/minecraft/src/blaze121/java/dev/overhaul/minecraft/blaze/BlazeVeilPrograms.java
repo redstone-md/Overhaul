@@ -92,7 +92,7 @@ public final class BlazeVeilPrograms {
         }
         for (var entry : bindings.samplerTypes().entrySet()) {
             String name = entry.getKey();
-            samplers.put(name, new ShaderUniformCache.Uniform(name, programs.uniformLocation(program, name), 0, entry.getValue().equals("sampler2DShadow") ? 35682 : 35678, 1));
+            samplers.put(name, new ShaderUniformCache.Uniform(name, programs.uniformLocation(program, name), 0, samplerType(entry.getValue()), 1));
         }
         return true;
     }
@@ -116,10 +116,29 @@ public final class BlazeVeilPrograms {
             case "ivec2" -> 35667;
             case "ivec3" -> 35668;
             case "ivec4" -> 35669;
+            case "uint" -> 5125;
+            case "uvec2" -> 36294;
+            case "uvec3" -> 36295;
+            case "uvec4" -> 36296;
             case "mat2" -> 35674;
             case "mat3" -> 35675;
             case "mat4" -> 35676;
             default -> throw new IllegalArgumentException("Unsupported uniform type: " + type);
+        };
+    }
+
+    /** The GL type OpenGL reflects for each sampler, which Veil checks before it binds a texture unit. */
+    private static int samplerType(String type) {
+        return switch (type) {
+            case "sampler2DShadow" -> 35682;
+            case "sampler3D" -> 35679;
+            case "samplerCube" -> 35680;
+            case "sampler2DArray" -> 36289;
+            case "sampler2DArrayShadow" -> 36292;
+            case "samplerCubeShadow" -> 36293;
+            case "isampler2D" -> 36298;
+            case "usampler2D" -> 36306;
+            default -> 35678;
         };
     }
 

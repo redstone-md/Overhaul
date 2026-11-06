@@ -21,6 +21,7 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
         for(String type:samplerTypes.values())if(!TYPES.contains(type))throw new IllegalArgumentException("Unsupported sampler type: "+type);
     }
     private static final java.util.Set<String> TYPES=java.util.Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D",
+            "samplerCube","samplerCubeShadow","sampler2DArray","sampler2DArrayShadow","isampler2DArray","usampler2DArray",
             "image2D","image3D","uimage2D","uimage3D","iimage2D","iimage3D",ProgramBindings.BUFFER);
     /** The type of a storage buffer binding, named by the pack's {@code bufferObject} index. */
     public static final String BUFFER="buffer";
@@ -37,7 +38,7 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
     public boolean hasStorageImages(){return samplerTypes.values().stream().anyMatch(type->type.contains("image"));}
     public boolean hasStorageBuffers(){return samplerTypes.containsValue(BUFFER);}
     private String type(String name){String type=samplerTypes.get(name);if(type==null)throw new IllegalArgumentException("Unknown sampler: "+name);return type;}
-    public boolean comparisonSampler(String name){String type=samplerTypes.get(name);if(type==null)throw new IllegalArgumentException("Unknown sampler: "+name);return type.equals("sampler2DShadow");}
+    public boolean comparisonSampler(String name){String type=samplerTypes.get(name);if(type==null)throw new IllegalArgumentException("Unknown sampler: "+name);return type.endsWith("Shadow");}
     private static Map<String,String> ordinarySamplers(Map<String,Integer> samplers){Map<String,String> result=new java.util.LinkedHashMap<>();for(String name:samplers.keySet())result.put(name,"sampler2D");return result;}
     /**
      * Names and types are looked up every frame with string literals as keys; interned, each key comparison is an

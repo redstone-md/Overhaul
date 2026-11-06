@@ -39,7 +39,7 @@ final class BlazePass implements BlazeQueue.Operation {
         this.target=target;this.program=shader.program();this.state=state;constants=owner.vertexConstants(program);
         try{
             for(String name:program.bindings().samplers().keySet()){
-                BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name));
+                BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name),program.bindings().samplerTypes().get(name));
                 if(sample.view()!=null&&target.writes(sample.view().image()))throw new SamplingFeedback();
                 samples.add(sample);
             }
@@ -62,7 +62,7 @@ final class BlazePass implements BlazeQueue.Operation {
         if(next.topology()!=first.topology()||!next.layout().equals(first.layout()))return false;
         int index=0;
         for(String name:program.bindings().samplers().keySet()){
-            BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name)),existing=samples.get(index++);
+            BlazeTextures.Sampled sample=owner.textures().resolve(shader.samplers().get(name),program.bindings().samplerTypes().get(name)),existing=samples.get(index++);
             if(sample.view()!=existing.view()||sample.sampler()!=existing.sampler()||sample.buffer()!=existing.buffer())return false;
         }
         ByteBuffer bytes=shader.uniforms();

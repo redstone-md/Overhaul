@@ -28,7 +28,8 @@ public final class PackProgramTranslator {
     private static final Set<String> COMPUTE_BUILTINS = Set.of("gl_GlobalInvocationID","gl_LocalInvocationID","gl_WorkGroupID",
             "gl_NumWorkGroups","gl_LocalInvocationIndex","gl_WorkGroupSize");
     /** Sampled types a pack may declare; storage images come from {@link PackStorageImages#IMAGE_TYPES}. */
-    private static final Set<String> SAMPLER_TYPES = Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D");
+    private static final Set<String> SAMPLER_TYPES = Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D",
+            "samplerCube","samplerCubeShadow","sampler2DArray","sampler2DArrayShadow","isampler2DArray","usampler2DArray");
     private static final Pattern LOCAL_SIZE = Pattern.compile("\\blayout\\s*\\(([^)]*local_size_[xyz][^)]*)\\)\\s*in\\s*;");
     private static final Pattern WORK_GROUPS = Pattern.compile("\\bconst\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
     private static final Pattern WORK_GROUPS_RENDER = Pattern.compile("\\bconst\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)");
@@ -36,6 +37,7 @@ public final class PackProgramTranslator {
             Map.entry("float",4), Map.entry("int",4), Map.entry("bool",4),
             Map.entry("vec2",8), Map.entry("vec3",12), Map.entry("vec4",16),
             Map.entry("ivec2",8), Map.entry("ivec3",12), Map.entry("ivec4",16),
+            Map.entry("uint",4), Map.entry("uvec2",8), Map.entry("uvec3",12), Map.entry("uvec4",16),
             Map.entry("mat2",32), Map.entry("mat3",48), Map.entry("mat4",64));
     private static final Map<String,String> TEXTURE_FUNCTIONS = Map.ofEntries(
             Map.entry("texture2D","texture"),Map.entry("texture2DProj","textureProj"),
@@ -223,7 +225,8 @@ public final class PackProgramTranslator {
             } else {
                 boolean integer = INTEGER_VARYINGS.contains(type);
                 if (kind.equals("attribute")) {
-                    if (!ATTRIBUTE_TYPES.contains(type)) throw unsupported("Unsupported interface type: " + type);
+                    // A matrix input fills one location per column, as GL lays out an instanced transform.
+                    if (!ATTRIBUTE_TYPES.contains(type) && !VARYING_SLOTS.containsKey(type)) throw unsupported("Unsupported interface type: " + type);
                     if (!vertex) throw unsupported("Attributes are vertex-stage inputs");
                     put(attributes,name,type);
                 } else {

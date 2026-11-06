@@ -17,12 +17,12 @@ public final class GpuImageView implements AutoCloseable {
                 &&(alpha==VK_COMPONENT_SWIZZLE_IDENTITY||alpha==VK_COMPONENT_SWIZZLE_A);}
     }
     private final GpuImage image;
-    private final int baseMip,mips,baseLayer,layers;
+    private final int baseMip,mips,baseLayer,layers,viewType;
     private final Components components;
     private long handle;
     private FrameRing.Submission lastUse;
     GpuImageView(GpuImage image,int baseMip,int mips,int baseLayer,int layers,int viewType,int aspectMask,Components components){
-        this.image=image;this.baseMip=baseMip;this.mips=mips;this.baseLayer=baseLayer;this.layers=layers;this.components=java.util.Objects.requireNonNull(components);
+        this.image=image;this.baseMip=baseMip;this.mips=mips;this.baseLayer=baseLayer;this.layers=layers;this.viewType=viewType;this.components=java.util.Objects.requireNonNull(components);
         if(!components.identity()&&!image.context().portability().imageViewFormatSwizzle())throw new UnsupportedOperationException("This device cannot remap image-view components");
         try(MemoryStack stack=VulkanStack.push()){
             VkImageViewCreateInfo info=VkImageViewCreateInfo.calloc(stack).sType$Default().image(image.handle())
@@ -35,6 +35,8 @@ public final class GpuImageView implements AutoCloseable {
     public GpuImage image(){requireOpen();return image;}public long handle(){requireOpen();return handle;}
     public int baseMip(){return baseMip;}public int baseMipLevel(){return baseMip;}public int mipCount(){return mips;}
     public int baseLayer(){return baseLayer;}public int layerCount(){return layers;}
+    /** The VK_IMAGE_VIEW_TYPE a shader's sampler must declare to read this view. */
+    public int viewType(){return viewType;}
     public Components components(){return components;}
     /**
      * Opts this view into precise tracking. The caller must update this receipt for every native use
