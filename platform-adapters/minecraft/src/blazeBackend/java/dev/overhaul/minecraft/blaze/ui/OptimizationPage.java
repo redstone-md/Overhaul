@@ -21,7 +21,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
-                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES)),
+                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS,
                     BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
@@ -136,6 +136,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SHADOW_TIGHT_REUSE, "Reused shadow frustum test");
         labels.put(BlazeOptimization.SHADOW_REACH, "Shadow casters by view");
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
+        labels.put(BlazeOptimization.PIXEL_ROWS, "Row copies for pixel reads");
         return labels;
     }
 }

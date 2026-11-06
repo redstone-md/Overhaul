@@ -46,6 +46,12 @@ final class BlazePixels {
     static void pack(ByteBuffer rgba,boolean depth,int storageBytes,ByteBuffer destination,BlazePixelStore.Layout layout,int width,int height,int format,int type){
         if(destination.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel destination is truncated");
         var target=destination.slice().order(ByteOrder.nativeOrder());var source=rgba.slice().order(ByteOrder.nativeOrder());int stride=bytes(format,type);
+        if(!depth&&storageBytes==4&&format==GL_RGBA&&type==GL_UNSIGNED_BYTE&&BlazeOptimization.PIXEL_ROWS.on()){
+            // Storage and request share one byte order, so each row is a plain copy.
+            int row=width*4;
+            for(int y=0;y<height;y++)target.put(layout.offset()+y*layout.stride(),source,y*row,row);
+            return;
+        }
         for(int y=0;y<height;y++)for(int x=0;x<width;x++){
             int offset=(y*width+x)*storageBytes,pixel;
             if(depth){int value=normalized(source.getFloat(offset));pixel=value<<24|value<<16|value<<8|255;}
