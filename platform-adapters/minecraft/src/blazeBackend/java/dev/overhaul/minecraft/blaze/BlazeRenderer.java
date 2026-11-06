@@ -133,12 +133,15 @@ public final class BlazeRenderer implements AutoCloseable {
         return true;
     }
     public BlazeSectionBatch beginSections(BlazeShaderAccess shader,boolean ordered){
-        requireOpen();if(sections==null){sections=new BlazeSectionBatch(this);closeWith(sections);}
+        BlazeSectionBatch sections=sectionBatch();
         BlazeShaderSnapshot game=shader.overhaul$sectionSnapshot();
         BlazePackScene.Sections pack=packScene!=null&&packScene.routes(currentTarget())?packScene.sections(game):null;
-        if(pack!=null)sections.begin(pack.shader(),null,ordered,pack.target(),pack.failed());
-        else sections.begin(game,compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered,currentTarget(),null);
-        return sections;
+        if(pack!=null)return sections.begin(pack.shader(),null,ordered,pack.target(),state.snapshot(),pack.failed());
+        return sections.begin(game,compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered,currentTarget(),state.snapshot(),null);
+    }
+    /** The one batch every terrain layer reuses, light camera included. */
+    BlazeSectionBatch sectionBatch(){
+        requireOpen();if(sections==null){sections=new BlazeSectionBatch(this);closeWith(sections);}return sections;
     }
     /** Whether a terrain mesh uploaded now may be compact: a pack's programs and the section-by-section path read full vertices. */
     public boolean compactsSections(){

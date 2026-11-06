@@ -53,13 +53,15 @@ public final class BlazeSectionBatch implements AutoCloseable {
      * @param ordered keep the given draw order exactly, as blending needs; otherwise sections group by buffer
      * @param failed told when the layer cannot draw, which then drops it; null lets the failure through
      */
-    void begin(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, boolean ordered, BlazeTarget target, Runnable failed) {
+    BlazeSectionBatch begin(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, boolean ordered, BlazeTarget target,
+            BlazeDrawState.Snapshot state, Runnable failed) {
         this.target = target;
-        state = owner.drawState().snapshot();
+        this.state = state;
         this.shader = shader;
         this.compact = compact;
         this.ordered = ordered;
         this.failed = failed;
+        return this;
     }
 
     public void add(BlazeMesh mesh, float x, float y, float z) {

@@ -150,6 +150,21 @@ public final class BlazePackScene implements AutoCloseable {
         if (caster != null) caster.prepare(phase, runtime, uniforms);
     }
 
+    /** The light camera's casters of this layer as one batch, each added with its offset from the camera; null casts them one by one. */
+    public BlazeSectionBatch shadowSections(Matrix4fc view, Matrix4fc projection) {
+        if (caster == null || !BlazeOptimization.SECTION_BATCH.on() || !BlazeOptimization.PACK_SECTION_BATCH.on() || !renderer.context().indirectFirstInstance()) return null;
+        BlazePackDraw draw = sectioned(caster);
+        if (draw == null) return null;
+        try {
+            draw.prepare(phase, runtime, uniforms);
+            return renderer.sectionBatch().begin(draw.cast(view, projection, shadowTextures), null, false, draw.target(), shadowRaster, () -> sectioned.put(draw.program, null));
+        } catch (RuntimeException failure) {
+            BlazeGlBoundary.reportOnce("pack sections " + draw.program.name(), "Pack program " + draw.program.name() + " casts shadows section by section: " + failure);
+            sectioned.put(draw.program, null);
+            return null;
+        }
+    }
+
     public void castShadow(BlazeMesh mesh, Matrix4fc modelView, Matrix4fc projection) {
         if (caster != null) renderer.draw(mesh, caster.target(), caster.cast(modelView, projection, shadowTextures), shadowRaster);
     }
@@ -212,7 +227,11 @@ public final class BlazePackScene implements AutoCloseable {
         String shader = current == null ? null : current.getName();
         if (shader == null || BlazePackSelection.onTop(shader)) return null;
         BlazePackDraw draw = select(shader);
-        if (draw == null) return null;
+        return draw == null ? null : sectioned(draw);
+    }
+
+    /** The variant of a program that reads section offsets per instance, built once; null when the pack's code has no place for it. */
+    private BlazePackDraw sectioned(BlazePackDraw draw) {
         if (sectioned.containsKey(draw.program)) return sectioned.get(draw.program);
         BlazePackDraw batched = null;
         try {

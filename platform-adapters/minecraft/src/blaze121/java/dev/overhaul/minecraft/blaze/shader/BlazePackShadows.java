@@ -1,8 +1,10 @@
 package dev.overhaul.minecraft.blaze.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.overhaul.minecraft.blaze.BlazeMesh;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
+import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
 import dev.overhaul.minecraft.blaze.BlazeSectionBounds;
 import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
 import dev.overhaul.shader.pack.PackShadowSettings;
@@ -94,6 +96,19 @@ final class BlazePackShadows {
 
     private void cast(RenderType layer, String program, double x, double y, double z) {
         scene.shadowLayer(program);
+        BlazeSectionBatch batch = scene.shadowSections(view, projection);
+        if (batch != null) {
+            for (int index = 0; index < casters.size(); index++) {
+                var section = casters.get(index);
+                if (section.getCompiled().isEmpty(layer)) continue;
+                BlazeMesh mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$existingMesh();
+                if (mesh == null) continue;
+                var origin = section.getOrigin();
+                batch.add(mesh, (float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z));
+            }
+            batch.end();
+            return;
+        }
         for (int index = 0; index < casters.size(); index++) {
             var section = casters.get(index);
             if (section.getCompiled().isEmpty(layer)) continue;
