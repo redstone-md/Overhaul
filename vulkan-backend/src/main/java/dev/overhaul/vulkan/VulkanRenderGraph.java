@@ -66,12 +66,15 @@ public final class VulkanRenderGraph implements AutoCloseable {
         public Operation { uses=Map.copyOf(uses); Objects.requireNonNull(record,"record"); }
     }
 
+    /** What construction proved about a graph of imported images; a graph of the same shape reuses it with new pass callbacks. */
+    public record Shape(RenderGraph graph, Map<String,GpuImageView> bindings, Map<String,Image> images) {}
+
     private final VulkanContext context;
     private final RenderGraph graph;
     private final Map<String,Operation> operations;
     private final Map<String,GpuImage> owned = new LinkedHashMap<>();
-    private final Map<String,GpuImageView> bindings = new LinkedHashMap<>();
-    private final Map<String,Image> images = new LinkedHashMap<>();
+    private Map<String,GpuImageView> bindings = new LinkedHashMap<>();
+    private Map<String,Image> images = new LinkedHashMap<>();
     private final boolean ownsCommands;
     private GpuAllocator allocator;
     private ImmediateCommands commands;
@@ -114,6 +117,24 @@ public final class VulkanRenderGraph implements AutoCloseable {
             if(!expectedImports.equals(imports.keySet()))throw new IllegalArgumentException("Unknown imported graph resource");
             validatePhysicalFeedback();
         } catch (RuntimeException | Error failure) { close(); throw failure; }
+    }
+
+    /**
+     * A graph whose shape an earlier construction validated. The caller guarantees that {@code operations} name the
+     * same passes with the same uses; only their callbacks differ.
+     */
+    VulkanRenderGraph(VulkanContext context,Shape shape,Map<String,Operation> operations,ImmediateCommands borrowedCommands){
+        this.context=context;context.requireOwner();
+        if(borrowedCommands==null||borrowedCommands.context()!=context)throw new IllegalArgumentException("A reused graph shape borrows its frame's command lane");
+        this.graph=shape.graph();this.operations=operations;this.ownsCommands=false;this.commands=borrowedCommands;
+        this.bindings=shape.bindings();this.images=shape.images();
+    }
+
+    /** The validated shape of a graph that owns no images, for reuse by later graphs of the same shape. */
+    Shape shape(){
+        requireOpen();
+        if(!owned.isEmpty())throw new IllegalStateException("Only graphs of imported images have a reusable shape");
+        return new Shape(graph,Map.copyOf(bindings),Map.copyOf(images));
     }
 
     /** Creation flags per resource in one sweep over the passes; graphs are built every frame. */
@@ -196,7 +217,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
             for(var use:operation.uses().entrySet()){
                 transition(command,bindings.get(use.getKey()),use.getValue(),changes);scoped.put(use.getKey(),images.get(use.getKey()));
             }
-            operation.record().accept(new PassContext(command,Map.copyOf(scoped)));
+            operation.record().accept(new PassContext(command,Collections.unmodifiableMap(scoped)));
         }
     }
 
@@ -258,7 +279,7 @@ public final class VulkanRenderGraph implements AutoCloseable {
         if(executing)throw new IllegalStateException("Cannot close an executing render graph");
         List<GpuImage> reverse=new ArrayList<>(owned.values()); Collections.reverse(reverse);
         for (GpuImage image:reverse) image.close();
-        owned.clear(); images.clear(); bindings.clear();
+        owned.clear(); images=Map.of(); bindings=Map.of();
         if(allocator!=null)allocator.close();
         if (ownsCommands&&commands!=null) commands.close();
         closed=true;

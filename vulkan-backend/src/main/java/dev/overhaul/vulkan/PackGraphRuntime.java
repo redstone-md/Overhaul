@@ -29,6 +29,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     private final VulkanContext context;
     private final CompiledShaderPack pack;
     private final PackTargetSwaps swaps=new PackTargetSwaps();
+    private PackFrameGraph.Shapes shapes=new PackFrameGraph.Shapes();
     private final Map<CompiledShaderPack.Program,PackFullscreenPass> passes=new LinkedHashMap<>();
     private final int width,height;
     private PackGraphImages images;
@@ -184,14 +185,16 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     private void execute(PackFrameGraph plan,ImmediateCommands lane){
         if(plan.operations.isEmpty())return;
-        if(recorder==null){try(VulkanRenderGraph graph=plan.create(context,lane)){graph.execute();}return;}
-        recorder.add(new PackRecording(plan.create(context,lane)));
+        if(recorder==null){try(VulkanRenderGraph graph=plan.create(context,lane,shapes)){graph.execute();}return;}
+        recorder.add(new PackRecording(plan.create(context,lane,shapes)));
     }
     /**
      * Hands every later graph to the caller's ordered frame lane instead of a submission that waits for the GPU. The
      * lane records each one after the work queued before it, and before the next.
      */
     public void recordInto(PackRecording.Recorder recorder){requireOpen();this.recorder=recorder;}
+    /** Off, every graph is built and validated from scratch instead of reusing an earlier frame's of the same shape. */
+    public void reuseGraphShapes(boolean reuse){requireOpen();shapes=reuse?new PackFrameGraph.Shapes():null;}
     public boolean hasSceneProgram(){return scene;}
     public long samplerHandle(){requireOpen();return sampler.handle();}
     public long depthSamplerHandle(){requireOpen();return depthSampler.handle();}
@@ -237,7 +240,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         PackFrameGraph plan=new PackFrameGraph();String input=plan.read(source),output=plan.write(images.depth);
         plan.pass("snapshot-scene-depth",Map.of(input,VulkanRenderGraph.Usage.GRAPHICS_SAMPLE,output,VulkanRenderGraph.Usage.COLOR_WRITE),
                 pass->depthPass.record(pass,List.of(output),Map.of("inputDepth",input),depthSampler.handle()));
-        try(VulkanRenderGraph graph=plan.create(context,frameLane)){graph.record(command,changes);}
+        try(VulkanRenderGraph graph=plan.create(context,frameLane,shapes)){graph.record(command,changes);}
     }
     public GpuImageView color(int index){requireOpen();GpuImageView view=images.colors.get(swaps.current(index));if(view==null)throw new IllegalArgumentException("Pack color target is absent: "+index);return view;}
     public List<GpuImageView> sceneTargets(CompiledShaderPack.Program program){requireOpen();if(program.stage()!=CompiledShaderPack.Stage.GBUFFER)throw new IllegalArgumentException("Not a world gbuffer program");return outputs(route(program));}
@@ -303,7 +306,7 @@ public final class PackGraphRuntime implements AutoCloseable {
     }
     private void requireOpen(){context.requireOwner();if(closed)throw new IllegalStateException("Pack graph runtime closed");}
     @Override public void close(){
-        context.requireOwner();if(closed)return;List<PackFullscreenPass> reverse=new ArrayList<>(passes.values());Collections.reverse(reverse);
+        context.requireOwner();if(closed)return;shapes=null;List<PackFullscreenPass> reverse=new ArrayList<>(passes.values());Collections.reverse(reverse);
         for(var pass:reverse)pass.close();passes.clear();if(depthPass!=null){depthPass.close();depthPass=null;}
         if(depthSampler!=null){depthSampler.close();depthSampler=null;}if(mipSampler!=null){mipSampler.close();mipSampler=null;}
         if(shadows!=null){shadows.close();shadows=null;}

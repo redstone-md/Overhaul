@@ -192,6 +192,7 @@ public final class BlazePackFrame implements AutoCloseable {
             renderer.context().waitIdle();
             runtime = new PackGraphRuntime(renderer.context(), renderer.allocator(), compiled, targetWidth, targetHeight, compiler, BlazePackScene.worldPrograms(compiled), false);
             if (BlazeOptimization.PACK_FRAME_QUEUE.on()) runtime.recordInto(renderer.packRecorder());
+            runtime.reuseGraphShapes(BlazeOptimization.PACK_GRAPH_SHAPES.on());
             if (BlazePackScene.drawsWorld(compiled)) scene = new BlazePackScene(renderer, compiled, runtime, uniforms);
             if (scene != null && scene.castsShadows()) shadows = new BlazePackShadows(renderer, scene, runtime, compiled.shadow());
             pack = compiled;
