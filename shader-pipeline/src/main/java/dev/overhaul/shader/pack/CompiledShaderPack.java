@@ -31,9 +31,12 @@ public final class CompiledShaderPack {
     private final PackCustomUniforms customUniforms;
     private final PackSmoothing smoothing;
     private final PackIdMap ids;
-    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms,PackIdMap ids){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;this.ids=ids;
+    private final boolean vanillaClouds;
+    private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms,PackIdMap ids,boolean vanillaClouds){this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;this.ids=ids;this.vanillaClouds=vanillaClouds;
         List<String> texts=new ArrayList<>();for(Sources value:sources.values()){texts.add(value.vertex());texts.add(value.fragment());}smoothing=PackSmoothing.scan(texts);}
     public List<Program> programs(){return programs;}
+    /** False when the pack draws its own sky clouds and turns the game's off with {@code clouds=off}. */
+    public boolean vanillaClouds(){return vanillaClouds;}
     public PackSmoothing smoothing(){return smoothing;}
     public PackIdMap ids(){return ids;}
     /** Evaluated once per frame by whoever fills this generation's uniform blocks. */
@@ -72,7 +75,8 @@ public final class CompiledShaderPack {
         }
         programs.sort(Comparator.comparing(Program::stage).thenComparingInt(Program::ordinal).thenComparing(Program::name));
         if(programs.isEmpty())throw new UnsupportedShaderException("Shader pack has no enabled executable programs");
-        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings,PackCustomUniforms.parse(catalog.properties().values()),catalog.ids());
+        return new CompiledShaderPack(programs,targets.build(),shadow.build(),sources,textures.load(source,programs),warnings,PackCustomUniforms.parse(catalog.properties().values()),catalog.ids(),
+                !"off".equalsIgnoreCase(catalog.properties().values().getOrDefault("clouds","").trim()));
     }
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{

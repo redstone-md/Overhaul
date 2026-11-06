@@ -95,6 +95,11 @@ public final class BlazePackFrame implements AutoCloseable {
         }
     }
 
+    /** True while an installed pack draws its own sky clouds instead of the game's. */
+    public boolean hidesClouds() {
+        return active && !pack.vanillaClouds();
+    }
+
     /** Idempotent within a frame: the game calls this before every translucent section layer it draws. */
     public void afterOpaque() {
         if (!active) return;

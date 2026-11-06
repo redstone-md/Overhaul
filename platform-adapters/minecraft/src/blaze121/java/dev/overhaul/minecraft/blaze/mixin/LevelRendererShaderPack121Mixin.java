@@ -38,6 +38,11 @@ abstract class LevelRendererShaderPack121Mixin {
         if (overhaul$pack != null && type == RenderType.translucent()) overhaul$pack.afterOpaque();
     }
 
+    @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
+    private void overhaul$packClouds(CallbackInfo callback) {
+        if (overhaul$pack != null && overhaul$pack.hidesClouds()) callback.cancel();
+    }
+
     @Inject(method = "renderLevel", at = @At("RETURN"))
     private void overhaul$finishPack(DeltaTracker delta, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f view, Matrix4f projection, CallbackInfo callback) {
         if (overhaul$pack != null) overhaul$pack.finish();
