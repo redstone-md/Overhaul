@@ -31,6 +31,7 @@ public enum BlazeOptimization {
     CUBE_MESH("cubeMesh", "Entity model cubes written from precomputed quads"),
     CUBE_AXES("cubeAxes", "Cubes of a model part reuse its transformed axis normals instead of transforming them per cube; needs cubeMesh"),
     ITEM_QUADS("itemQuads", "Item quads written directly instead of per-vertex"),
+    ITEM_AXES("itemAxes", "Item quads facing an axis reuse their pose's transformed axis normals instead of transforming a normal per quad; needs itemQuads"),
     ENTITY_RENDERER_CACHE("entityRendererCache", "Entity renderer lookup stored on the entity type"),
     BIOME_CACHE("biomeCache", "Sky and fog biome samples cached per tick"),
     SPRITE_INTERPOLATION("spriteInterpolation", "Interpolated texture animation blended on raw memory"),

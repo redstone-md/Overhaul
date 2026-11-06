@@ -13,6 +13,7 @@ import org.joml.Vector3f;
 public final class BlazeBakedQuadWriter {
     private static final boolean LITTLE_ENDIAN=ByteOrder.nativeOrder()==ByteOrder.LITTLE_ENDIAN;
     private static final int VERTEX_INTS=8,VERTICES=4,COLOR=3,U=4,V=5,LIGHT=6,NORMAL=7,NORMAL_MASK=0xFFFFFF;
+    private static final boolean REUSE_AXES=BlazeOptimization.ITEM_AXES.on();
 
     private BlazeBakedQuadWriter(){}
 
@@ -25,9 +26,7 @@ public final class BlazeBakedQuadWriter {
         Matrix4f matrix=pose.pose();
         Matrix3f normals=pose.normal();
         Vector3f normal=new Vector3f();
-        Vec3i direction=quad.getDirection().getNormal();
-        pose.transformNormal(direction.getX(),direction.getY(),direction.getZ(),normal);
-        int faceNormal=BlazeEntityVertex.packNormal(normal.x,normal.y,normal.z);
+        int faceNormal=REUSE_AXES?BlazeCubeAxes.of(pose).toward(quad.getDirection()):faceNormal(pose,quad,normal);
         int lastBaked=0,lastPacked=faceNormal;
         for(int at=0;at<data.length;at+=VERTEX_INTS,pointer+=BlazeEntityVertex.BYTES){
             float x=Float.intBitsToFloat(data[at]),y=Float.intBitsToFloat(data[at+1]),z=Float.intBitsToFloat(data[at+2]);
@@ -46,6 +45,10 @@ public final class BlazeBakedQuadWriter {
                     brightest(light,data[at+LIGHT]),lastPacked);
         }
         return true;
+    }
+    private static int faceNormal(PoseStack.Pose pose,BakedQuad quad,Vector3f scratch){
+        Vec3i direction=quad.getDirection().getNormal();
+        return BlazeCubeMesh.packed(pose,direction.getX(),direction.getY(),direction.getZ(),scratch);
     }
     private static int tinted(int baked,float red,float green,float blue,float alpha){
         int a=(int)((alpha*(float)(baked>>>24)/255f)*255);

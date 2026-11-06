@@ -69,7 +69,7 @@ public final class BlazeCubeMesh {
         return BlazeEntityVertex.packNormal(scratch.x,scratch.y,scratch.z);
     }
     private static int opposite(int packed){
-        return -(byte)packed&0xFF|(-(byte)(packed>>8)&0xFF)<<8|(-(byte)(packed>>16)&0xFF)<<16;
+        return BlazeCubeAxes.opposite(packed);
     }
     private static Object field(Object owner,String name) throws ReflectiveOperationException {
         Field field=owner.getClass().getDeclaredField(name);

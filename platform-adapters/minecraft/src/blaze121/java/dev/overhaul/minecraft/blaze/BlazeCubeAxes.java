@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.core.Direction;
 import org.joml.Matrix3f;
 import org.joml.Vector3f;
 
@@ -27,6 +28,22 @@ final class BlazeCubeAxes {
     int x() { return x; }
     int y() { return y; }
     int z() { return z; }
+
+    /** The packed normal of a face pointing along this direction. */
+    int toward(Direction direction) {
+        return switch (direction) {
+            case EAST -> x;
+            case UP -> y;
+            case SOUTH -> z;
+            case WEST -> opposite(x);
+            case DOWN -> opposite(y);
+            case NORTH -> opposite(z);
+        };
+    }
+
+    static int opposite(int packed) {
+        return -(byte) packed & 0xFF | (-(byte) (packed >> 8) & 0xFF) << 8 | (-(byte) (packed >> 16) & 0xFF) << 16;
+    }
 
     private void update(PoseStack.Pose pose) {
         Matrix3f n = pose.normal();
