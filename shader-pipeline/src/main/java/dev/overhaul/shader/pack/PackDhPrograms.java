@@ -66,14 +66,14 @@ public final class PackDhPrograms {
                 + "float overhaulDhBit(float bits, float bit) { return mod(floor(bits / bit), 2.0); }\n";
     }
 
-    /** Decodes the packed meta short: light in the low byte (sky high nibble), seam offsets in the high byte. */
+    /** Decodes the packed meta short: light in the low byte (block high nibble, sky low), seam offsets in the high byte. */
     private static String wrapper() {
         return "\nvoid main() {\n"
                 + "    float meta = " + POSITION + ".w;\n"
                 + "    float micro = floor(meta / 256.0);\n"
                 + "    float lights = meta - micro * 256.0;\n"
-                + "    float sky = floor(lights / 16.0);\n"
-                + "    float block = lights - sky * 16.0;\n"
+                + "    float block = floor(lights / 16.0);\n"
+                + "    float sky = lights - block * 16.0;\n"
                 + "    float mx = overhaulDhBit(micro, 1.0) * (1.0 - 2.0 * overhaulDhBit(micro, 2.0)) * " + MICRO_OFFSET + ";\n"
                 + "    float mz = overhaulDhBit(micro, 16.0) * (1.0 - 2.0 * overhaulDhBit(micro, 32.0)) * " + MICRO_OFFSET + ";\n"
                 + "    overhaulDhVertex = vec4(" + POSITION + ".xyz + " + PackSectionOffsets.ATTRIBUTE + " + vec3(mx, 0.0, mz), 1.0);\n"
