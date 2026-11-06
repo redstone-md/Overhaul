@@ -41,7 +41,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("LevelEntityClasses121Mixin", BlazeOptimization.ENTITY_CLASS_SCANS),
             Map.entry("EntitySectionManagerClasses121Mixin", BlazeOptimization.ENTITY_CLASS_SCANS),
             Map.entry("EntityLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
-            Map.entry("EntityDispatcherLight121Mixin", BlazeOptimization.ENTITY_LIGHT));
+            Map.entry("EntityDispatcherLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
+            Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
+            Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
 
     @Override public void onLoad(String mixinPackage) {
         BlazeOptimization.describeInFile();

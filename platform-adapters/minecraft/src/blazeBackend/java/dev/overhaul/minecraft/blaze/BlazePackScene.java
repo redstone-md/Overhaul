@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.shader.pack.CompiledShaderPack;
+import dev.overhaul.shader.pack.PackIdMap;
 import dev.overhaul.shader.pack.PackProgramFallbacks;
 import dev.overhaul.vulkan.GpuBuffer;
 import dev.overhaul.vulkan.GpuImage;
@@ -61,6 +62,10 @@ public final class BlazePackScene implements AutoCloseable {
         flatNormal = solid(0.5f, 0.5f, 1, 1);
         noSpecular = solid(0, 0, 0, 0);
         renderer.packScene(this);
+    }
+
+    PackIdMap ids() {
+        return pack.ids();
     }
 
     public static String baseName(CompiledShaderPack.Program program) {

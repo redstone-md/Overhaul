@@ -211,7 +211,11 @@ public final class BlazeRenderer implements AutoCloseable {
         try{draw(mesh,target,shader);}
         catch(UnsupportedOperationException failure){BlazeGlBoundary.reportOnce("foreign draw "+failure.getMessage(),"A mod program's draw was dropped: "+failure.getMessage());}
     }
-    void packScene(BlazePackScene scene){boolean compact=scene!=null&&compactsSections();packScene=scene;if(compact)rebuildSections();}
+    void packScene(BlazePackScene scene){
+        boolean compact=scene!=null&&compactsSections();packScene=scene;
+        boolean ids=BlazePackBlockIds.activate(scene==null?null:scene.ids());
+        if(compact||ids)rebuildSections();
+    }
     BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
     public void clear(int mask){clear(mask,clearValues());}

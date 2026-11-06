@@ -53,7 +53,7 @@ final class BlazePackVertexInputs {
             case "overhaulLegacyNormal" -> either(location, layout, "Normal", UP);
             case "overhaulLegacyTexCoord0", "mc_midTexCoord" -> either(location, layout, "UV0", TEXTURE);
             case "overhaulLegacyTexCoord1" -> either(location, layout, "UV2", LIGHT);
-            case "mc_Entity" -> constant(location, UNKNOWN_ID);
+            case "mc_Entity" -> either(location, layout, BlazePackBlockIds.FIELD, UNKNOWN_ID);
             case "at_tangent" -> constant(location, TANGENT);
             case "at_velocity", "at_midBlock" -> constant(location, ZERO);
             default -> throw new UnsupportedShaderException("Unbound pack vertex input: " + name);

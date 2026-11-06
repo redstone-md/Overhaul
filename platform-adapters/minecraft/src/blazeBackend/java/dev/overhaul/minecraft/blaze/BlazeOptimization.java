@@ -45,7 +45,8 @@ public enum BlazeOptimization {
     PARTICLE_QUADS("particleQuads", "Particle quads written in one go instead of vertex by vertex"),
     ENTITY_CLASS_SCANS("entityClassScans", "Client entity scans skipped for classes no loaded entity belongs to"),
     ENTITY_LIGHT("entityLight", "Light at each entity sampled once per tick instead of once per frame"),
-    HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame");
+    HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame"),
+    PACK_BLOCK_IDS("packBlockIds", "Terrain vertices carry the shader pack's block ids for mc_Entity; off, every block reads -1");
 
 
     private final String key, description;
