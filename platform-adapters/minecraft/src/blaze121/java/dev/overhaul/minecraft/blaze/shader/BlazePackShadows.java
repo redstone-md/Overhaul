@@ -60,6 +60,9 @@ final class BlazePackShadows {
     private final BlazeMesh[][] layerMeshes = new BlazeMesh[LAYERS.length][0];
     private final int[][] layerCasters = new int[LAYERS.length][0];
     private final int[] layerCounts = new int[LAYERS.length];
+    /** Per section, whether this frame's light frustum holds it without the margin; read only while {@link #tight}. */
+    private boolean[] inside = new boolean[0];
+    private boolean tight;
     private double keptX, keptY, keptZ;
     private float lightX, lightY, lightZ;
     private long keptAt = -1;
@@ -79,6 +82,7 @@ final class BlazePackShadows {
         uniforms.shadowProjection(projection);
         var position = camera.getPosition();
         collect(sections, position.x, position.y, position.z);
+        tighten(position.x, position.y, position.z);
         light.turnOnLightLayer();
         scene.beginShadows(minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getId(), RenderSystem.getShaderTexture(2), settings.resolution());
         runtime.prepareShadows(renderer.packCommands());
@@ -166,6 +170,26 @@ final class BlazePackShadows {
         casters[casterCount++] = index;
     }
 
+    /**
+     * Kept casters were picked through a frustum widened by the margin. Once the frame is bound by the GPU, drawing
+     * them all costs more than this test, so each frame keeps only those inside its own frustum and distance.
+     */
+    private void tighten(double x, double y, double z) {
+        tight = BlazeOptimization.PACK_SHADOW_REUSE.on() && settings.fov() == null && casterCount != 0;
+        if (!tight) return;
+        frustum.set(projection.mul(view, combined));
+        float multiplier = settings.renderMultiplier();
+        double limit = multiplier > 0 ? settings.distance() * multiplier + 16 : Double.MAX_VALUE;
+        if (inside.length != indexed.length) inside = new boolean[indexed.length];
+        int[] origins = this.origins;
+        for (int at = 0; at < casterCount; at++) {
+            int index = casters[at];
+            float minX = (float) (origins[index * 3] - x), minY = (float) (origins[index * 3 + 1] - y), minZ = (float) (origins[index * 3 + 2] - z);
+            inside[index] = Math.abs(minX + 8) <= limit && Math.abs(minY + 8) <= limit && Math.abs(minZ + 8) <= limit
+                    && frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16);
+        }
+    }
+
     private void split() {
         for (int layer = 0; layer < LAYERS.length; layer++) {
             if (layerMeshes[layer].length < casterCount) {
@@ -231,6 +255,7 @@ final class BlazePackShadows {
         BlazeMesh[] meshes = layerMeshes[layer];
         for (int at = 0, count = layerCounts[layer]; at < count; at++) {
             int index = owners[at];
+            if (tight && !inside[index]) continue;
             BlazeMesh mesh = meshes[at];
             float offsetX = (float) (origins[index * 3] - x), offsetY = (float) (origins[index * 3 + 1] - y), offsetZ = (float) (origins[index * 3 + 2] - z);
             if (batch != null) {
