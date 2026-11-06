@@ -39,7 +39,8 @@ final class BlazeTexture implements AutoCloseable {
     boolean complete(){
         if(!defined(base)||max<base)return false;var source=image();int first=mip(base);
         boolean mipmapped=min!=GL_NEAREST&&min!=GL_LINEAR;
-        int last=mipmapped?Math.min(max,base+31-Integer.numberOfLeadingZeros(Math.max(source.width(first),source.height(first)))):base;
+        // A volume holds one level, so its mipmapped filters read that level as GL reads a texture limited to it.
+        int last=mipmapped&&!source.volume()?Math.min(max,base+31-Integer.numberOfLeadingZeros(Math.max(source.width(first),source.height(first)))):base;
         for(int level=base;level<=last;level++)if(!defined(level))return false;return true;
     }
     void allocate(int internal,int width,int height,int levels,ImmediateCommands commands){
@@ -53,9 +54,11 @@ final class BlazeTexture implements AutoCloseable {
         if(borrowed())throw new UnsupportedOperationException("Cannot redefine a render-target texture alias");
         if(layers<1||viewType==VK_IMAGE_VIEW_TYPE_CUBE&&(layers!=6||width!=height))throw new IllegalArgumentException("Invalid layered texture shape");
         var storage=BlazeTextureFormats.storage(internal);int count=storage.channels();ImageFormat format=storage.format();
-        GpuImage next=allocator.createImage(format,width,height,levels,layers,usage(format),flags(viewType));
+        // A 3D texture's depth is its slices; volumes here hold one mip level.
+        boolean volume=viewType==VK_IMAGE_VIEW_TYPE_3D;if(volume)levels=1;
+        GpuImage next=volume?allocator.createVolume(format,width,height,layers,usage(format)):allocator.createImage(format,width,height,levels,layers,usage(format),flags(viewType));
         try{
-            if(!format.isDepth())for(int level=0;level<levels;level++)for(int layer=0;layer<layers;layer++){
+            if(!format.isDepth())for(int level=0;level<levels;level++)for(int layer=0;layer<next.layers();layer++){
                 if(transfers!=null)transfers.clearColor(next,level,layer,0,0,0,count==4?0:1);
                 else commands.clearColor(next,level,layer,0,0,0,count==4?0:1);
             }
@@ -67,7 +70,8 @@ final class BlazeTexture implements AutoCloseable {
     }
     /** The view dimension this texture samples as; a render-target alias is always 2D. */
     int viewType(){return borrowed!=null?VK_IMAGE_VIEW_TYPE_2D:viewType;}
-    int layers(){return borrowed!=null?1:image==null?0:image.layers();}
+    /** Layers of a cube or array, slices of a 3D texture. */
+    int layers(){return borrowed!=null?1:image==null?0:image.volume()?image.depth():image.layers();}
     private static int flags(int viewType){return viewType==VK_IMAGE_VIEW_TYPE_CUBE?VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT:0;}
     private int usage(ImageFormat format){
         int usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -75,7 +79,9 @@ final class BlazeTexture implements AutoCloseable {
     }
     /** Marks this texture as a framebuffer attachment: its image moves to one that allows it, keeping any colour contents. */
     void attach(){
-        if(borrowed()||attached)return;attached=true;if(image==null)return;
+        if(borrowed()||attached)return;
+        if(viewType==VK_IMAGE_VIEW_TYPE_3D){BlazeGlBoundary.reportOnce("3D attachment","A mod attached a 3D texture to a framebuffer; it receives no output");return;}
+        attached=true;if(image==null)return;
         GpuImage next=allocator.createImage(image.format(),image.width(0),image.height(0),image.mipLevels(),image.layers(),usage(image.format()),flags(viewType));
         if(transfers!=null&&!image.format().isDepth())for(int level=0;level<image.mipLevels();level++)for(int layer=0;layer<image.layers();layer++){
             var area=new ImageRegion(level,layer,0,0,image.width(level),image.height(level));transfers.copy(image,area,next,area);

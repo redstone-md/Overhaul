@@ -142,10 +142,10 @@ final class BlazeGlRoutes {
         put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(6))));
     }
 
-    /** 3D image calls store only 2D arrays; a 3D texture has no owned storage. */
+    /** 3D image calls store 2D arrays and 3D textures; other targets have no owned storage for them. */
     private static boolean layered(int target) {
-        if (target == BlazeTextureTargets.ARRAY) return true;
-        BlazeGlBoundary.reportOnce("3D texture " + target, "A mod specified a 3D texture, which has no owned storage: " + target);
+        if (BlazeTextureTargets.deep(target)) return true;
+        BlazeGlBoundary.reportOnce("Deep texture " + target, "A mod specified a deep texture target with no owned storage: " + target);
         return false;
     }
 

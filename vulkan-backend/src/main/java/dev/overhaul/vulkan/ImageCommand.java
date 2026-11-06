@@ -295,7 +295,7 @@ public final class ImageCommand implements AutoCloseable {
     private static void describe(VkBufferImageCopy copy,GpuImage image,ImageRegion region,long offset,int pitch) {
         copy.bufferOffset(offset).bufferRowLength(region.rowPitch(image,pitch)/image.format().bytesPerPixel());
         copy.imageSubresource().aspectMask(image.format().aspectMask()).mipLevel(region.mipLevel()).baseArrayLayer(region.arrayLayer()).layerCount(1);
-        copy.imageOffset().set(region.x(),region.y(),0); copy.imageExtent().set(region.width(),region.height(),1);
+        copy.imageOffset().set(region.x(),region.y(),region.slice()); copy.imageExtent().set(region.width(),region.height(),1);
     }
     private void requireOpen() { context.device(); if (closed) throw new IllegalStateException("Image command is closed"); }
     @Override public void close() {

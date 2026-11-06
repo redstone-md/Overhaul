@@ -42,7 +42,7 @@ public final class BlazeTextures implements AutoCloseable {
     private final BlazePixelStore pixels=new BlazePixelStore();
     /** The 2D bindings; {@link #layered} holds the cube and 2D array bindings of the same units. */
     private final int[] bindings=new int[32];
-    private final int[][] layered={bindings,new int[32],new int[32]};
+    private final int[][] layered={bindings,new int[32],new int[32],new int[32]};
     private BlazeTexture incomplete;
     /** Cleared cube, array and 3D views, made the first time a sampler of that dimension asks. */
     private final GpuImageView[] blanks=new GpuImageView[3];
@@ -67,6 +67,7 @@ public final class BlazeTextures implements AutoCloseable {
     /** The renderable storage behind a name, or null while the name holds none at that level. */
     Attachment attachment(int id,int level){
         requireOpen();BlazeTexture texture=find(id);if(texture==null||!texture.defined(level))return null;
+        if(texture.viewType()==VK_IMAGE_VIEW_TYPE_3D){texture.attach();return null;}
         texture.attach();return new Attachment(texture.image(),texture.mip(level),texture.layer());
     }
     void renderbufferStorage(int id,int internal,int width,int height){
@@ -77,9 +78,10 @@ public final class BlazeTextures implements AutoCloseable {
         int kind=kind(target);if(kind==BlazeTextureTargets.KIND_CUBE)current(target).allocate(internal,width,height,levels,6,VK_IMAGE_VIEW_TYPE_CUBE,commands,true);
         else storage(target,levels,internal,width,height,1);
     }
-    /** Immutable storage of a 2D array, its depth the layer count. */
+    /** Immutable storage of a 2D array or 3D texture, its depth the layers or slices. A volume keeps only its first level. */
     void storage(int target,int levels,int internal,int width,int height,int depth){
         int kind=kind(target);if(kind==BlazeTextureTargets.KIND_CUBE)throw new UnsupportedOperationException("Cube storage has no depth");
+        if(kind==BlazeTextureTargets.KIND_3D&&levels>1)BlazeGlBoundary.reportOnce("3D mips","A 3D texture asked for mip levels; it keeps only its first level");
         current(target).allocate(internal,width,height,levels,depth,BlazeTextureTargets.viewType(kind),commands,true);
     }
     private int nextId(){if(next<=0)throw new IllegalStateException("Texture namespace exhausted");return next++;}
@@ -102,7 +104,8 @@ public final class BlazeTextures implements AutoCloseable {
     public Integer integer(int name){
         requireOpen();if(name==GL_ACTIVE_TEXTURE)return GL_TEXTURE0+active;if(name==GL_TEXTURE_BINDING_2D)return bindings[active];
         if(name==BlazeTextureTargets.BINDING_CUBE)return layered[BlazeTextureTargets.KIND_CUBE][active];
-        if(name==BlazeTextureTargets.BINDING_ARRAY)return layered[BlazeTextureTargets.KIND_ARRAY][active];return pixels.integer(name);
+        if(name==BlazeTextureTargets.BINDING_ARRAY)return layered[BlazeTextureTargets.KIND_ARRAY][active];
+        if(name==BlazeTextureTargets.BINDING_3D)return layered[BlazeTextureTargets.KIND_3D][active];return pixels.integer(name);
     }
     public void pixelStore(int name,int value){requireOpen();pixels.set(name,value);}
     public void parameter(int target,int name,float value){current(target).parameter(name,value);}
@@ -114,16 +117,21 @@ public final class BlazeTextures implements AutoCloseable {
     public void image(int target,int level,int internal,int width,int height,int border,int format,int type,IntBuffer input){
         requireOpen();if(target==GL_PROXY_TEXTURE_2D){proxy(level,internal,width,height,border,format,type,input);return;}
         int kind=kind(target);if(border!=0||level<0)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
-        if(kind==BlazeTextureTargets.KIND_ARRAY||target==BlazeTextureTargets.CUBE_MAP)throw new UnsupportedOperationException("2D image of a layered target");
+        if(BlazeTextureTargets.deep(target)||target==BlazeTextureTargets.CUBE_MAP)throw new UnsupportedOperationException("2D image of a layered target");
         BlazePixels.bytes(format,type);
         define(current(target),kind,level,internal,width,height,kind==BlazeTextureTargets.KIND_CUBE?6:1,BlazeTextureTargets.layer(target));
         if(input!=null)upload(target,level,0,0,width,height,format,type,MemoryUtil.memByteBuffer(input));
     }
-    /** glTexImage3D of a 2D array: level 0 gives the array its layers, later levels must match them. */
+    /**
+     * glTexImage3D of a 2D array or 3D texture: level 0 gives it its layers or slices, later array levels must match
+     * them. A volume holds level 0 only, so its later levels are dropped with a report.
+     */
     public void image(int target,int level,int internal,int width,int height,int depth,int border,int format,int type){
-        int kind=kind(target);if(kind!=BlazeTextureTargets.KIND_ARRAY)throw new UnsupportedOperationException("Only 2D arrays take 3D images");
+        if(!BlazeTextureTargets.deep(target))throw new UnsupportedOperationException("Only 2D arrays and 3D textures take 3D images");
+        int kind=kind(target);
         if(border!=0||level<0||depth<1)throw new UnsupportedOperationException("Texture borders/negative levels are unsupported");
         BlazePixels.bytes(format,type);var texture=current(target);
+        if(kind==BlazeTextureTargets.KIND_3D&&level>0){BlazeGlBoundary.reportOnce("3D mips","A 3D texture asked for mip levels; it keeps only its first level");return;}
         if(level>0&&texture.layers()!=depth)throw new UnsupportedOperationException("Noncanonical texture mip redefinition");
         define(texture,kind,level,internal,width,height,depth,-1);
     }
@@ -152,10 +160,11 @@ public final class BlazeTextures implements AutoCloseable {
         var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         upload(target,level,x,y,width,height,format,type,MemoryUtil.memByteBuffer(address,layout.bytes()));
     }
-    /** glTexSubImage3D of a 2D array: each slice of the source is one layer's rectangle, packed one after another. */
+    /** glTexSubImage3D of a 2D array or 3D texture: each slice of the source is one layer's rectangle, packed one after another. */
     public void upload(int target,int level,int x,int y,int z,int width,int height,int depth,int format,int type,long address){
-        if(kind(target)!=BlazeTextureTargets.KIND_ARRAY)throw new UnsupportedOperationException("Only 2D arrays take 3D uploads");
+        if(!BlazeTextureTargets.deep(target))throw new UnsupportedOperationException("Only 2D arrays and 3D textures take 3D uploads");
         if(width==0||height==0||depth==0)return;if(address==0)throw new IllegalArgumentException("Null pixel source");
+        if(kind(target)==BlazeTextureTargets.KIND_3D&&level>0)return;
         var texture=current(target);if(z<0||depth<0||z>texture.layers()-depth)throw new IllegalArgumentException("Pixel box exceeds texture layers");
         long slice=pixels.layout(false,width,height,BlazePixels.bytes(format,type)).bytes();
         for(int layer=0;layer<depth;layer++)upload(texture,level,z+layer,x,y,width,height,format,type,MemoryUtil.memByteBuffer(address+layer*slice,(int)slice));
@@ -254,7 +263,7 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void generateMipmap(int target){
         var texture=current(target);
-        if(texture.borrowed()||!texture.defined(texture.baseLevel()))return;
+        if(texture.borrowed()||!texture.defined(texture.baseLevel())||texture.image().volume())return;
         for(int layer=0;layer<texture.layers();layer++)transfers.mipmaps(texture.image(),texture.baseLevel(),layer);
         texture.defineMipmaps(texture.baseLevel()+1);
     }
@@ -312,6 +321,7 @@ public final class BlazeTextures implements AutoCloseable {
         var image=texture.image();int mip=texture.mip(level);
         if(x<0||y<0||width<1||height<1||x>image.width(mip)-width||y>image.height(mip)-height)throw new IllegalArgumentException("Pixel rectangle exceeds texture mip");
         if(layer<0||layer>=texture.layers())throw new IllegalArgumentException("Pixel layer exceeds texture layers");
+        if(image.volume())return new ImageRegion(mip,0,x,y,width,height,layer);
         return new ImageRegion(mip,texture.layer()+layer,x,y,width,height);
     }
     private void proxy(int level,int internal,int width,int height,int border,int format,int type,IntBuffer input){

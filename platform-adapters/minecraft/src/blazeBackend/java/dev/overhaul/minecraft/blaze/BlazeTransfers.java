@@ -92,7 +92,7 @@ final class BlazeTransfers {
         int rows=Math.max(1,(MAX_CHUNK-tight)/stride+1);
         for(int row=0;row<region.height();){
             int count=Math.min(rows,region.height()-row);
-            ImageRegion chunk=count==region.height()?region:new ImageRegion(region.mipLevel(),region.arrayLayer(),region.x(),region.y()+row,region.width(),count);
+            ImageRegion chunk=count==region.height()?region:new ImageRegion(region.mipLevel(),region.arrayLayer(),region.x(),region.y()+row,region.width(),count,region.slice());
             int length=Math.addExact(Math.multiplyExact(count-1,stride),tight);
             uploadChunk(target,chunk,source.slice(source.position()+Math.multiplyExact(row,stride),length),pitch,length);
             row+=count;
