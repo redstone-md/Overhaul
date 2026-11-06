@@ -6,6 +6,9 @@ import java.util.Objects;
 
 /** Thread-confined std140 values. The returned view never exposes mutable storage. */
 public final class UniformBlock {
+    /** Type names by component count, so a setter never builds a string per call. */
+    private static final String[] VEC = {null, null, "vec2", "vec3", "vec4"}, IVEC = {null, null, "ivec2", "ivec3", "ivec4"},
+            MAT = {null, null, "mat2", "mat3", "mat4"};
     private final ProgramBindings bindings;
     private final ByteBuffer data;
 
@@ -27,12 +30,12 @@ public final class UniformBlock {
     }
     public void setVector(String name, float... values) {
         if (values.length < 2 || values.length > 4) throw new IllegalArgumentException("Vector size must be 2..4");
-        var uniform = require(name,"vec"+values.length);
+        var uniform = require(name,VEC[values.length]);
         for (int index=0;index<values.length;index++) data.putFloat(uniform.byteOffset()+4*index,values[index]);
     }
     public void setIntVector(String name, int... values) {
         if (values.length < 2 || values.length > 4) throw new IllegalArgumentException("Vector size must be 2..4");
-        var uniform = require(name,"ivec"+values.length);
+        var uniform = require(name,IVEC[values.length]);
         for (int index=0;index<values.length;index++) data.putInt(uniform.byteOffset()+4*index,values[index]);
     }
 
@@ -41,7 +44,7 @@ public final class UniformBlock {
         if (dimension < 2 || dimension > 4 || columnMajor.length != dimension*dimension) {
             throw new IllegalArgumentException("Matrix dimensions must be square and 2..4");
         }
-        var uniform = require(name,"mat"+dimension);
+        var uniform = require(name,MAT[dimension]);
         for (int column=0;column<dimension;column++) for (int row=0;row<dimension;row++) {
             data.putFloat(uniform.byteOffset()+column*16+row*4,columnMajor[column*dimension+row]);
         }
