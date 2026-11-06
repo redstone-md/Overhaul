@@ -31,14 +31,15 @@ final class BlazeTransfers {
     }
     /**
      * Vertices start on a multiple of their stride, so every section in a page binds the page at offset zero and the
-     * sections of one layer share one multi-draw per page instead of one per distinct leftover.
+     * sections of one layer share one multi-draw per page instead of one per distinct leftover. The multiple is of a
+     * whole quad, so the base vertex a draw then carries keeps {@code gl_VertexID % 4} naming the corner, as packs expect.
      */
     BlazeGeometryRange vertices(ByteBuffer source,int stride){
-        int alignment=geometry.alignment(),bytes=source.remaining();
-        if(!BlazeOptimization.STRIDE_OFFSETS.on()||alignment%stride==0)return geometry(source);
-        int slack=stride-gcd(alignment,stride);
+        int alignment=geometry.alignment(),bytes=source.remaining(),quad=stride*4;
+        if(!BlazeOptimization.STRIDE_OFFSETS.on()||alignment%quad==0)return geometry(source);
+        int slack=quad-gcd(alignment,quad);
         BlazeBufferPool.Slice destination=geometry.acquire(bytes+slack);
-        int shift=(stride-destination.offset()%stride)%stride;
+        int shift=(quad-destination.offset()%quad)%quad;
         fill(destination,shift,bytes,(target,offset)->target.put(source.slice(source.position()+offset,target.remaining())));
         return new BlazeShiftedRange(destination,shift);
     }
