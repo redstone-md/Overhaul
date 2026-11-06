@@ -20,6 +20,7 @@ public final class BlazeCubeMesh {
     private static final byte OFF_AXIS=-1;
     private static final BlazeCubeMesh UNSUPPORTED=new BlazeCubeMesh(null,null);
     private static final Logger LOGGER=LoggerFactory.getLogger(BlazeCubeMesh.class);
+    private static final boolean REUSE_AXES=BlazeOptimization.CUBE_AXES.on();
     private static boolean reported;
     private final float[] quads;
     private final byte[] axes;
@@ -63,7 +64,7 @@ public final class BlazeCubeMesh {
         if(x==0f&&y==0f&&Math.abs(z)==1f)return (byte)(z>0f?2:5);
         return OFF_AXIS;
     }
-    private static int packed(PoseStack.Pose pose,float x,float y,float z,Vector3f scratch){
+    static int packed(PoseStack.Pose pose,float x,float y,float z,Vector3f scratch){
         pose.transformNormal(x,y,z,scratch);
         return BlazeEntityVertex.packNormal(scratch.x,scratch.y,scratch.z);
     }
@@ -90,8 +91,13 @@ public final class BlazeCubeMesh {
         float m30=matrix.m30(),m31=matrix.m31(),m32=matrix.m32();
         int abgr=FastColor.ABGR32.fromArgb32(color);
         Vector3f normal=new Vector3f();
-        // Six faces, three directions: the opposite of a transformed and packed normal is that value negated.
-        int alongX=packed(pose,1f,0f,0f,normal),alongY=packed(pose,0f,1f,0f,normal),alongZ=packed(pose,0f,0f,1f,normal);
+        int alongX,alongY,alongZ;
+        if(REUSE_AXES){
+            BlazeCubeAxes axes=BlazeCubeAxes.of(pose);
+            alongX=axes.x();alongY=axes.y();alongZ=axes.z();
+        }else{
+            alongX=packed(pose,1f,0f,0f,normal);alongY=packed(pose,0f,1f,0f,normal);alongZ=packed(pose,0f,0f,1f,normal);
+        }
         byte[] faces=axes;
         for(int at=0,quad=0;at<data.length;quad++){
             int packedNormal=switch(faces[quad]){

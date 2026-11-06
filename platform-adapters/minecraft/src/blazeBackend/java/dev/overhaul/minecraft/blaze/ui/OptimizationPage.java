@@ -19,7 +19,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS, BlazeOptimization.SECTION_DRAWS,
                     BlazeOptimization.STRIDE_OFFSETS)),
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
-                    BlazeOptimization.CUBE_MESH, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
+                    BlazeOptimization.CUBE_MESH, BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
@@ -112,6 +112,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.STREAM_UPLOADS, "Streamed uploads");
         labels.put(BlazeOptimization.BULK_VERTICES, "Bulk vertex writes");
         labels.put(BlazeOptimization.CUBE_MESH, "Precomputed model cubes");
+        labels.put(BlazeOptimization.CUBE_AXES, "Shared cube normals");
         labels.put(BlazeOptimization.ITEM_QUADS, "Direct item quads");
         labels.put(BlazeOptimization.ENTITY_RENDERER_CACHE, "Entity renderer cache");
         labels.put(BlazeOptimization.BIOME_CACHE, "Sky and fog biome cache");

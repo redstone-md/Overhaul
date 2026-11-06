@@ -29,6 +29,7 @@ public enum BlazeOptimization {
     STREAM_UPLOADS("streamUploads", "Per-frame geometry written to host memory instead of copied to device memory"),
     BULK_VERTICES("bulkVertices", "Direct vertex writes for cubes and item quads; cubeMesh and itemQuads need this"),
     CUBE_MESH("cubeMesh", "Entity model cubes written from precomputed quads"),
+    CUBE_AXES("cubeAxes", "Cubes of a model part reuse its transformed axis normals instead of transforming them per cube; needs cubeMesh"),
     ITEM_QUADS("itemQuads", "Item quads written directly instead of per-vertex"),
     ENTITY_RENDERER_CACHE("entityRendererCache", "Entity renderer lookup stored on the entity type"),
     BIOME_CACHE("biomeCache", "Sky and fog biome samples cached per tick"),
