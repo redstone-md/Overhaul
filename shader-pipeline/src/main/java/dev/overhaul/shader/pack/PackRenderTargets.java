@@ -45,8 +45,9 @@ public final class PackRenderTargets {
         }
         var enabled=new java.util.TreeSet<Integer>();for(var entry:states.entrySet())if(entry.getValue())enabled.add(entry.getKey());return Set.copyOf(enabled);
     }
+    /** Runs for every sampler of every pass each frame, so it parses by hand instead of through a regex. */
     public static int colorIndex(String sampler){
-        if(sampler.matches("colortex(?:[0-9]|1[0-5])"))return Integer.parseInt(sampler.substring(8));
+        if(sampler.startsWith("colortex")){int index=suffix(sampler,8);if(index>=0&&index<=15)return index;}
         for(int index=0;index<ALIASES.length;index++)if(ALIASES[index].equals(sampler))return index;
         return -1;
     }
@@ -55,7 +56,21 @@ public final class PackRenderTargets {
         if(index<0||index>15)throw new IllegalArgumentException("Invalid color target index");
         return index<ALIASES.length?java.util.List.of("colortex"+index,ALIASES[index]):java.util.List.of("colortex"+index);
     }
-    public static int depthIndex(String sampler){return sampler.equals("gdepthtex")?0:sampler.matches("depthtex[0-2]")?sampler.charAt(8)-'0':-1;}
+    public static int depthIndex(String sampler){
+        if(sampler.equals("gdepthtex"))return 0;
+        int index=sampler.startsWith("depthtex")?suffix(sampler,8):-1;
+        return index>=0&&index<=2?index:-1;
+    }
+    /** The decimal number filling the name from {@code from}: one or two digits without a leading zero, else -1. */
+    private static int suffix(String name,int from){
+        int length=name.length()-from;
+        if(length<1||length>2)return -1;
+        char first=name.charAt(from);
+        if(first<'0'||first>'9'||length==2&&first=='0')return -1;
+        if(length==1)return first-'0';
+        char second=name.charAt(from+1);
+        return second<'0'||second>'9'?-1:(first-'0')*10+second-'0';
+    }
     private static int dimension(String value,int viewport){
         if(viewport<1)throw new IllegalArgumentException("Positive viewport required");
         try{
