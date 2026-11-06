@@ -143,6 +143,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");
         labels.put(BlazeOptimization.DH_SHARED_PAGES, "Distant Horizons shared pages");
         labels.put(BlazeOptimization.MERGED_BARRIERS, "Merged image barriers");
+        labels.put(BlazeOptimization.SHADOW_DRAWS, "Flat shadow draw fields");
         return labels;
     }
 }

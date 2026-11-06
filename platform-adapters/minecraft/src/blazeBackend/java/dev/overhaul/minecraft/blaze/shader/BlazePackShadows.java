@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.blaze.shader;
 
 import dev.overhaul.minecraft.blaze.BlazeChunkLayers;
+import dev.overhaul.minecraft.blaze.BlazeDrawTable;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.overhaul.minecraft.blaze.BlazeMesh;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
@@ -67,7 +68,8 @@ final class BlazePackShadows {
     private int[] columnFirst = new int[0], columnBase = new int[0];
     private int columnCount;
     /** Per layer, the casters that have a mesh in it, so each pass walks only meshes it draws. */
-    private final BlazeMesh[][] layerMeshes = new BlazeMesh[LAYERS.length][0];
+    private final BlazeDrawTable[] layerMeshes = new BlazeDrawTable[LAYERS.length];
+    private static final boolean DRAWS = BlazeOptimization.SHADOW_DRAWS.on();
     private final int[][] layerCasters = new int[LAYERS.length][0];
     private final int[] layerCounts = new int[LAYERS.length];
     /** Per section, whether this frame's light frustum holds it without the margin; read only while {@link #tight}. */
@@ -91,6 +93,7 @@ final class BlazePackShadows {
         this.scene = scene;
         this.runtime = runtime;
         this.settings = settings;
+        for (int layer = 0; layer < LAYERS.length; layer++) layerMeshes[layer] = new BlazeDrawTable();
     }
 
     void render(Minecraft minecraft, ViewArea sections, BlazePackUniforms uniforms, Camera camera, LightTexture light, PackGraphRuntime.Frame frame) {
@@ -268,21 +271,18 @@ final class BlazePackShadows {
 
     private void split() {
         for (int layer = 0; layer < LAYERS.length; layer++) {
-            if (layerMeshes[layer].length < casterCount) {
-                layerMeshes[layer] = new BlazeMesh[casters.length];
-                layerCasters[layer] = new int[casters.length];
-            }
-            BlazeMesh[] into = layerMeshes[layer];
+            if (layerCasters[layer].length < casterCount) layerCasters[layer] = new int[casters.length];
+            BlazeDrawTable into = layerMeshes[layer];
             int[] owners = layerCasters[layer];
             int count = 0;
             for (int at = 0; at < casterCount; at++) {
                 int index = casters[at];
                 BlazeMesh mesh = meshes[index * LAYERS.length + layer];
                 if (mesh == null) continue;
-                into[count] = mesh;
+                into.put(count, mesh, DRAWS);
                 owners[count++] = index;
             }
-            Arrays.fill(into, count, Math.max(count, Math.min(layerCounts[layer], into.length)), null);
+            into.clear(count, layerCounts[layer]);
             layerCounts[layer] = count;
         }
     }
@@ -332,17 +332,18 @@ final class BlazePackShadows {
         scene.shadowLayer(program);
         BlazeSectionBatch batch = scene.shadowSections(view, projection);
         int[] origins = this.origins, owners = layerCasters[layer];
-        BlazeMesh[] meshes = layerMeshes[layer];
+        BlazeDrawTable meshes = layerMeshes[layer];
         for (int at = 0, count = layerCounts[layer]; at < count; at++) {
             int index = owners[at];
             if (tight && !inside[index]) continue;
-            BlazeMesh mesh = meshes[at];
             float offsetX = (float) (origins[index * 3] - x), offsetY = (float) (origins[index * 3 + 1] - y), offsetZ = (float) (origins[index * 3 + 2] - z);
-            if (batch != null) {
-                batch.add(mesh, offsetX, offsetY, offsetZ);
+            if (batch != null && DRAWS) {
+                batch.add(meshes, at, offsetX, offsetY, offsetZ);
+            } else if (batch != null) {
+                batch.add(meshes.mesh(at), offsetX, offsetY, offsetZ);
             } else {
                 view.translate(offsetX, offsetY, offsetZ, modelView);
-                scene.castShadow(mesh, modelView, projection);
+                scene.castShadow(meshes.mesh(at), modelView, projection);
             }
         }
         if (batch != null) batch.end();
