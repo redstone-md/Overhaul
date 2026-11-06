@@ -31,6 +31,8 @@ public final class PackGraphRuntime implements AutoCloseable {
     private final VulkanContext context;
     private final CompiledShaderPack pack;
     private java.util.function.Function<String,GameTexture> games=location->null;
+    private static final String BLOCK_ATLAS="minecraft:textures/atlas/blocks.png";
+    private static final java.util.Set<String> ATLAS_ALIASES=java.util.Set.of("tex","texture","gtexture");
     private final PackTargetSwaps swaps=new PackTargetSwaps();
     private PackFrameGraph.Shapes shapes=new PackFrameGraph.Shapes();
     private final Map<CompiledShaderPack.Program,PackFullscreenPass> passes=new LinkedHashMap<>();
@@ -232,6 +234,11 @@ public final class PackGraphRuntime implements AutoCloseable {
             boolean comparison=bindings.comparisonSampler(samplerName);
             GpuImageView image=shadowDepth>=0?shadowDepthSample(shadowDepth,comparison):shadowColor>=0?shadowColor(shadowColor):color!=null?(program.mipmaps().contains(color.color())?images.sampling.get(color):images.colors.get(color)):
                     depth==1?images.opaqueDepth:depth>=0?images.depth:textures.get(samplerName);
+            if(image==null&&!comparison&&ATLAS_ALIASES.contains(samplerName)){
+                // A fullscreen pass has no draw texture; packs read its size there for the block atlas.
+                GameTexture atlas=games.apply(BLOCK_ATLAS);
+                if(atlas!=null){String name=plan.read(atlas.view());samples.put(samplerName,name);uses.put(name,usage);sampleModes.put(samplerName,atlas.sampler());continue;}
+            }
             if(image==null)throw new UnsupportedShaderException("Unbound shader-pack sampler: "+samplerName+" in "+program.name());
             String name=plan.read(image);samples.put(samplerName,name);uses.put(name,usage);
             if(comparison&&shadowDepth<0)throw new UnsupportedShaderException("Depth comparison requires a bound shadow depth texture: "+samplerName);
