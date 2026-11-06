@@ -10,13 +10,16 @@ import java.util.regex.Pattern;
 /**
  * Line-based conditionals for shaders.properties. Inactive lines are blanked, so only the
  * selected branch reaches {@link java.util.Properties}, which would otherwise read every
- * directive as a comment and merge all branches. Macros are not expanded inside values.
+ * directive as a comment and merge all branches. Macros are expanded only inside image and buffer
+ * declarations, whose sizes packs write as option names, as Iris's preprocessor does.
  */
 final class PackPropertiesPreprocessor {
     private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(define|undef|ifdef|ifndef|if|elif|else|endif)\\b(.*)$");
     private static final Pattern DEFINITION = Pattern.compile("([A-Za-z_]\\w*)(\\(?)\\s*(.*)");
     private static final Pattern NAME = Pattern.compile("[A-Za-z_]\\w*");
     private static final int MAX_NESTING = 64;
+    private static final Pattern SIZED = Pattern.compile("^(\\s*(?:image\\.\\w+|bufferObject\\.\\d+)\\s*[=:])(.*)$");
+    private static final Pattern WORD = Pattern.compile("\\b[A-Za-z_]\\w*\\b");
 
     private PackPropertiesPreprocessor() {}
 
@@ -43,7 +46,7 @@ final class PackPropertiesPreprocessor {
                 apply(directive.group(1),strip(directive.group(2)),defines,branches,active);
                 continued = false;
             } else {
-                if (active) output.append(line);
+                if (active) output.append(continued ? line : expand(line,defines));
                 continued = continues(line,continued);
             }
             output.append('\n');
@@ -88,6 +91,28 @@ final class PackPropertiesPreprocessor {
         if (!definition.matches()) throw invalid("Invalid #define in shaders.properties: " + argument);
         if (!definition.group(2).isEmpty()) throw invalid("Function-like macro in shaders.properties: " + definition.group(1));
         defines.put(definition.group(1),definition.group(3).trim());
+    }
+
+    /** Replaces macro names in an image or buffer value by their definitions, nested up to a bound. */
+    private static String expand(String line, Map<String,String> defines) {
+        var sized = SIZED.matcher(line);
+        if (!sized.matches()) return line;
+        String value = sized.group(2);
+        for (int depth = 0; depth < 8; depth++) {
+            var word = WORD.matcher(value);
+            StringBuilder result = new StringBuilder();
+            boolean changed = false;
+            while (word.find()) {
+                String definition = defines.get(word.group());
+                boolean replace = definition != null && !definition.isEmpty();
+                changed |= replace;
+                word.appendReplacement(result,java.util.regex.Matcher.quoteReplacement(replace ? definition : word.group()));
+            }
+            word.appendTail(result);
+            value = result.toString();
+            if (!changed) break;
+        }
+        return sized.group(1)+value;
     }
 
     private static String name(String kind, String argument) {
