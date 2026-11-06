@@ -43,6 +43,36 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         return lower(vertexName, fragmentName, vs, fs);
     }
 
+    /** {@code geometry} is null for the usual two-stage program. */
+    public synchronized Program compile(String vertexName, String geometryName, String fragmentName, String vertex, String geometry, String fragment,
+            ShadercCompiler.IncludeResolver includes) {
+        if (geometry == null) return compile(vertexName, fragmentName, vertex, fragment, includes);
+        String vs = BlazeGeometryStage.flatten(preprocess(vertexName, vertex, ShaderStage.VERTEX, includes));
+        String gs = BlazeGeometryStage.flatten(preprocess(geometryName, geometry, ShaderStage.GEOMETRY, includes));
+        String fs = BlazeGeometryStage.flatten(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, includes));
+        var vertexStage = BlazeSourceLowering.lower(vs, true);
+        var geometryStage = BlazeGeometryStage.lower(gs);
+        var fragmentStage = BlazeSourceLowering.lower(fs, false);
+        var lowered = translator.translate(varyingSchema(vertexStage), geometryStage.source(), varyingSchema(fragmentStage), CoordinateConvention.OPENGL_RENDER_TARGET);
+        String vertexText = declarations(lowered.vertex(), lowered.bindings().attributes(), vertexStage.attributes(), "in", java.util.Set.of(), false);
+        vertexText = declarations(vertexText, lowered.bindings().varyings(), vertexStage.varyings(), "out", vertexStage.flatVaryings(), true);
+        String geometryText = lowered.geometry();
+        for (var input : geometryStage.inputs().entrySet())
+            geometryText = BlazeGeometryStage.retype(geometryText, "in", input.getKey(), input.getValue(), false, true);
+        for (var output : geometryStage.outputs().entrySet())
+            geometryText = BlazeGeometryStage.retype(geometryText, "out", output.getKey(), output.getValue(), geometryStage.flatOutputs().contains(output.getKey()), false);
+        String fragmentText = lowered.fragment();
+        for (var input : fragmentStage.varyings().entrySet())
+            fragmentText = BlazeGeometryStage.retype(fragmentText, "in", input.getKey(), input.getValue(), fragmentStage.flatVaryings().contains(input.getKey()), false);
+        var declared = lowered.bindings();
+        var bindings = new ProgramBindings(declared.uniforms(), declared.uniformBytes(), declared.samplers(), declared.attributes(),
+                declared.varyings(), vertexStage.attributes(), declared.samplerTypes());
+        SpirvBinary vertexCode = compiler.compile(vertexName, vertexText, ShaderStage.VERTEX);
+        SpirvBinary geometryCode = compiler.compile(geometryName, geometryText, ShaderStage.GEOMETRY);
+        SpirvBinary fragmentCode = compiler.compile(fragmentName, fragmentText, ShaderStage.FRAGMENT);
+        return new Program(vertexCode, geometryCode, fragmentCode, SpirvInterface.active(bindings, vertexCode, geometryCode, fragmentCode, java.util.Set.of()), lowered.primitive());
+    }
+
     /** A program written for current OpenGL, with its includes already expanded by its own loader. */
     public synchronized Program compileModern(String vertexName, String fragmentName, String vertex, String fragment) {
         ShadercCompiler.IncludeResolver none = (requested, requester, relative) -> {
