@@ -4,7 +4,8 @@ def tiers = [
                    loaders: ['fabric', 'forge'], uploadMixin: 'VertexBufferUpload120Mixin', tierMixins: []],
         '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
-                   tierMixins: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin',
+                   loaderMixins: [neoforge: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin']],
+                   tierMixins: [
                                 'VeilCompiledProgram121Mixin', 'VeilShaderCompiler121Mixin', 'VeilCompiledShader121Mixin', 'VeilShaderSource121Access',
                                 'VeilUniformCache121Mixin', 'VeilShaderProgram121Mixin', 'VeilUniform121Access', 'VeilTextureCache121Access',
                                 'VeilScreenQuad121Mixin', 'GlStateProgram121Mixin', 'ShaderInstanceProgram121Access', 'EffectInstanceProgram121Access',
@@ -14,7 +15,7 @@ def tiers = [
                                 'ClientLevelBiomes121Mixin', 'FogRendererBiomes121Mixin',
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
                                 'ModelCube121Mixin', 'BufferBuilderBulk121Mixin', 'ItemQuads121Mixin',
-                                'XaeroMapWriter121Mixin', 'XaeroMapProcessor121Mixin', 'ShoulderCrosshair121Mixin', 'SectionOcclusionFrustum121Mixin', 'RenderSectionOrigin121Mixin', 'Frustum121Accessor', 'CataclysmScans121Mixin', 'AlexsCavesScans121Mixin', 'DhClouds121Mixin', 'XaeroRadar121Mixin', 'RendererRegistration121Mixin', 'RenderSectionBuffers121Mixin',
+                                'XaeroMapWriter121Mixin', 'XaeroMapProcessor121Mixin', 'ShoulderCrosshair121Mixin', 'SectionOcclusionFrustum121Mixin', 'RenderSectionOrigin121Mixin', 'Frustum121Accessor', 'CataclysmScans121Mixin', 'AlexsCavesScans121Mixin', 'DhClouds121Mixin', 'XaeroRadar121Mixin', 'RendererRegistration121Mixin', 'BlockEntityRendererRegistration121Mixin', 'RenderSectionBuffers121Mixin',
                                 'LevelRendererShaderPack121Mixin', 'TextureAtlas121Accessor', 'GameRendererHand121Access', 'GameRendererPackHand121Mixin', 'GameRendererPackBobbing121Mixin',
                                 'VideoSettingsRedirect121Mixin', 'OptionsSubScreen121Access',
                                 'LevelRendererSectionBatch121Mixin',
@@ -30,6 +31,10 @@ if (blazeTarget == null || !blazeTarget.loaders.contains(target.loader)) {
 if ((target.java as int) != blazeTarget.java) throw new GradleException('Blaze3D target Java version does not match its game tier')
 sourceSets.main.java.srcDir 'src/blazeBackend/java'
 sourceSets.main.java.srcDir "src/${blazeTarget.source}/java"
+// What a loader patches into the game (biome modifiers, its own loading screen) lives beside the tier, per loader.
+def blazeLoaderSource = file("src/${blazeTarget.source}${target.loader.capitalize()}/java")
+if (blazeLoaderSource.isDirectory()) sourceSets.main.java.srcDir blazeLoaderSource
+ext.blazeMixinNames = blazeTarget.tierMixins + ((blazeTarget.loaderMixins ?: [:])[target.loader] ?: [])
 sourceSets.main.resources.srcDir 'src/blazeBackend/resources'
 // Sodium and Distant Horizons are optional at runtime; their classes are compile-time stubs for @Pseudo mixins and are never packaged.
 sourceSets.create('blazeSodiumStubs') { java.srcDirs = ['src/blazeSodiumStubs/java'] }
@@ -39,7 +44,7 @@ dependencies {
 }
 tasks.named('processResources') {
     inputs.properties(blazeMinecraft: target.minecraft, blazeJava: target.java,
-            blazeUploadMixin: blazeTarget.uploadMixin, blazeTierMixins: blazeTarget.tierMixins.join(','))
+            blazeUploadMixin: blazeTarget.uploadMixin, blazeTierMixins: blazeMixinNames.join(','))
     filesMatching('overhaul.blaze.mixins.json') {
         expand(compatibility: "JAVA_${target.java}")
     }

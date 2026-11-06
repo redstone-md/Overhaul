@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
+import dev.overhaul.minecraft.blaze.BlazeLoader121;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
@@ -40,7 +41,7 @@ abstract class LevelRendererEntityOcclusion121Mixin {
     }
 
     private boolean overhaul$showsPastItsBox(Entity entity) {
-        return entity.noCulling || entity.shouldShowName() || minecraft.shouldEntityAppearGlowing(entity) || entity.hasCustomOutlineRendering(minecraft.player)
+        return entity.noCulling || entity.shouldShowName() || minecraft.shouldEntityAppearGlowing(entity) || BlazeLoader121.customOutline(entity, minecraft.player)
                 || entity instanceof Guardian || entity instanceof EndCrystal || entity instanceof Leashable leashable && leashable.isLeashed();
     }
 }

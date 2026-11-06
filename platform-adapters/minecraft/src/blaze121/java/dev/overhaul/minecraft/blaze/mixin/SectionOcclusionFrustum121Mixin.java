@@ -53,7 +53,7 @@ abstract class SectionOcclusionFrustum121Mixin {
     }
 
     /** A partial update adds nodes to the same graph without asking for a frustum update, so the copy misses them. */
-    @Inject(method = "runPartialUpdate", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SectionOcclusionGraph;runUpdates"))
+    @Inject(method = "runPartialUpdate", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SectionOcclusionGraph;runUpdates(Lnet/minecraft/client/renderer/SectionOcclusionGraph$GraphStorage;Lnet/minecraft/world/phys/Vec3;Ljava/util/Queue;ZLjava/util/function/Consumer;)V"))
     private void overhaul$graphGrew(CallbackInfo callback) {
         overhaul$bounds.invalidate();
     }

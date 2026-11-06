@@ -1,5 +1,6 @@
 package dev.overhaul.minecraft.blaze.shader;
 
+import dev.overhaul.minecraft.blaze.BlazeLoader121;
 import dev.overhaul.shader.pack.PackBiomeCategory;
 import java.util.HashMap;
 import java.util.Locale;
@@ -65,7 +66,7 @@ final class BlazePackBiome {
         Biome biome = holder.value();
         id = level.registryAccess().registryOrThrow(Registries.BIOME).getId(biome);
         temperature = biome.getBaseTemperature();
-        rainfall = biome.getModifiedClimateSettings().downfall();
+        rainfall = BlazeLoader121.downfall(biome);
         Biome.Precipitation fall = biome.getPrecipitationAt(position);
         precipitation = fall == Biome.Precipitation.NONE ? 0 : fall == Biome.Precipitation.RAIN ? 1 : 2;
         category = category(holder, fall).ordinal();
