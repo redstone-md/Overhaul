@@ -100,6 +100,11 @@ public final class BlazePackFrame implements AutoCloseable {
         return active && !pack.vanillaClouds();
     }
 
+    /** Marks the game's rain and snow draws, which a pack draws with its weather program. */
+    public void weather(boolean drawing) {
+        if (active && scene != null) scene.weather(drawing);
+    }
+
     /** Idempotent within a frame: the game calls this before every translucent section layer it draws. */
     public void afterOpaque() {
         if (!active) return;

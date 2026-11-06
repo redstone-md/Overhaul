@@ -27,6 +27,8 @@ public final class BlazePackScene implements AutoCloseable {
     private static final NativeGraphicsPipeline.Depth SHADOW_DEPTH = new NativeGraphicsPipeline.Depth(true, true, VK_COMPARE_OP_LESS_OR_EQUAL, 0, 0);
     private static final NativeGraphicsPipeline.Color SHADOW_COLOR = new NativeGraphicsPipeline.Color(false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, 15);
     private static final NativeGraphicsPipeline.ColorLogic SHADOW_LOGIC = new NativeGraphicsPipeline.ColorLogic(false, VK_LOGIC_OP_COPY);
+    /** Rain and snow draw with the particle shader; while the game draws weather that shader goes by this name. */
+    static final String WEATHER = "overhaul_weather";
     private record TargetKey(List<GpuImageView> colors, GpuImageView depth) {}
     private final BlazeRenderer renderer;
     private final CompiledShaderPack pack;
@@ -44,7 +46,7 @@ public final class BlazePackScene implements AutoCloseable {
     private BlazePackDraw caster;
     private BlazeDrawState.Snapshot shadowRaster;
     private int phase;
-    private boolean open, opaqueDone;
+    private boolean open, opaqueDone, weather;
 
     public BlazePackScene(BlazeRenderer renderer, CompiledShaderPack pack, PackGraphRuntime runtime, PackGraphRuntime.Uniforms uniforms) {
         this.renderer = renderer;
@@ -101,6 +103,12 @@ public final class BlazePackScene implements AutoCloseable {
 
     public void end() {
         open = false;
+        weather = false;
+    }
+
+    /** Brackets the game's rain and snow, which the pack draws with gbuffers_weather. */
+    public void weather(boolean drawing) {
+        weather = drawing;
     }
 
     public boolean castsShadows() {
@@ -136,6 +144,7 @@ public final class BlazePackScene implements AutoCloseable {
 
     void draw(BlazeMesh mesh, BlazeShaderSnapshot game) {
         String shader = activeShader();
+        if (weather && "particle".equals(shader)) shader = WEATHER;
         BlazePackDraw draw = shader == null ? null : select(shader);
         if (draw != null) {
             try {

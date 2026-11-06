@@ -43,6 +43,16 @@ abstract class LevelRendererShaderPack121Mixin {
         if (overhaul$pack != null && overhaul$pack.hidesClouds()) callback.cancel();
     }
 
+    @Inject(method = "renderSnowAndRain", at = @At("HEAD"))
+    private void overhaul$weatherBegins(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.weather(true);
+    }
+
+    @Inject(method = "renderSnowAndRain", at = @At("RETURN"))
+    private void overhaul$weatherEnds(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.weather(false);
+    }
+
     @Inject(method = "renderLevel", at = @At("RETURN"))
     private void overhaul$finishPack(DeltaTracker delta, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f view, Matrix4f projection, CallbackInfo callback) {
         if (overhaul$pack != null) overhaul$pack.finish();

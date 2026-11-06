@@ -12,6 +12,7 @@ final class BlazePackSelection {
             case "rendertype_eyes" -> "gbuffers_spidereyes";
             case "particle" -> "gbuffers_textured_lit";
             case "rendertype_clouds" -> "gbuffers_clouds";
+            case BlazePackScene.WEATHER -> "gbuffers_weather";
             case "rendertype_entity_shadow", "rendertype_entity_glint", "rendertype_entity_glint_direct", "rendertype_entity_translucent_emissive" -> null;
             case "rendertype_item_entity_translucent_cull", "rendertype_entity_translucent", "rendertype_entity_translucent_cull", "rendertype_armor_translucent" -> "gbuffers_entities_translucent";
             default -> shader.startsWith("rendertype_entity_") || shader.startsWith("rendertype_armor_cutout") ? "gbuffers_entities" : null;
