@@ -23,7 +23,7 @@ public final class BlazePackDistant implements AutoCloseable {
     static final BlazeMeshState MESH = new BlazeMeshState(new BlazeMeshState.Layout(16, List.of(
             new BlazeMeshState.Field("DhPosition", 0, VK_FORMAT_R16G16B16A16_USCALED),
             new BlazeMeshState.Field("Color", 8, VK_FORMAT_R8G8B8A8_UNORM),
-            new BlazeMeshState.Field("DhData", 12, VK_FORMAT_R8G8B8A8_USCALED))),
+            new BlazeMeshState.Field("DhData", 12, VK_FORMAT_R8G8B8A8_USCALED))).canonical(),
             0, 0, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 4, BlazeMeshState.IndexPattern.SEQUENTIAL);
     private static final NativeGraphicsPipeline.ColorLogic NO_LOGIC = new NativeGraphicsPipeline.ColorLogic(false, VK_LOGIC_OP_COPY);
     private static final NativeGraphicsPipeline.Color OPAQUE = new NativeGraphicsPipeline.Color(false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,

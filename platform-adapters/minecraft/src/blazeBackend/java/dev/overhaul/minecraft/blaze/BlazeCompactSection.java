@@ -24,7 +24,7 @@ public final class BlazeCompactSection {
             new BlazeMeshState.Field(VERTEX_ATTRIBUTE, 0, VK_FORMAT_R16G16B16A16_UINT),
             new BlazeMeshState.Field("Color", 8, VK_FORMAT_R8G8B8A8_UNORM),
             new BlazeMeshState.Field(UV_ATTRIBUTE, 12, VK_FORMAT_R16G16_UINT),
-            new BlazeMeshState.Field("Normal", 16, VK_FORMAT_R8G8B8_SNORM)));
+            new BlazeMeshState.Field("Normal", 16, VK_FORMAT_R8G8B8_SNORM))).canonical();
     private static final Set<String> READABLE = Set.of(VERTEX_ATTRIBUTE, "Color", UV_ATTRIBUTE, "Normal", BlazeSectionShape.OFFSET_ATTRIBUTE);
     private static final Pattern POSITION = Pattern.compile("\\bin\\s+vec3\\s+Position\\s*;"),
             UV0 = Pattern.compile("\\bin\\s+vec2\\s+UV0\\s*;"),

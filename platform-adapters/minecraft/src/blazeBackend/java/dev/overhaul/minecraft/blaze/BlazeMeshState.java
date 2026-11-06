@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Immutable version boundary; native owners retain no game format or uploaded-buffer object. */
 public record BlazeMeshState(Layout layout,int vertexCount,int indexCount,int topology,int indexBytes,IndexPattern pattern) {
@@ -27,5 +28,11 @@ public record BlazeMeshState(Layout layout,int vertexCount,int indexCount,int to
                 if(field.offset()>=stride||!names.add(field.name()))throw new IllegalArgumentException("Invalid or duplicate vertex field: "+field.name());
             }
         }
+        /** One instance per distinct layout, so batching compares layouts by reference instead of field by field. */
+        public Layout canonical(){
+            Layout known=CANONICAL.putIfAbsent(this,this);
+            return known==null?this:known;
+        }
     }
+    private static final ConcurrentHashMap<Layout,Layout> CANONICAL=new ConcurrentHashMap<>();
 }

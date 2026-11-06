@@ -3,12 +3,21 @@ package dev.overhaul.minecraft.blaze;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Converts the pinned record-based format using its authoritative element offsets. */
 public final class BlazeGameMesh {
+    private static final Map<VertexFormat, BlazeMeshState.Layout> LAYOUTS = new ConcurrentHashMap<>();
+
     private BlazeGameMesh() {}
 
+    /** Asked on every upload; formats are long-lived constants. */
     public static BlazeMeshState.Layout layout(VertexFormat format) {
+        return LAYOUTS.computeIfAbsent(format, BlazeGameMesh::convert);
+    }
+
+    private static BlazeMeshState.Layout convert(VertexFormat format) {
         var fields = new ArrayList<BlazeMeshState.Field>();
         var elements = format.getElements();
         var names = format.getElementAttributeNames();
@@ -22,6 +31,6 @@ public final class BlazeGameMesh {
                     element.count(), normalized, integer);
             fields.add(new BlazeMeshState.Field(names.get(index), format.getOffset(element), nativeFormat));
         }
-        return new BlazeMeshState.Layout(format.getVertexSize(), fields);
+        return new BlazeMeshState.Layout(format.getVertexSize(), fields).canonical();
     }
 }
