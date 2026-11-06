@@ -54,6 +54,11 @@ public final class BlazePackRequest {
         return status;
     }
 
+    /** True while a pack is installed and drawing, so camera effects can go where packs expect them. */
+    public static boolean running() {
+        return status.startsWith("Active");
+    }
+
     /** {@code -Doverhaul.shaderPack} wins over the file. */
     public static boolean launchOverride() {
         return System.getProperty("overhaul.shaderPack") != null;
