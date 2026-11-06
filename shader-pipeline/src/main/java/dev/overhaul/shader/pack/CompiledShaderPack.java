@@ -67,8 +67,10 @@ public final class CompiledShaderPack {
         for(ShaderPackCatalog.Program discovered:catalog.programs()){
             if(!discovered.state().enabled())continue;
             String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
-            var foreign=PackForeignPrograms.owner(name);if(foreign.isPresent()){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Not compiled; there is no "+foreign.get()+" integration"));continue;}
+            boolean distant=PackDhPrograms.drawn(name)&&macros.containsKey(PackDhPrograms.MACRO);
+            var foreign=PackForeignPrograms.owner(name);if(foreign.isPresent()&&!distant){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Not compiled; there is no "+foreign.get()+" integration"));continue;}
             Sources expanded=preprocess(discovered,preprocessor);
+            if(distant){String vertex=PackDhPrograms.lower(expanded.vertex());if(vertex==null)throw new UnsupportedShaderException("Distant Horizons program has no main: "+discovered.name());expanded=new Sources(vertex,expanded.fragment());}
             sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length();if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),expanded);
             programs.add(compileProgram(discovered,expanded,compiler,targets,shadow,textures));
@@ -108,7 +110,7 @@ public final class CompiledShaderPack {
     }
     /** Stage of a bare program name; an unknown name fails. */
     public static Stage stage(String name){
-        if(name.startsWith("gbuffers_"))return Stage.GBUFFER;
+        if(name.startsWith("gbuffers_")||PackDhPrograms.drawn(name))return Stage.GBUFFER;
         if(name.equals("shadow")||name.startsWith("shadow_"))return Stage.SHADOW;
         if(name.matches("shadowcomp[0-9]*"))return Stage.SHADOWCOMPOSITE;
         for(Stage stage:Stage.values())if(stage!=Stage.GBUFFER&&stage!=Stage.SHADOW
