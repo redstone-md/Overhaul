@@ -209,17 +209,24 @@ public final class VulkanRenderGraph implements AutoCloseable {
         if(command.getDevice()!=context.device())throw new IllegalArgumentException("Foreign graph command buffer");
         if(executing)throw new IllegalStateException("Nested render graph recording");
         if(ownsCommands||!owned.isEmpty())throw new IllegalStateException("Inline graphs must borrow their command lane and fence-owned image resources");
-        executing=true;try{recordPasses(command,changes);}finally{executing=false;}
+        executing=true;try{recordPasses(command,changes,observer);}finally{executing=false;}
     }
-    private void recordPasses(VkCommandBuffer command,List<GpuImage.LayoutChange> changes){
+    private void recordPasses(VkCommandBuffer command,List<GpuImage.LayoutChange> changes){recordPasses(command,changes,null);}
+    private void recordPasses(VkCommandBuffer command,List<GpuImage.LayoutChange> changes,PassObserver watch){
         for(RenderGraph.Pass pass:graph.passes()){
             Operation operation=operations.get(pass.name());Map<String,Image> scoped=new LinkedHashMap<>();
             for(var use:operation.uses().entrySet()){
                 transition(command,bindings.get(use.getKey()),use.getValue(),changes);scoped.put(use.getKey(),images.get(use.getKey()));
             }
             operation.record().accept(new PassContext(command,Collections.unmodifiableMap(scoped)));
+            if(watch!=null)watch.recorded(command,pass.name());
         }
     }
+
+    /** Told after each pass a graph records into an enclosing encoder; a profiling hook, null when nothing listens. */
+    public interface PassObserver{void recorded(VkCommandBuffer command,String pass);}
+    private static volatile PassObserver observer;
+    public static void observe(PassObserver listener){observer=listener;}
 
     /** Readback is a separate synchronized submission; returned bytes have Java ownership. */
     public byte[] readRgba8(String name) {

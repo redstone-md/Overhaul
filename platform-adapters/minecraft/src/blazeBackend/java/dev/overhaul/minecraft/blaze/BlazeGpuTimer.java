@@ -21,10 +21,12 @@ import org.slf4j.Logger;
 final class BlazeGpuTimer implements AutoCloseable {
     static final boolean ENABLED=Boolean.getBoolean("overhaul.blaze.gpuStats");
     private static final Logger LOGGER=LogUtils.getLogger();
-    private static final int FRAMES=5,MARKS=32,WINDOW=600;
+    private static final int FRAMES=5,MARKS=96,WINDOW=600;
     private final VulkanContext context;
     private final long[] pools=new long[FRAMES];
     private final String[][] labels=new String[FRAMES][MARKS];
+    @SuppressWarnings("unchecked")
+    private final java.util.Set<String>[] marked=new java.util.Set[FRAMES];
     private final int[] used=new int[FRAMES];
     private final double period;
     private final Map<String,Double> totals=new LinkedHashMap<>();
@@ -41,31 +43,35 @@ final class BlazeGpuTimer implements AutoCloseable {
             for(int i=0;i<FRAMES;i++){
                 if(vkCreateQueryPool(context.device(),info,null,pointer)!=VK_SUCCESS)throw new IllegalStateException("vkCreateQueryPool failed");
                 pools[i]=pointer.get(0);
+                marked[i]=new java.util.HashSet<>();
             }
         }
+        dev.overhaul.vulkan.VulkanRenderGraph.observe((command,pass)->stamp(command,"pass:"+pass));
     }
 
     /** Records a timestamp once every earlier command in the queue has finished; a label seen this frame is ignored. */
     BlazeQueue.Operation mark(String label){
-        int count=used[frame];
-        if(count>=MARKS)return null;
-        for(int i=0;i<count;i++)if(labels[frame][i].equals(label))return null;
-        labels[frame][count]=label;used[frame]=count+1;
-        long pool=pools[frame];boolean first=count==0;
+        if(!marked[frame].add(label))return null;
         return new BlazeQueue.Operation(){
-            @Override public void record(VkCommandBuffer command){
-                if(first)vkCmdResetQueryPool(command,pool,0,MARKS);
-                vkCmdWriteTimestamp(command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,pool,count);
-            }
+            @Override public void record(VkCommandBuffer command){stamp(command,label);}
             @Override public void close(){}
         };
+    }
+
+    /** Slots are taken as commands are recorded, so marks and shader pack passes stay in queue order. */
+    private void stamp(VkCommandBuffer command,String label){
+        int count=used[frame];
+        if(count>=MARKS)return;
+        labels[frame][count]=label;used[frame]=count+1;
+        if(count==0)vkCmdResetQueryPool(command,pools[frame],0,MARKS);
+        vkCmdWriteTimestamp(command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,pools[frame],count);
     }
 
     /** Ends this frame's marks and reads the frame that left the ring longest ago. */
     void endFrame(){
         frame=(frame+1)%FRAMES;
         if(used[frame]>1)read(frame);
-        used[frame]=0;
+        used[frame]=0;marked[frame].clear();
     }
 
     private void read(int slot){
@@ -85,5 +91,5 @@ final class BlazeGpuTimer implements AutoCloseable {
         totals.clear();frames=0;
     }
 
-    @Override public void close(){for(long pool:pools)if(pool!=0)vkDestroyQueryPool(context.device(),pool,null);}
+    @Override public void close(){dev.overhaul.vulkan.VulkanRenderGraph.observe(null);for(long pool:pools)if(pool!=0)vkDestroyQueryPool(context.device(),pool,null);}
 }
