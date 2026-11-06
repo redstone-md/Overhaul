@@ -6,11 +6,9 @@ import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeSectionBatch;
 import dev.overhaul.minecraft.blaze.BlazeSectionBounds;
-import dev.overhaul.minecraft.blaze.BlazeVertexBufferAccess;
+import dev.overhaul.minecraft.blaze.BlazeSectionBuffers;
 import dev.overhaul.shader.pack.PackShadowSettings;
 import dev.overhaul.vulkan.PackGraphRuntime;
-import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
@@ -31,11 +29,22 @@ final class BlazePackShadows {
     private final BlazePackScene scene;
     private final PackGraphRuntime runtime;
     private final PackShadowSettings settings;
-    private final List<SectionRenderDispatcher.RenderSection> casters = new ArrayList<>();
+    private static final RenderType[] LAYERS = {RenderType.solid(), RenderType.cutoutMipped(), RenderType.cutout(), RenderType.translucent()};
+    private static final int[] LAYER_IDS = new int[LAYERS.length];
+    private static final long CASTING;
+    static {
+        long casting = 0;
+        for (int layer = 0; layer < LAYERS.length; layer++) casting |= 1L << (LAYER_IDS[layer] = LAYERS[layer].getChunkLayerId());
+        CASTING = casting;
+    }
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f(), modelView = new Matrix4f(), combined = new Matrix4f();
     private SectionRenderDispatcher.RenderSection[] indexed = new SectionRenderDispatcher.RenderSection[0];
-    private int[] origins = new int[0];
+    private int[] origins = new int[0], casters = new int[0];
+    /** Per section, the layer mask its meshes were read for, or 0 while one of them has yet to upload. */
+    private long[] seen = new long[0];
+    private BlazeMesh[] meshes = new BlazeMesh[0];
+    private int casterCount;
     private int seenMoves = -1;
 
     BlazePackShadows(BlazeRenderer renderer, BlazePackScene scene, PackGraphRuntime runtime, PackShadowSettings settings) {
@@ -53,17 +62,20 @@ final class BlazePackShadows {
         light.turnOnLightLayer();
         scene.beginShadows(minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getId(), RenderSystem.getShaderTexture(2), settings.resolution());
         runtime.prepareShadows(renderer.packCommands());
-        cast(RenderType.solid(), "shadow_solid", position.x, position.y, position.z);
-        cast(RenderType.cutoutMipped(), "shadow_cutout", position.x, position.y, position.z);
-        cast(RenderType.cutout(), "shadow_cutout", position.x, position.y, position.z);
+        cast(0, "shadow_solid", position.x, position.y, position.z);
+        cast(1, "shadow_cutout", position.x, position.y, position.z);
+        cast(2, "shadow_cutout", position.x, position.y, position.z);
         runtime.snapshotOpaqueShadow(renderer.packCommands());
-        cast(RenderType.translucent(), "shadow_water", position.x, position.y, position.z);
+        cast(3, "shadow_water", position.x, position.y, position.z);
         runtime.finishShadows(renderer.packCommands(), frame, uniforms);
     }
 
-    /** The bounds test runs over a flat copy of the origins: reaching each section object for them cost most of the frame. */
+    /**
+     * The bounds test runs over a flat copy of the origins: reaching each section object for them cost most of the frame.
+     * A caster's layer meshes are looked up again only when its compiled state changed, so the passes read flat arrays.
+     */
     private void collect(ViewArea sections, double x, double y, double z) {
-        casters.clear();
+        casterCount = 0;
         if (sections == null) return;
         index(sections.sections);
         // The Iris field-of-view matrix has an unusual m33, so planes taken from it would not bound what it draws.
@@ -76,16 +88,36 @@ final class BlazePackShadows {
             float minX = (float) (origins[at] - x), minY = (float) (origins[at + 1] - y), minZ = (float) (origins[at + 2] - z);
             if (Math.abs(minX + 8) > limit || Math.abs(minY + 8) > limit || Math.abs(minZ + 8) > limit) continue;
             if (bounded && !frustum.testAab(minX, minY, minZ, minX + 16, minY + 16, minZ + 16)) continue;
-            var section = indexed[index];
-            if (section.getCompiled() != SectionRenderDispatcher.CompiledSection.UNCOMPILED) casters.add(section);
+            long contents = ((BlazeSectionBuffers) indexed[index]).overhaul$contents() & CASTING;
+            if (contents == 0) continue;
+            if (contents != seen[index]) remember(index, contents);
+            casters[casterCount++] = index;
         }
+    }
+
+    /** A buffer keeps its mesh until it closes, so the meshes stand until the section's layers change. */
+    private void remember(int index, long contents) {
+        var section = (BlazeSectionBuffers) indexed[index];
+        boolean complete = true;
+        for (int layer = 0; layer < LAYERS.length; layer++) {
+            BlazeMesh mesh = (contents & 1L << LAYER_IDS[layer]) == 0 ? null : section.overhaul$mesh(LAYER_IDS[layer]);
+            if (mesh == null && (contents & 1L << LAYER_IDS[layer]) != 0) complete = false;
+            meshes[index * LAYERS.length + layer] = mesh;
+        }
+        seen[index] = complete ? contents : 0;
     }
 
     private void index(SectionRenderDispatcher.RenderSection[] all) {
         if (all == indexed && seenMoves == BlazeSectionBounds.originMoves()) return;
+        // A section moved to a new origin is rebuilt through an empty state, so only a new array clears these.
+        if (all != indexed) {
+            seen = new long[all.length];
+            meshes = new BlazeMesh[all.length * LAYERS.length];
+        }
         indexed = all;
         seenMoves = BlazeSectionBounds.originMoves();
         if (origins.length != all.length * 3) origins = new int[all.length * 3];
+        if (casters.length != all.length) casters = new int[all.length];
         for (int index = 0; index < all.length; index++) {
             var origin = all[index].getOrigin();
             origins[index * 3] = origin.getX();
@@ -94,27 +126,22 @@ final class BlazePackShadows {
         }
     }
 
-    private void cast(RenderType layer, String program, double x, double y, double z) {
+    private void cast(int layer, String program, double x, double y, double z) {
         scene.shadowLayer(program);
         BlazeSectionBatch batch = scene.shadowSections(view, projection);
-        if (batch != null) {
-            for (int index = 0; index < casters.size(); index++) {
-                var section = casters.get(index);
-                if (section.getCompiled().isEmpty(layer)) continue;
-                BlazeMesh mesh = ((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$existingMesh();
-                if (mesh == null) continue;
-                var origin = section.getOrigin();
-                batch.add(mesh, (float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z));
+        int[] origins = this.origins;
+        for (int at = 0; at < casterCount; at++) {
+            int index = casters[at];
+            BlazeMesh mesh = meshes[index * LAYERS.length + layer];
+            if (mesh == null) continue;
+            float offsetX = (float) (origins[index * 3] - x), offsetY = (float) (origins[index * 3 + 1] - y), offsetZ = (float) (origins[index * 3 + 2] - z);
+            if (batch != null) {
+                batch.add(mesh, offsetX, offsetY, offsetZ);
+            } else {
+                view.translate(offsetX, offsetY, offsetZ, modelView);
+                scene.castShadow(mesh, modelView, projection);
             }
-            batch.end();
-            return;
         }
-        for (int index = 0; index < casters.size(); index++) {
-            var section = casters.get(index);
-            if (section.getCompiled().isEmpty(layer)) continue;
-            var origin = section.getOrigin();
-            view.translate((float) (origin.getX() - x), (float) (origin.getY() - y), (float) (origin.getZ() - z), modelView);
-            scene.castShadow(((BlazeVertexBufferAccess) section.getBuffer(layer)).overhaul$existingMesh(), modelView, projection);
-        }
+        if (batch != null) batch.end();
     }
 }
