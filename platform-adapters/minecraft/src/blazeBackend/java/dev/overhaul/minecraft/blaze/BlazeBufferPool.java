@@ -5,6 +5,7 @@ import dev.overhaul.vulkan.GpuBuffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
 import java.util.TreeMap;
 
 /** Bounded buffer pages with fence-retired, coalescing suballocations. Owner-thread only. */
@@ -68,25 +69,29 @@ final class BlazeBufferPool implements AutoCloseable {
         Pin share(){slice.references=Math.addExact(slice.references,1);return new Pin(slice);}
         @Override public void close(){if(slice!=null){Slice old=slice;slice=null;old.releaseReference();}}
     }
+    /** Free ranges by offset for coalescing, and by size so an acquire takes the smallest fit without walking fragments. */
     private final class Page {
         private final GpuBuffer buffer;
         private final TreeMap<Integer,Integer> free=new TreeMap<>();
+        private final LongRBTreeSet bySize=new LongRBTreeSet();
         private int active;
-        private Page(GpuBuffer buffer){this.buffer=buffer;free.put(0,buffer.size());}
+        private Page(GpuBuffer buffer){this.buffer=buffer;add(0,buffer.size());}
         private Slice acquire(int bytes,int reserved){
-            var iterator=free.entrySet().iterator();while(iterator.hasNext()){
-                var range=iterator.next();if(range.getValue()<reserved)continue;
-                int offset=range.getKey(),remaining=range.getValue()-reserved;iterator.remove();
-                if(remaining!=0)free.put(offset+reserved,remaining);active++;return new Slice(this,offset,bytes,reserved);
-            }
-            return null;
+            if(bySize.isEmpty()||bySize.lastLong()>>>32<reserved)return null;
+            long fit=bySize.tailSet((long)reserved<<32).firstLong();
+            int offset=(int)fit,size=(int)(fit>>>32);
+            remove(offset,size);
+            if(size!=reserved)add(offset+reserved,size-reserved);
+            active++;return new Slice(this,offset,bytes,reserved);
         }
         private void release(int offset,int size){
             var before=free.lowerEntry(offset);
-            if(before!=null&&before.getKey()+before.getValue()==offset){offset=before.getKey();size+=before.getValue();free.remove(before.getKey());}
+            if(before!=null&&before.getKey()+before.getValue()==offset){offset=before.getKey();size+=before.getValue();remove(before.getKey(),before.getValue());}
             var after=free.ceilingEntry(offset);
-            if(after!=null&&offset+size==after.getKey()){size+=after.getValue();free.remove(after.getKey());}
-            free.put(offset,size);active--;
+            if(after!=null&&offset+size==after.getKey()){size+=after.getValue();remove(after.getKey(),after.getValue());}
+            add(offset,size);active--;
         }
+        private void add(int offset,int size){free.put(offset,size);bySize.add((long)size<<32|offset);}
+        private void remove(int offset,int size){free.remove(offset);bySize.remove((long)size<<32|offset);}
     }
 }
