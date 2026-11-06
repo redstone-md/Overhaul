@@ -16,6 +16,7 @@ import dev.overhaul.vulkan.PackGraphRuntime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import org.joml.Matrix4f;
@@ -41,8 +42,10 @@ public final class BlazePackScene implements AutoCloseable {
     private final PackGraphRuntime runtime;
     private final PackGraphRuntime.Uniforms uniforms;
     private final Map<String, CompiledShaderPack.Program> programs = new HashMap<>(), shadowPrograms = new HashMap<>();
-    private final Map<String, BlazePackDraw> byShader = new HashMap<>();
-    private final Map<CompiledShaderPack.Program, BlazePackDraw> byProgram = new HashMap<>(), sectioned = new HashMap<>();
+    /** One table per route, so a draw looks its shader up without building a key string. */
+    private final Map<String, BlazePackDraw> byShader = new HashMap<>(), byHandShader = new HashMap<>(), bySkyShader = new HashMap<>();
+    /** Keyed by identity: a program record hashes every field, and the pack's programs are never copied. */
+    private final Map<CompiledShaderPack.Program, BlazePackDraw> byProgram = new IdentityHashMap<>(), sectioned = new IdentityHashMap<>();
     private final Map<TargetKey, BlazeTarget> targets = new HashMap<>();
     private final Map<String, Object> shadowTextures = new HashMap<>();
     private final List<AutoCloseable> owned = new ArrayList<>();
@@ -152,9 +155,9 @@ public final class BlazePackScene implements AutoCloseable {
             return null;
         }
         var program = opaque ? distantOpaque : distantTranslucent;
-        if (sectioned.containsKey(program) && sectioned.get(program) == null) return null;
+        BlazePackDraw draw = sectioned.get(program);
+        if (draw == null && sectioned.containsKey(program)) return null;
         try {
-            BlazePackDraw draw = sectioned.get(program);
             if (draw == null) {
                 draw = new BlazePackDraw(this, program, program.code(), true);
                 renderer.shape(draw.code, draw);
@@ -286,7 +289,7 @@ public final class BlazePackScene implements AutoCloseable {
                 return;
             } catch (RuntimeException failure) {
                 BlazeGlBoundary.reportOnce("pack program " + draw.program.name(), "Pack program " + draw.program.name() + " cannot draw " + shader + ", which keeps the game's shader: " + failure);
-                forget(route() + shader);
+                forget(shader);
             }
         }
         renderer.draw(mesh, plain(), game);
@@ -357,18 +360,18 @@ public final class BlazePackScene implements AutoCloseable {
     }
 
     /** Draws in a bracket pick their program by bracket, so the same game shader keeps one cache entry per bracket. */
-    private String route() {
-        return hand ? "hand:" : sky ? "sky:" : "";
+    private Map<String, BlazePackDraw> routeTable() {
+        return hand ? byHandShader : sky ? bySkyShader : byShader;
     }
 
     private BlazePackDraw select(String shader) {
-        String key = route() + shader;
-        BlazePackDraw draw = byShader.get(key);
-        if (draw != null || byShader.containsKey(key)) return draw;
+        Map<String, BlazePackDraw> table = routeTable();
+        BlazePackDraw draw = table.get(shader);
+        if (draw != null || table.containsKey(shader)) return draw;
         String wanted = hand ? BlazePackSelection.handProgram(shader) : sky ? BlazePackSelection.skyProgram(shader) : BlazePackSelection.program(shader);
         var program = wanted == null ? null : PackProgramFallbacks.resolve(wanted, programs.keySet()).map(programs::get).orElse(null);
         if (program != null) draw = draw(program);
-        byShader.put(key, draw);
+        table.put(shader, draw);
         return draw;
     }
 
@@ -383,7 +386,7 @@ public final class BlazePackScene implements AutoCloseable {
     }
 
     private void forget(String shader) {
-        byShader.put(shader, null);
+        routeTable().put(shader, null);
     }
 
     BlazeTarget target(List<GpuImageView> colors) {
