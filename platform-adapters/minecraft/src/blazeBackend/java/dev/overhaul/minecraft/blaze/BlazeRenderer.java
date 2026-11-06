@@ -38,6 +38,12 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
+    private BlazeProgramCompiler.Program lastProgram;
+    private BlazeMeshState.Layout lastLayout;
+    private int lastTopology;
+    private BlazeDrawState.Snapshot lastDraw;
+    private BlazeTarget lastTarget;
+    private NativeGraphicsPipeline lastPipeline;
     private GpuAllocator allocator;
     private ImmediateCommands commands;
     private BlazeQueue queue;
@@ -276,8 +282,11 @@ public final class BlazeRenderer implements AutoCloseable {
             BlazeDrawState.Snapshot draw,BlazeTarget target,long descriptorLayout){
         int topology=mesh.topology();
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
+        // Consecutive draws mostly repeat the same inputs; the same objects give the same key, so skip building and hashing it.
+        if(lastPipeline!=null&&program==lastProgram&&mesh.layout()==lastLayout&&topology==lastTopology&&draw==lastDraw&&target==lastTarget)return lastPipeline;
         PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.colorFormats(),target.depth()==null?null:target.depth().format());
-        NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return existing;
+        NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return remember(program,mesh,topology,draw,target,existing);
+        lastPipeline=null;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
         BlazeProgramShape shape=shapes.get(program);
         var description=new NativeGraphicsPipeline.Description(List.of(
@@ -288,12 +297,18 @@ public final class BlazeRenderer implements AutoCloseable {
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
                 shape!=null?shape.colors(draw.color()):List.of(draw.color()),true,0,0,draw.logic());
         NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description);
-        try{pipelines.put(key,pipeline);return pipeline;}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
+        try{pipelines.put(key,pipeline);}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
+        return remember(program,mesh,topology,draw,target,pipeline);
+    }
+    private NativeGraphicsPipeline remember(BlazeProgramCompiler.Program program,BlazeMeshState mesh,int topology,
+            BlazeDrawState.Snapshot draw,BlazeTarget target,NativeGraphicsPipeline pipeline){
+        lastProgram=program;lastLayout=mesh.layout();lastTopology=topology;lastDraw=draw;lastTarget=target;lastPipeline=pipeline;
+        return pipeline;
     }
     void shape(BlazeProgramCompiler.Program program,BlazeProgramShape shape){requireOpen();shapes.put(program,shape);}
     long vertexConstants(BlazeProgramCompiler.Program program){BlazeProgramShape shape=shapes.get(program);return shape==null?0:shape.vertexConstants();}
     public void forgetProgram(BlazeProgramCompiler.Program program){
-        requireOpen();shapes.remove(program);var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
+        requireOpen();shapes.remove(program);lastPipeline=null;var iterator=pipelines.entrySet().iterator();while(iterator.hasNext()){var entry=iterator.next();if(entry.getKey().program()==program){iterator.remove();queue.retire(entry.getValue());}}
         if(descriptors!=null)descriptors.forget(program);
     }
     private record PipelineKey(BlazeProgramCompiler.Program program,BlazeMeshState.Layout layout,int topology,
@@ -327,7 +342,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
-        for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();
+        for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();lastPipeline=null;
         for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();
         if(rawFramebuffers!=null)failure=release(rawFramebuffers::close,failure);
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
