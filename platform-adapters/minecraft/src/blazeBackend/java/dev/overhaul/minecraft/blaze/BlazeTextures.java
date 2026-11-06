@@ -162,10 +162,26 @@ public final class BlazeTextures implements AutoCloseable {
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
         var area=new ImageRegion(source.level(),0,x,y,width,height);
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
+        // Another colour format, such as a pack's R11F colortex0 standing in for the main target: the GPU converts it
+        // as GL does, where reading it back as RGBA8 bytes would scramble its packed floats.
+        if(transfers!=null&&source.level()==0&&destination.mipLevel()==0&&destination.arrayLayer()==0&&from.format()!=to.format()&&blits(from.format(),to.format())){
+            transfers.blit(from,new int[]{x,y,x+width,y+height},to,new int[]{destination.x(),destination.y(),destination.x()+width,destination.y()+height},VK_FILTER_NEAREST);return;
+        }
         var bytes=immediate().readback(from,area,0);int stride=Math.multiplyExact(width,4),size=Math.multiplyExact(stride,height);
         var layout=new BlazePixelStore.Layout(stride,0,size);
         var converted=BlazePixels.unpack(bytes,layout,width,height,GL_RGBA,GL_UNSIGNED_BYTE,texture.channels,to.format().bytesPerPixel());
         try{uploadImage(to,destination,converted,0);}finally{MemoryUtil.memFree(converted);}
+    }
+    /** Blits convert between float and normalised colour formats only, and only where the device can blit them. */
+    private boolean blits(ImageFormat from,ImageFormat to){
+        if(from.isDepth()||to.isDepth()||from.name().contains("INT")||to.name().contains("INT"))return false;
+        try(MemoryStack stack=VulkanStack.push()){
+            var properties=org.lwjgl.vulkan.VkFormatProperties.malloc(stack);
+            vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),from.vkFormat(),properties);
+            if((properties.optimalTilingFeatures()&VK_FORMAT_FEATURE_BLIT_SRC_BIT)==0)return false;
+            vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),to.vkFormat(),properties);
+            return (properties.optimalTilingFeatures()&VK_FORMAT_FEATURE_BLIT_DST_BIT)!=0;
+        }
     }
     public int levelParameter(int target,int level,int name){
         requireOpen();
