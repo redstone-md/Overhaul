@@ -75,10 +75,11 @@ The fairest comparison reads the F3 counter in both, runs interleaved, two runs 
 
 | View | Overhaul | Iris with Sodium | Ratio |
 | --- | --- | --- | --- |
-| Horizon | about 255 fps | about 123 fps | 2.07x |
-| Looking down | about 248 fps | about 117 fps | 2.12x |
+| Horizon | about 266 fps | about 123 fps | 2.16x |
+| Looking down | about 262 fps | about 117 fps | 2.24x |
 
-These are with F3 open, Complementary and Distant Horizons, measured on 2026-11-06. An earlier
+These are with F3 open, Complementary and Distant Horizons, measured on 2026-11-06 after the
+optimistic DH stamp reads; the Iris column is from the same day. An earlier
 pair of runs gave 277 and 135 at the horizon; GPU clock modes move both sides between launches.
 
 GPU time is bimodal from one launch to the next: about 3.3 to 3.4 ms or about 3.65 to
@@ -121,7 +122,7 @@ The percentages are self time.
   section's mesh and then its draw run.
 - `PalettedContainer.get`, about 2 to 5%: vanilla block lookups.
 - `BlazePackShadows.tighten`, about 3%: kept casters tested against the light frustum.
-- `BlazeDhFrame.drawThroughPack`, about 4%: the walk over Distant Horizons containers and their stamp locks.
+- `SoftwareDepthBuffer.behind`, about 3%: the CPU occlusion test.
 
 Fixed since the previous profile: the buffer pool keeps free ranges in sorted long arrays
 instead of a TreeMap (`poolRanges`), each uniform block remembers which source answers each
@@ -129,8 +130,9 @@ name (`uniformPlans`), kept shadow casters are tested a column at a time (`shado
 pass graph shapes are validated once (`packGraphShapes`), F3 text is gathered at 10 Hz,
 and sections find their draw run through a key their mesh shares. Distant Horizons vertex
 buffers keep their device buffer (`dhDeviceCache`), planned uniforms are found by identity
-through interned names, and pack draws are looked up without building key strings or hashing
-program records.
+through interned names, pack draws are looked up without building key strings, programs hash
+by their binaries, and Distant Horizons buffer state is read under optimistic stamps instead of
+two read locks per container.
 
 The remaining F3 cost is vanilla text drawing (`CodepointMap`, `Font`) and Distant Horizons'
 own debug string.
@@ -147,5 +149,5 @@ own debug string.
 - GPU occlusion (`gpuOcclusion`) is in but off by default: a compute pass tests each section against the newest
   queued depth tiles and zeroes its instance count. With Complementary and F3 it measured on par with the CPU test
   (horizon about 238 fps both ways, looking down 218 on vs 228 off), so terrain stays on the CPU readback test.
-- With F3 open the 2x target is reached (2.07x horizon, 2.12x looking down). The run is GPU-bound, so GPU clock
+- With F3 open the 2x target is reached (2.16x horizon, 2.24x looking down). The run is GPU-bound, so GPU clock
   modes still swing single runs by about 5 to 10%.
