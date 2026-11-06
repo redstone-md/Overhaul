@@ -146,7 +146,9 @@ The percentages are self time.
 - `BlazeSectionBatch.run`, `write` and `end`, about 10 to 15%: cache misses chasing each
   section's mesh and then its draw run.
 - `PalettedContainer.get`, about 2 to 5%: vanilla block lookups.
-- `BlazeSectionOcclusion.hidden`, about 10% inclusive: eight corners projected per section.
+- `BlazeSectionOcclusion.hidden`, about 10% inclusive in an older profile: eight corners
+  projected per section, with verdicts kept per section until the camera or depth changes.
+  In the latest profile only `SoftwareDepthBuffer.behind` (3%) is left of it.
 - Shadow caster `batch.add`, about 9% inclusive.
 - `SoftwareDepthBuffer.behind`, about 3%: the CPU occlusion test.
 
@@ -167,6 +169,19 @@ two read locks per container.
 
 Pack blits cache their format features, free descriptor sets are a primitive stack, and repeated
 draw inputs reuse the last pipeline without building its key.
+
+Section vertices are placed on a multiple of their stride (`strideOffsets`), so a pack's wider
+vertices share one indirect draw per buffer page: 886 to 431 indirect draws, about 0.07 ms (down)
+and 0.14 ms (horizon) less CPU per frame. Distant Horizons vertex buffers drawn through a pack live
+in shared 32 MB device pages (`dhSharedPages`), so the LODs of a pass draw as one multi-draw per page
+instead of one per LOD: 435 to 154 indirect draws, about 0.2 ms less CPU in both views
+(down 2.10 to 1.88 ms, horizon 2.27 to 2.07 ms). LODs looked the same in both screenshots.
+
+Profile after both (40 s JFR, horizon, 2800 sections in about 160 indirect draws): the section
+add loop is about 16% self, attributed to `BlazeSectionBatch.run` though the JIT folds the whole
+loop there; terrain, Distant Horizons and shadow casters feed it in about equal parts.
+`SoftwareDepthBuffer.behind` 3%, pack uniform capture 6.5% inclusive (custom uniforms 2.9%),
+`FrameRing.awaitSlot` 5.9% waiting for the GPU. Nothing left is over 3% self outside that loop.
 
 The render thread is no longer the limit. In a 20 s JFR at the horizon it had about 185 Java
 samples against 92 native ones, and 62% of the native samples are `vkWaitForFences` in
