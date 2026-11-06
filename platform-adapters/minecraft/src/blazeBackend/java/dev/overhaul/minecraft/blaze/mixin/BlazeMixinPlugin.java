@@ -53,7 +53,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public String getRefMapperConfig() { return null; }
 
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        BlazeOptimization owner = OWNERS.get(mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1));
+        String name = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
+        if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
+        BlazeOptimization owner = OWNERS.get(name);
         return owner == null || owner.on();
     }
 
