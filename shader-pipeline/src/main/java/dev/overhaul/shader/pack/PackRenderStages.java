@@ -23,7 +23,10 @@ public final class PackRenderStages {
             Map.entry("gbuffers_basic","OUTLINE"),Map.entry("gbuffers_line","OUTLINE"),
             Map.entry("gbuffers_hand","HAND_SOLID"),Map.entry("gbuffers_hand_water","HAND_TRANSLUCENT"),
             Map.entry("gbuffers_textured","PARTICLES"),Map.entry("gbuffers_textured_lit","PARTICLES"),
-            Map.entry("gbuffers_clouds","CLOUDS"),Map.entry("gbuffers_weather","RAIN_SNOW"));
+            Map.entry("gbuffers_clouds","CLOUDS"),Map.entry("gbuffers_weather","RAIN_SNOW"),
+            // The light camera casts terrain only, so shadow programs read the terrain stage of their layer.
+            Map.entry("shadow","TERRAIN_SOLID"),Map.entry("shadow_solid","TERRAIN_SOLID"),
+            Map.entry("shadow_cutout","TERRAIN_CUTOUT"),Map.entry("shadow_water","TERRAIN_TRANSLUCENT"));
 
     private PackRenderStages() {}
 
