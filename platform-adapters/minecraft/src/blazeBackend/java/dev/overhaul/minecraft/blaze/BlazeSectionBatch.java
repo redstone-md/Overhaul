@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkCommandBuffer;
@@ -21,17 +22,15 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeSectionBatch implements AutoCloseable {
     private static final int COMMAND_BYTES = 20;
 
-    private record Run(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
-        boolean holds(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
-            return this.vertices == vertices && this.remainder == remainder && this.indices == indices && this.indexBytes == indexBytes;
-        }
-    }
+    /** Unique across batches, so a run key stamped by another batch, or by this one before its last flush, reads as new. */
+    private static final AtomicLong STAMPS = new AtomicLong();
 
     private final BlazeRenderer owner;
-    private final List<Run> runs = new ArrayList<>();
+    private final List<BlazeSectionRun> runs = new ArrayList<>();
+    private long stamp = STAMPS.incrementAndGet();
     /**
-     * Run index plus one by all four run keys, open addressed. Keyed by vertex buffer alone, sections of one page with
-     * different remainders chained every run of that page, and each new run walked the whole chain.
+     * Run index plus one by all four run keys, open addressed, for keys meshes did not intern. Keyed by vertex buffer
+     * alone, sections of one page with different remainders chained every run of that page.
      */
     private int[] slots = new int[1024];
     private int[] sections = new int[4 * 1024];
@@ -72,16 +71,20 @@ public final class BlazeSectionBatch implements AutoCloseable {
     public void add(BlazeMesh mesh, float x, float y, float z) {
         if (compact == null && BlazeCompactSection.compact(mesh.drawLayout)) return;
         append(mesh.stateOrNull(), mesh.drawLayout, mesh.drawTopology, mesh.drawIndexCount, mesh.drawFirstIndex, mesh.drawBaseVertex,
-                mesh.drawVertices, mesh.drawRemainder, mesh.drawIndices, mesh.drawIndexBytes, x, y, z);
+                mesh.drawRun, x, y, z);
     }
 
-    /** A mesh another renderer uploaded: whole buffers, indices from the start of theirs. */
+    /**
+     * A mesh another renderer uploaded: whole buffers, indices from the start of theirs. Each such mesh owns its
+     * buffers, so its key is not interned: an intern lookup per mesh costs more than the run it could never share.
+     */
     void add(BlazeMeshState state, GpuBuffer vertices, GpuBuffer indices, int indexCount, float x, float y, float z) {
-        append(state, state.layout(), state.topology(), indexCount, 0, 0, vertices, 0, indices, state.indexBytes(), x, y, z);
+        if (indexCount == 0) return;
+        append(state, state.layout(), state.topology(), indexCount, 0, 0, BlazeSectionRun.of(vertices, 0, indices, state.indexBytes(), false), x, y, z);
     }
 
     private void append(BlazeMeshState state, BlazeMeshState.Layout layout, int topology, int indexCount, int firstIndex, int baseVertex,
-            GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes, float x, float y, float z) {
+            BlazeSectionRun run, float x, float y, float z) {
         if (indexCount == 0) return;
         if (first != null && (topology != firstTopology || layout != firstLayout && !layout.equals(firstLayout))) finish();
         if (first == null) {
@@ -97,25 +100,33 @@ public final class BlazeSectionBatch implements AutoCloseable {
         sections[at] = indexCount;
         sections[at + 1] = firstIndex;
         sections[at + 2] = baseVertex;
-        sections[at + 3] = run(vertices, remainder, indices, indexBytes);
+        sections[at + 3] = run(run);
         offsets[position] = x;
         offsets[position + 1] = y;
         offsets[position + 2] = z;
         count++;
     }
 
-    private int run(GpuBuffer vertices, int remainder, GpuBuffer indices, int indexBytes) {
+    private int run(BlazeSectionRun run) {
         int last = runs.size() - 1;
-        if (last >= 0 && runs.get(last).holds(vertices, remainder, indices, indexBytes)) return last;
+        if (last >= 0 && runs.get(last).holds(run)) return last;
         int added = last + 1;
-        Run run = new Run(vertices, remainder, indices, indexBytes);
         if (ordered) {
             runs.add(run);
             return added;
         }
-        int mask = slots.length - 1, slot = hash(run) & mask;
+        if (run.stamp == stamp) return run.index;
+        if (!BlazeOptimization.SECTION_RUN_KEYS.on()) return hashed(run, added);
+        run.stamp = stamp;
+        run.index = added;
+        runs.add(run);
+        return added;
+    }
+
+    private int hashed(BlazeSectionRun run, int added) {
+        int mask = slots.length - 1, slot = run.hashCode() & mask;
         for (int held; (held = slots[slot]) != 0; slot = slot + 1 & mask) {
-            if (runs.get(held - 1).holds(vertices, remainder, indices, indexBytes)) return held - 1;
+            if (runs.get(held - 1).holds(run)) return held - 1;
         }
         runs.add(run);
         slots[slot] = added + 1;
@@ -123,16 +134,11 @@ public final class BlazeSectionBatch implements AutoCloseable {
         return added;
     }
 
-    private static int hash(Run run) {
-        int hash = System.identityHashCode(run.vertices) * 0x9E3779B9 ^ run.remainder * 0x85EBCA6B ^ System.identityHashCode(run.indices) * 0xC2B2AE35 ^ run.indexBytes;
-        return hash ^ hash >>> 16;
-    }
-
     private void rehash() {
         slots = new int[slots.length * 2];
         int mask = slots.length - 1;
         for (int index = 0; index < runs.size(); index++) {
-            int slot = hash(runs.get(index)) & mask;
+            int slot = runs.get(index).hashCode() & mask;
             while (slots[slot] != 0) slot = slot + 1 & mask;
             slots[slot] = index + 1;
         }
@@ -159,8 +165,9 @@ public final class BlazeSectionBatch implements AutoCloseable {
             failed.run();
         } finally {
             count = 0;
-            if (!ordered && !runs.isEmpty()) Arrays.fill(slots, 0);
+            if (!ordered && !runs.isEmpty() && !BlazeOptimization.SECTION_RUN_KEYS.on()) Arrays.fill(slots, 0);
             runs.clear();
+            stamp = STAMPS.incrementAndGet();
         }
     }
 
@@ -213,7 +220,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
         commands.write(commandBytes);
         positions.write(positionBytes);
         BlazeStats.sections(count, runs.size());
-        return new Draw(runs.toArray(new Run[0]), starts, lengths, commands, positions, 0);
+        return new Draw(runs.toArray(new BlazeSectionRun[0]), starts, lengths, commands, positions, 0);
     }
 
     private static ByteBuffer scratch(ByteBuffer held, int bytes) {
@@ -228,7 +235,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
     }
 
     /** @param constants the pack's fixed vertex inputs, bound third; 0 for a game program, which has none */
-    private record Draw(Run[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions, long constants) implements BlazeTerrainPass.Draw {
+    private record Draw(BlazeSectionRun[] runs, int[] starts, int[] lengths, BlazeBufferPool.Slice commands, BlazeBufferPool.Slice positions, long constants) implements BlazeTerrainPass.Draw {
         Draw withConstants(long buffer) {
             return new Draw(runs, starts, lengths, commands, positions, buffer);
         }
@@ -245,9 +252,9 @@ public final class BlazeSectionBatch implements AutoCloseable {
                     buffers.put(2, constants);
                     bindOffsets.put(2, 0);
                 }
-                Run previous = null;
+                BlazeSectionRun previous = null;
                 for (int index = 0; index < runs.length; index++) {
-                    Run run = runs[index];
+                    BlazeSectionRun run = runs[index];
                     buffers.put(0, run.vertices.handle());
                     bindOffsets.put(0, run.remainder);
                     if (previous == null) {

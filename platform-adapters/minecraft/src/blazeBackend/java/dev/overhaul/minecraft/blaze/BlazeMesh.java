@@ -22,6 +22,7 @@ public final class BlazeMesh implements AutoCloseable {
     int drawIndexCount, drawFirstIndex, drawBaseVertex, drawRemainder, drawIndexBytes, drawTopology;
     GpuBuffer drawVertices, drawIndices;
     BlazeMeshState.Layout drawLayout;
+    BlazeSectionRun drawRun;
 
     BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, BlazeSequenceIndices sequences, boolean stream, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.sequences=sequences;this.stream=stream;this.onClose=onClose; }
 
@@ -66,6 +67,7 @@ public final class BlazeMesh implements AutoCloseable {
             drawIndexCount = 0;
             drawVertices = drawIndices = null;
             drawLayout = null;
+            drawRun = null;
             return;
         }
         int stride = current.layout().stride();
@@ -77,6 +79,7 @@ public final class BlazeMesh implements AutoCloseable {
         drawVertices = vertices.buffer();
         drawIndices = indices.buffer();
         drawLayout = current.layout();
+        drawRun = BlazeSectionRun.of(drawVertices, drawRemainder, drawIndices, drawIndexBytes, BlazeOptimization.SECTION_RUN_KEYS.on());
         drawIndexCount = current.indexCount();
     }
 
