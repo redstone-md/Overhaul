@@ -28,6 +28,8 @@ public final class BlazePrograms implements AutoCloseable {
         Map<String,Integer> locations=Map.of();
         final Map<Integer,String> samplerLocations=new HashMap<>();
         final Map<String,Integer> samplerUnits=new HashMap<>();
+        /** Values set with raw glUniform calls, by location, as 32-bit words. */
+        final Map<Integer,int[]> raw=new HashMap<>();
         Supplier<BlazeShaderSnapshot> snapshot;
         String name="unlinked";
         boolean foreign;
@@ -98,6 +100,10 @@ public final class BlazePrograms implements AutoCloseable {
     public int attributeLocation(int id,CharSequence name){return compiled(id).bindings().attributes().getOrDefault(name.toString(),-1);}
     public void registerSnapshot(int id,Supplier<BlazeShaderSnapshot> snapshot){requireOpen();entry(id).snapshot=java.util.Objects.requireNonNull(snapshot);}
     public void use(int id){requireOpen();if(id!=0)compiled(id);active=id;unknownActive=0;}
+    /** Keeps a raw glUniform value for the program in use; a name without a compiled program keeps nothing. */
+    public void rawUniform(int location,int[] words){requireOpen();if(active!=0)entry(active).raw.put(location,words);}
+    /** The raw glUniform value a program holds at a location, or null. */
+    public int[] rawUniform(int id,int location){requireOpen();var entry=programs.get(id);return entry==null?null:entry.raw.get(location);}
     public void samplerUnit(int location,int unit){
         requireOpen();if(location==-1)return;if(active==0)throw new IllegalStateException("Sampler assignment requires an active program");
         var entry=entry(active);String name=entry.samplerLocations.get(location);if(name==null)throw new IllegalArgumentException("Location is not an active sampler");entry.samplerUnits.put(name,unit);

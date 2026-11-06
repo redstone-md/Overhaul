@@ -32,7 +32,15 @@ public final class BlazeGlBoundary implements FunctionProvider {
     /** Floating point arguments travel in other registers, so these entries need their true signature. */
     private static final Map<String, FFICIF> REAL_SIGNATURES = Map.of(
             "glClearColor", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float),
-            "glClearDepth", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_double));
+            "glClearDepth", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_double),
+            "glUniform1f", floats(1), "glUniform2f", floats(2), "glUniform3f", floats(3), "glUniform4f", floats(4));
+    /** A location followed by {@code count} floats. */
+    private static FFICIF floats(int count) {
+        var types = new org.lwjgl.system.libffi.FFIType[count + 1];
+        types[0] = LibFFI.ffi_type_sint32;
+        java.util.Arrays.fill(types, 1, types.length, LibFFI.ffi_type_float);
+        return APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, types);
+    }
     private static final int GL_TRUE = 1, GL_DEPTH_CLEAR_VALUE = 0x0B73, GL_COLOR_CLEAR_VALUE = 0x0C22;
     private static final int GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
     private static final int GL_ALREADY_SIGNALED = 0x911A;
@@ -83,6 +91,8 @@ public final class BlazeGlBoundary implements FunctionProvider {
         BlazeGlBuffers buffers = new BlazeGlBuffers();
         BlazeGlRoutes.install(answers, buffers);
         buffers.install(answers);
+        BlazeGlBlocks.install(answers, buffers);
+        BlazeGlUniforms.install(answers);
         if (BlazeOptimization.RAW_DRAWS.on()) new BlazeGlVertexArrays(buffers).install(answers);
         active = buffers;
     }

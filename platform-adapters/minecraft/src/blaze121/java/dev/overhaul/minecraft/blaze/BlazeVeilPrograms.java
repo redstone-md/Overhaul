@@ -8,6 +8,7 @@ import dev.overhaul.minecraft.blaze.mixin.EffectInstanceProgram121Access;
 import dev.overhaul.minecraft.blaze.mixin.ShaderInstanceProgram121Access;
 import dev.overhaul.minecraft.blaze.mixin.VeilTextureCache121Access;
 import dev.overhaul.minecraft.blaze.mixin.VeilUniform121Access;
+import dev.overhaul.shader.blaze.BlazeBlockBuffers;
 import dev.overhaul.shader.blaze.BlazeModernSource;
 import dev.overhaul.shader.compat.ProgramBindings;
 import foundry.veil.api.client.render.VeilRenderSystem;
@@ -79,11 +80,12 @@ public final class BlazeVeilPrograms {
         var block = BLOCK.matcher(source);
         while (block.find()) {
             String id = block.group(2) == null ? block.group(1) : block.group(2);
-            if (!id.equals("VeilCamera")) BlazeGlBoundary.reportOnce("veil block " + id, "Veil program " + name + " reads uniform block " + id + ", which stays zero on this backend");
+            if (!id.equals("VeilCamera") && !BlazeBlockBuffers.known(block.group(1))) BlazeGlBoundary.reportOnce("veil block " + id, "Veil program " + name + " reads uniform block " + id + ", which stays zero on this backend");
         }
     }
 
-    public static boolean fill(int program, Map<String, ShaderUniformCache.Uniform> uniforms, Map<String, ShaderUniformCache.Uniform> samplers) {
+    public static boolean fill(int program, Map<String, ShaderUniformCache.Uniform> uniforms, Map<String, ShaderUniformCache.Uniform> samplers,
+            Map<String, ShaderUniformCache.UniformBlock> blocks) {
         var programs = BlazePrograms.current();
         if (programs == null || !programs.linked(program)) return false;
         ProgramBindings bindings = programs.compiled(program).bindings();
@@ -92,7 +94,12 @@ public final class BlazeVeilPrograms {
             uniforms.put(reflected, new ShaderUniformCache.Uniform(reflected, programs.uniformLocation(program, name), 0, uniformType(entry.getValue().type()), 1));
         }
         for (var entry : bindings.samplerTypes().entrySet()) {
-            String name = entry.getKey();
+            String name = entry.getKey(), block = BlazeBlockBuffers.blockOf(name);
+            if (block != null) {
+                // The block index is the same in every program, so the binding Veil sets for it finds the buffer at draw time.
+                blocks.put(block, new ShaderUniformCache.UniformBlock(block, BlazeBlockBuffers.index(block), 0, new ShaderUniformCache.Uniform[0]));
+                continue;
+            }
             samplers.put(name, new ShaderUniformCache.Uniform(name, programs.uniformLocation(program, name), 0, samplerType(entry.getValue()), 1));
         }
         return true;
@@ -160,7 +167,9 @@ public final class BlazeVeilPrograms {
                 continue;
             }
             Object uniform = uniforms.get(reflectedName(name));
-            if (uniform != null) copy(values, entry.getValue(), ((VeilUniform121Access) uniform).overhaul$value());
+            ByteBuffer value = uniform == null ? null : ((VeilUniform121Access) uniform).overhaul$value();
+            if (value != null) copy(values, entry.getValue(), value);
+            else raw(values, entry.getValue(), programs.rawUniform(id, programs.uniformLocation(id, name)));
         }
         return new BlazeShaderSnapshot(program, values, textures(bindings, access));
     }
@@ -173,6 +182,11 @@ public final class BlazeVeilPrograms {
             if (bindings.samplers().containsKey(name)) samplers.put(name, ShaderTextureCache.getTextureId(entry.getLongValue()));
         }
         for (String name : bindings.samplers().keySet()) {
+            var storage = BlazeGlBlocks.storage(name);
+            if (storage != null) {
+                samplers.put(name, storage);
+                continue;
+            }
             Object texture = samplers.get(name);
             if (texture == null || (Integer) texture == 0) samplers.put(name, MissingTextureAtlasSprite.getTexture().getId());
         }
@@ -193,6 +207,19 @@ public final class BlazeVeilPrograms {
         }
         int count = Math.min(layout.byteSize(), value.capacity()) / 4;
         for (int index = 0; index < count; index++) target.putInt(offset + index * 4, value.getInt(index * 4));
+    }
+
+    /** A value the mod set with a raw glUniform call, as Veil's skinned meshes do for their bone count. */
+    private static void raw(ByteBuffer target, ProgramBindings.Uniform layout, int[] words) {
+        if (words == null) return;
+        int offset = layout.byteOffset();
+        String type = layout.type();
+        if (type.startsWith("mat")) {
+            int size = type.charAt(3) - '0';
+            for (int index = 0; index < Math.min(words.length, size * size); index++) target.putInt(offset + (index / size) * 16 + (index % size) * 4, words[index]);
+            return;
+        }
+        for (int index = 0; index < Math.min(words.length, layout.byteSize() / 4); index++) target.putInt(offset + index * 4, words[index]);
     }
 
     private static void camera(ByteBuffer target, String field, int offset) {

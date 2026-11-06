@@ -23,7 +23,7 @@ public final class BlazeRenderer implements AutoCloseable {
     static final int FOREIGN_FRAMEBUFFERS=0x40000000;
     /** A multiple of both terrain strides, so one indirect draw reaches every section in a page by base vertex alone. */
     private static final int GEOMETRY_ALIGNMENT=160;
-    private static final int GL_BUFFER_USAGE=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    private static final int GL_BUFFER_USAGE=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     /** Distant Horizons vertices are 16 bytes, so every shared buffer starts on a whole vertex. */
     static final int GL_SHARED_ALIGNMENT=16;
     /** Pages free as soon as they empty, so the budget only bounds what mods hold at once, as their own buffers did. */
