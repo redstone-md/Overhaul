@@ -66,6 +66,8 @@ public final class PackProgramTranslator {
         rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
         Map<String,PackStorageImages.Storage> storage = PackStorageImages.empty();
         vs = PackStorageImages.lift(vs,storage); fs = PackStorageImages.lift(fs,storage);
+        Set<Integer> buffers = new TreeSet<>();
+        vs = PackStorageBuffers.lift(vs,buffers); fs = PackStorageBuffers.lift(fs,buffers);
         var declarations = PackDeclarationNormalizer.declarations(vs,fs);
         vs = declarations.vertex(); fs = declarations.fragment();
         if (coordinates != CoordinateConvention.NATIVE_VULKAN) {
@@ -86,9 +88,9 @@ public final class PackProgramTranslator {
             }
         }
         Map<String,Integer> attributeLocations = locations(attributes), varyingLocations = locations(vertexVaryings);
-        ProgramBindings bindings = bindings(uniforms,samplers,attributeLocations,varyingLocations,attributes);
-        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings,storage),
-                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings,storage),bindings,coordinates);
+        ProgramBindings bindings = bindings(uniforms,samplers,buffers,attributeLocations,varyingLocations,attributes);
+        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings,storage,buffers),
+                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings,storage,buffers),bindings,coordinates);
     }
 
     /**
@@ -99,19 +101,20 @@ public final class PackProgramTranslator {
         String cs = PackExtensions.lower(stripComments(source));
         rejectUnprocessedDirectives(cs);
         Map<String,PackStorageImages.Storage> storage = PackStorageImages.empty();
-        cs = PackDeclarationNormalizer.declarations(PackStorageImages.lift(cs,storage),"").vertex();
+        Set<Integer> buffers = new TreeSet<>();
+        cs = PackDeclarationNormalizer.declarations(PackStorageBuffers.lift(PackStorageImages.lift(cs,storage),buffers),"").vertex();
         validateBuiltins(cs,COMPUTE_BUILTINS);
         Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>(), attributes = new TreeMap<>(), varyings = new TreeMap<>();
         scan(cs,false,uniforms,samplers,attributes,varyings);
         if (!attributes.isEmpty() || !varyings.isEmpty()) throw unsupported("Compute programs have no attributes or varyings");
-        ProgramBindings bindings = bindings(uniforms,samplers,Map.of(),Map.of(),Map.of());
+        ProgramBindings bindings = bindings(uniforms,samplers,buffers,Map.of(),Map.of(),Map.of());
         int[] local = localSize(cs);
         Matcher groups = WORK_GROUPS.matcher(cs), render = WORK_GROUPS_RENDER.matcher(cs);
         int[] workGroups = groups.find() ? new int[]{Integer.parseInt(groups.group(1)),Integer.parseInt(groups.group(2)),Integer.parseInt(groups.group(3))} : null;
         float[] scale = workGroups == null && render.find() ? new float[]{Float.parseFloat(render.group(1)),Float.parseFloat(render.group(2))} : null;
         if (workGroups == null && scale == null) scale = new float[]{1,1};
         cs = LOCAL_SIZE.matcher(cs).replaceAll("");
-        String body = rewrite(cs,false,uniforms,samplers,Map.of(),Map.of(),bindings,storage);
+        String body = rewrite(cs,false,uniforms,samplers,Map.of(),Map.of(),bindings,storage,buffers);
         return new TranslatedCompute(insertBodyPreamble(body,"layout(local_size_x="+local[0]+",local_size_y="+local[1]+",local_size_z="+local[2]+") in;\n"),
                 bindings,local,workGroups,scale);
     }
@@ -128,10 +131,17 @@ public final class PackProgramTranslator {
         if (matcher.find()) throw unsupported("Compute program declares local_size twice");
         return size;
     }
-    private static ProgramBindings bindings(Map<String,String> uniforms, Map<String,String> samplers, Map<String,Integer> attributeLocations,
-                                            Map<String,Integer> varyingLocations, Map<String,String> attributes) {
+    /** Samplers and storage images bind from one, then each storage buffer after them. */
+    private static ProgramBindings bindings(Map<String,String> uniforms, Map<String,String> samplers, Set<Integer> buffers,
+                                            Map<String,Integer> attributeLocations, Map<String,Integer> varyingLocations, Map<String,String> attributes) {
         Map<String,Integer> samplerBindings = new LinkedHashMap<>();
+        Map<String,String> types = new LinkedHashMap<>(samplers);
         for (String name : samplers.keySet()) samplerBindings.put(name, samplerBindings.size()+1);
+        for (int index : buffers) {
+            String name = PackStorageBuffers.name(index);
+            if (types.put(name,ProgramBindings.BUFFER) != null) throw unsupported("Storage buffer name collides with a sampler: "+name);
+            samplerBindings.put(name, samplerBindings.size()+1);
+        }
         Map<String,ProgramBindings.Uniform> layout = new LinkedHashMap<>();
         int offset = 0;
         for (Map.Entry<String,String> uniform : uniforms.entrySet()) {
@@ -141,7 +151,7 @@ public final class PackProgramTranslator {
             layout.put(uniform.getKey(), new ProgramBindings.Uniform(type, offset, size));
             offset += size;
         }
-        return new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes,samplers);
+        return new ProgramBindings(layout, align(offset,16), samplerBindings, attributeLocations, varyingLocations,attributes,types);
     }
 
     private static void rejectUnprocessedDirectives(String source) {
@@ -221,8 +231,9 @@ public final class PackProgramTranslator {
 
     private String rewrite(String source, boolean vertex, Map<String,String> uniforms,
                                   Map<String,String> samplers, Map<String,String> attributes,
-                                  Map<String,String> varyings, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage) {
+                                  Map<String,String> varyings, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage, Set<Integer> buffers) {
         String body = DECLARATION.matcher(source).replaceAll("").replaceAll("(?m)^\\s*#version[^\\r\\n]*", "");
+        body = PackStorageBuffers.place(body,buffers,bindings.samplers());
         // Legacy packs commonly name a sampler "texture", now also a GLSL function.
         for (String sampler : samplers.keySet()) {
             body = body.replaceAll("\\b" + Pattern.quote(sampler) + "\\b", "overhaulSampler_" + sampler);

@@ -10,10 +10,14 @@ import java.util.regex.Pattern;
 /**
  * {@code image.<name> = <sampler> <pixelFormat> <internalFormat> <pixelType> <clear> <relative> <width> <height> [<depth>]}:
  * storage images a pack writes with {@code imageStore} and reads back through a sampler. A depth makes the image 3D; a
- * relative image scales its width and height by the screen.
+ * relative image scales its width and height by the screen. {@code bufferObject.<index> = <bytes>} declares a zeroed
+ * storage buffer that shaders reach as {@code layout(std430, binding = index) buffer}.
  */
 public final class PackImages {
     private static final Pattern KEY = Pattern.compile("image\\.[A-Za-z_]\\w*");
+    private static final Pattern BUFFER = Pattern.compile("bufferObject\\.(\\d{1,2})");
+    /** Largest storage buffer a pack may ask for; the device's own limits are checked when it is allocated. */
+    private static final long MAX_BUFFER = 1L << 32;
     /** Formats both GLSL image layouts and Vulkan storage images accept. */
     private static final Set<String> FORMATS = Set.of("rgba32f","rgba16f","rg32f","rg16f","r11f_g11f_b10f","r32f","r16f",
             "rgba16","rgb10_a2","rgba8","rg16","rg8","r16","r8","rgba16_snorm","rgba8_snorm","rg16_snorm","rg8_snorm","r16_snorm","r8_snorm",
@@ -33,26 +37,37 @@ public final class PackImages {
 
     private final Map<String,Image> images;
     private final Map<String,Image> samplers;
+    private final Map<Integer,Long> buffers;
 
-    private PackImages(Map<String,Image> images) {
+    private PackImages(Map<String,Image> images, Map<Integer,Long> buffers) {
         this.images = Map.copyOf(images);
+        this.buffers = Map.copyOf(buffers);
         Map<String,Image> bySampler = new LinkedHashMap<>();
         for (Image image : images.values()) bySampler.put(image.sampler(),image);
         samplers = Map.copyOf(bySampler);
     }
 
-    public static final PackImages NONE = new PackImages(Map.of());
+    public static final PackImages NONE = new PackImages(Map.of(),Map.of());
 
-    public static boolean property(String key) { return KEY.matcher(key).matches(); }
+    public static boolean property(String key) { return KEY.matcher(key).matches() || BUFFER.matcher(key).matches(); }
 
     public static PackImages parse(Map<String,String> properties) {
         Map<String,Image> images = new LinkedHashMap<>();
+        Map<Integer,Long> buffers = new TreeMap<>();
         for (var entry : new TreeMap<>(properties).entrySet()) {
-            if (!property(entry.getKey())) continue;
+            var buffer = BUFFER.matcher(entry.getKey());
+            if (buffer.matches()) { buffers.put(Integer.parseInt(buffer.group(1)),bufferSize(entry.getKey(),entry.getValue().trim())); continue; }
+            if (!KEY.matcher(entry.getKey()).matches()) continue;
             String name = entry.getKey().substring("image.".length());
             images.put(name,image(name,entry.getValue().trim()));
         }
-        return images.isEmpty() ? NONE : new PackImages(images);
+        return images.isEmpty() && buffers.isEmpty() ? NONE : new PackImages(images,buffers);
+    }
+    private static long bufferSize(String key, String value) {
+        long size;
+        try { size = Long.parseLong(value); } catch (NumberFormatException failure) { throw new UnsupportedShaderException("Shader pack "+key+": invalid size "+value); }
+        if (size <= 0 || size > MAX_BUFFER) throw new UnsupportedShaderException("Shader pack "+key+": size out of range "+value);
+        return size;
     }
 
     private static Image image(String name, String value) {
@@ -85,7 +100,9 @@ public final class PackImages {
     public Map<String,Image> images() { return images; }
     public Image image(String name) { return images.get(name); }
     public Image bySampler(String sampler) { return samplers.get(sampler); }
-    public boolean isEmpty() { return images.isEmpty(); }
+    public boolean isEmpty() { return images.isEmpty() && buffers.isEmpty(); }
+    /** Storage buffer index to its size in bytes. */
+    public Map<Integer,Long> buffers() { return buffers; }
     /** Image name to GLSL layout format, for the translator. */
     public Map<String,String> formats() {
         Map<String,String> formats = new LinkedHashMap<>();
