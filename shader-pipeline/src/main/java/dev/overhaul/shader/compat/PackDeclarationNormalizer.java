@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 /**
  * Source-level rewrites that let common pack GLSL reach the translator's declaration subset:
  * multi-declarations, GLSL 130 {@code in}/{@code out}, and the fixed-function varyings
- * gl_FrontColor and gl_TexCoord. Arrays, blocks and non-constant indices stay rejected downstream.
+ * gl_FrontColor and gl_TexCoord, by constant or computed index. Interface arrays and blocks stay rejected downstream.
  */
 final class PackDeclarationNormalizer {
     private static final String QUALIFIER = "(?:flat|smooth|noperspective|centroid)";
@@ -22,6 +22,10 @@ final class PackDeclarationNormalizer {
     private static final Pattern FRAGMENT_COLOR = Pattern.compile("\\bgl_Color\\b");
     private static final String FRONT_COLOR_VARYING = "overhaulVaryingFrontColor";
     private static final String TEX_COORD_VARYING = "overhaulVaryingTexCoord";
+    private static final Pattern ANY_TEX_COORD = Pattern.compile("\\bgl_TexCoord\\s*\\[");
+    private static final Pattern MAIN = Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void)?\\s*\\)");
+    private static final String TEX_COORD_ARRAY = "overhaulVaryingTexCoords", TEX_COORD_MAIN = "overhaulVaryingMain";
+    private static final int TEX_COORDS = 8;
 
     private PackDeclarationNormalizer() {}
 
@@ -42,7 +46,48 @@ final class PackDeclarationNormalizer {
             vs = "varying vec4 "+FRONT_COLOR_VARYING+";\n"+FRONT_COLOR.matcher(vs).replaceAll(FRONT_COLOR_VARYING);
             if (FRAGMENT_COLOR.matcher(fs).find()) fs = "varying vec4 "+FRONT_COLOR_VARYING+";\n"+FRAGMENT_COLOR.matcher(fs).replaceAll(FRONT_COLOR_VARYING);
         }
-        return new Stages(lowerTexCoords(vs),lowerTexCoords(fs));
+        if (!computedTexCoord(vs) && !computedTexCoord(fs)) return new Stages(lowerTexCoords(vs),lowerTexCoords(fs));
+        TreeSet<Integer> written = computedTexCoord(vs) ? allTexCoords() : texCoordsUsed(vs);
+        return new Stages(computedTexCoords(vs,written,true),computedTexCoord(fs) ? computedTexCoords(fs,written,false) : lowerTexCoords(fs));
+    }
+
+    private static boolean computedTexCoord(String source) {
+        Matcher any = ANY_TEX_COORD.matcher(source);
+        while (any.find()) if (!TEX_COORD.matcher(source).region(any.start(),source.length()).lookingAt()) return true;
+        return false;
+    }
+
+    private static TreeSet<Integer> allTexCoords() {
+        TreeSet<Integer> all = new TreeSet<>();
+        for (int index = 0; index < TEX_COORDS; index++) all.add(index);
+        return all;
+    }
+
+    private static TreeSet<Integer> texCoordsUsed(String source) {
+        Matcher matcher = TEX_COORD.matcher(source);
+        TreeSet<Integer> used = new TreeSet<>();
+        while (matcher.find()) used.add(Integer.parseInt(matcher.group(1)));
+        return used;
+    }
+
+    /**
+     * A computed index needs a real array, so the stage works on a private one: the vertex stage copies it into the
+     * varyings once its main returns, the fragment stage fills it from the varyings the vertex stage writes before its
+     * main runs, and every other set reads as zero.
+     */
+    private static String computedTexCoords(String source, TreeSet<Integer> varyings, boolean vertex) {
+        if (!MAIN.matcher(source).find()) throw new UnsupportedShaderException("Shader indexes gl_TexCoord but has no main");
+        StringBuilder head = new StringBuilder("vec4 "+TEX_COORD_ARRAY+"["+TEX_COORDS+"];\n");
+        StringBuilder copy = new StringBuilder();
+        for (int index : varyings) {
+            head.append("varying vec4 ").append(TEX_COORD_VARYING).append(index).append(";\n");
+            if (vertex) copy.append("    ").append(TEX_COORD_VARYING).append(index).append(" = ").append(TEX_COORD_ARRAY).append('[').append(index).append("];\n");
+            else copy.append("    ").append(TEX_COORD_ARRAY).append('[').append(index).append("] = ").append(TEX_COORD_VARYING).append(index).append(";\n");
+        }
+        String body = MAIN.matcher(ANY_TEX_COORD.matcher(source).replaceAll(TEX_COORD_ARRAY+"[")).replaceFirst("void "+TEX_COORD_MAIN+"()");
+        String main = vertex ? "void main() {\n    "+TEX_COORD_MAIN+"();\n"+copy+"}\n"
+                : "void main() {\n    for (int i = 0; i < "+TEX_COORDS+"; i++) "+TEX_COORD_ARRAY+"[i] = vec4(0.0);\n"+copy+"    "+TEX_COORD_MAIN+"();\n}\n";
+        return head+body+"\n"+main;
     }
 
     private static String expand(String source) { return expand(expand(source,MULTI),MULTI_CORE); }
@@ -85,10 +130,8 @@ final class PackDeclarationNormalizer {
     /** A fragment read of a set the vertex stage never writes fails the translator's varying match. */
     private static String lowerTexCoords(String source) {
         Matcher matcher = TEX_COORD.matcher(source);
-        TreeSet<Integer> used = new TreeSet<>();
-        while (matcher.find()) used.add(Integer.parseInt(matcher.group(1)));
         StringBuilder declarations = new StringBuilder();
-        for (int index : used) declarations.append("varying vec4 ").append(TEX_COORD_VARYING).append(index).append(";\n");
+        for (int index : texCoordsUsed(source)) declarations.append("varying vec4 ").append(TEX_COORD_VARYING).append(index).append(";\n");
         return declarations+matcher.replaceAll(TEX_COORD_VARYING+"$1");
     }
 }
