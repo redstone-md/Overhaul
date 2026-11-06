@@ -8,7 +8,7 @@ import net.minecraft.world.level.LightLayer;
 /** One camera and world snapshot shared by every pass of a frame; it retains no level, camera or entity. */
 final class BlazePackEnvironment {
     private int worldTime, worldDay, moonPhase, submersion, blockLight, skyLight, height, bottom, logicalHeight;
-    private float red, green, blue, rain, thunder, altitude, brightness;
+    private float red, green, blue, rain, thunder, altitude, brightness, cloudHeight, ambientLight;
 
     void capture(BlazePackCapture frame) {
         var minecraft = frame.minecraft();
@@ -28,6 +28,8 @@ final class BlazePackEnvironment {
         height = level.getHeight();
         bottom = level.getMinBuildHeight();
         logicalHeight = level.dimensionType().logicalHeight();
+        cloudHeight = level.effects().getCloudHeight();
+        ambientLight = level.dimensionType().ambientLight();
         rain = weather(level.getRainLevel(partial));
         thunder = weather(level.getThunderLevel(partial));
         altitude = (float) position.y;
@@ -65,6 +67,8 @@ final class BlazePackEnvironment {
             case "heightLimit" -> values.setInt(name, height);
             case "bedrockLevel" -> values.setInt(name, bottom);
             case "logicalHeightLimit" -> values.setInt(name, logicalHeight);
+            case "cloudHeight" -> values.setFloat(name, cloudHeight);
+            case "ambientLight" -> values.setFloat(name, ambientLight);
             default -> {
                 return false;
             }
@@ -89,6 +93,8 @@ final class BlazePackEnvironment {
             case "heightLimit" -> height;
             case "bedrockLevel" -> bottom;
             case "logicalHeightLimit" -> logicalHeight;
+            case "cloudHeight" -> cloudHeight;
+            case "ambientLight" -> ambientLight;
             default -> Double.NaN;
         };
     }

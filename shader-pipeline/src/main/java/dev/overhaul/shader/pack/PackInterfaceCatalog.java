@@ -34,7 +34,7 @@ public final class PackInterfaceCatalog {
         Map<String,UniformInfo> table = new HashMap<>();
         add(table,Binding.BOUND,"float","viewWidth","viewHeight","aspectRatio","frameTime","frameTimeCounter","near","far",
                 "rainStrength","thunderStrength","eyeAltitude","screenBrightness","pi","sunAngle","shadowAngle",
-                "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef","endFlashIntensity");
+                "fogStart","fogEnd","fogDensity","wetness","nightVision","blindness","darknessFactor","darknessLightFactor","playerMood","centerDepthSmooth","alphaTestRef","endFlashIntensity","cloudHeight","ambientLight");
         add(table,Binding.BOUND,"int","frameCounter","worldTime","worldDay","moonPhase","isEyeInWater","fogMode","fogShape","heldBlockLightValue","heldBlockLightValue2","hideGUI");
         add(table,Binding.BOUND,"ivec2","eyeBrightness","eyeBrightnessSmooth","atlasSize");
         add(table,Binding.BOUND,"int","heldItemId","heldItemId2");

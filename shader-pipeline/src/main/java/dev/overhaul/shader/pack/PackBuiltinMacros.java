@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * Macros a shader loader defines for every pack. MC_NORMAL_MAP and MC_SPECULAR_MAP stay undefined because no
- * PBR maps are stitched, and IS_IRIS stays undefined because that branch reads uniforms only Iris supplies.
+ * PBR maps are stitched. IS_IRIS is defined like Iris does: packs gate custom images and Iris-only uniforms on it.
  */
 public final class PackBuiltinMacros {
     private static final String GLSL_VERSION = "450";
@@ -25,6 +25,10 @@ public final class PackBuiltinMacros {
         macros.put("MC_RENDER_QUALITY","1.0");
         macros.put("MC_SHADOW_QUALITY","1.0");
         macros.put("MC_HAND_DEPTH",HAND_DEPTH);
+        // Iris identity and feature flags for what this loader runs; packs gate image.* and .csh paths on them.
+        macros.put("IS_IRIS","1");
+        macros.put("IRIS_FEATURE_CUSTOM_IMAGES","1");
+        macros.put("IRIS_FEATURE_COMPUTE_SHADERS","1");
         PackRenderStages.define(macros);
         macros.putAll(explicit);
         return macros;
