@@ -26,6 +26,15 @@ final class BlazePackSelection {
         return world.equals("gbuffers_water") || world.equals("gbuffers_entities_translucent") ? "gbuffers_hand_water" : "gbuffers_hand";
     }
 
+    /** The sky's stand-in: the plain sky, its sunrise fan and the stars go to skybasic, the sun and moon to skytextured. */
+    static String skyProgram(String shader) {
+        return switch (shader) {
+            case "position", "position_color" -> "gbuffers_skybasic";
+            case "position_tex", "position_tex_color" -> "gbuffers_skytextured";
+            default -> null;
+        };
+    }
+
     /** The block outline and debug lines: no pack program draws them, and the pack's passes would paint over them. */
     static boolean onTop(String shader) {
         return "rendertype_lines".equals(shader);

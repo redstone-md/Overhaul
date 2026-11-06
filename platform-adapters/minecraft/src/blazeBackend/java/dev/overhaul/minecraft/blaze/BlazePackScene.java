@@ -59,7 +59,7 @@ public final class BlazePackScene implements AutoCloseable {
     private BlazeDrawState.Snapshot shadowRaster;
     private ShadercCompiler compiler;
     private int phase;
-    private boolean open, opaqueDone, weather, hand;
+    private boolean open, opaqueDone, weather, hand, sky;
 
     public BlazePackScene(BlazeRenderer renderer, CompiledShaderPack pack, PackGraphRuntime runtime, PackGraphRuntime.Uniforms uniforms) {
         this.renderer = renderer;
@@ -197,6 +197,7 @@ public final class BlazePackScene implements AutoCloseable {
         heldDistant = null;
         weather = false;
         hand = false;
+        sky = false;
     }
 
     /** Queues the draws held back while the frame was open, over the image the pack's last pass left in the main target. */
@@ -211,6 +212,11 @@ public final class BlazePackScene implements AutoCloseable {
     /** Brackets the game's rain and snow, which the pack draws with gbuffers_weather. */
     public void weather(boolean drawing) {
         weather = drawing;
+    }
+
+    /** Brackets the game's sky, which the pack draws with gbuffers_skybasic and gbuffers_skytextured. */
+    public void sky(boolean drawing) {
+        sky = drawing;
     }
 
     /** Brackets the first-person hand, which the pack draws with gbuffers_hand and gbuffers_hand_water. */
@@ -280,7 +286,7 @@ public final class BlazePackScene implements AutoCloseable {
                 return;
             } catch (RuntimeException failure) {
                 BlazeGlBoundary.reportOnce("pack program " + draw.program.name(), "Pack program " + draw.program.name() + " cannot draw " + shader + ", which keeps the game's shader: " + failure);
-                forget(hand ? "hand:" + shader : shader);
+                forget(route() + shader);
             }
         }
         renderer.draw(mesh, plain(), game);
@@ -307,7 +313,7 @@ public final class BlazePackScene implements AutoCloseable {
     }
 
     private BlazePackDraw sectionDraw() {
-        if (hand || weather || !BlazeOptimization.PACK_SECTION_BATCH.on()) return null;
+        if (hand || weather || sky || !BlazeOptimization.PACK_SECTION_BATCH.on()) return null;
         // Asked before the layer binds its program, so the terrain shader itself names the draw.
         var current = RenderSystem.getShader();
         String shader = current == null ? null : current.getName();
@@ -350,11 +356,16 @@ public final class BlazePackScene implements AutoCloseable {
         return current != null && current.getId() == renderer.programs().activeId() ? current.getName() : null;
     }
 
+    /** Draws in a bracket pick their program by bracket, so the same game shader keeps one cache entry per bracket. */
+    private String route() {
+        return hand ? "hand:" : sky ? "sky:" : "";
+    }
+
     private BlazePackDraw select(String shader) {
-        String key = hand ? "hand:" + shader : shader;
+        String key = route() + shader;
         BlazePackDraw draw = byShader.get(key);
         if (draw != null || byShader.containsKey(key)) return draw;
-        String wanted = hand ? BlazePackSelection.handProgram(shader) : BlazePackSelection.program(shader);
+        String wanted = hand ? BlazePackSelection.handProgram(shader) : sky ? BlazePackSelection.skyProgram(shader) : BlazePackSelection.program(shader);
         var program = wanted == null ? null : PackProgramFallbacks.resolve(wanted, programs.keySet()).map(programs::get).orElse(null);
         if (program != null) draw = draw(program);
         byShader.put(key, draw);

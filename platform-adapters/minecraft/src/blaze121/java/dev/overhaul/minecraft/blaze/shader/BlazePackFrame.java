@@ -113,6 +113,11 @@ public final class BlazePackFrame implements AutoCloseable {
         if (active && scene != null) scene.weather(drawing);
     }
 
+    /** Marks the game's sky draws, which a pack draws with its sky programs. */
+    public void sky(boolean drawing) {
+        if (active && scene != null) scene.sky(drawing);
+    }
+
     /** Idempotent within a frame: the game calls this before every translucent section layer it draws. */
     public void afterOpaque() {
         if (!active) return;

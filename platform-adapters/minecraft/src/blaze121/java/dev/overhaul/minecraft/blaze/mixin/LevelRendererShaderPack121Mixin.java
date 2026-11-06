@@ -43,6 +43,16 @@ abstract class LevelRendererShaderPack121Mixin {
         if (overhaul$pack != null && overhaul$pack.hidesClouds()) callback.cancel();
     }
 
+    @Inject(method = "renderSky", at = @At("HEAD"))
+    private void overhaul$skyBegins(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.sky(true);
+    }
+
+    @Inject(method = "renderSky", at = @At("RETURN"))
+    private void overhaul$skyEnds(CallbackInfo callback) {
+        if (overhaul$pack != null) overhaul$pack.sky(false);
+    }
+
     @Inject(method = "renderSnowAndRain", at = @At("HEAD"))
     private void overhaul$weatherBegins(CallbackInfo callback) {
         if (overhaul$pack != null) overhaul$pack.weather(true);
