@@ -6,6 +6,7 @@ import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.CoordinateConvention;
 import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.FragmentAlphaTest;
+import dev.overhaul.shader.compat.PackGeometryInterface;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShaderStage;
 import dev.overhaul.shader.compile.ShadercCompiler;
@@ -13,13 +14,21 @@ import dev.overhaul.shader.compile.SpirvBinary;
 import dev.overhaul.shader.compile.SpirvInterface;
 import java.io.IOException;
 
-/** Loads and compiles one explicit program; does not claim complete pack semantics. */
-public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
+/**
+ * Loads and compiles one explicit program; does not claim complete pack semantics. {@code geometry} and {@code primitive}
+ * are null unless the pack gives the program a geometry stage.
+ */
+public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary geometry, SpirvBinary fragment,
                                 ProgramBindings descriptors, FramebufferBindings framebuffer,
-                                CoordinateConvention coordinates, ShaderPackProperties.AlphaTest alphaTest) {
+                                CoordinateConvention coordinates, ShaderPackProperties.AlphaTest alphaTest,
+                                PackGeometryInterface.Primitive primitive) {
     public ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment, ProgramBindings descriptors,
                              FramebufferBindings framebuffer, CoordinateConvention coordinates) {
         this(vertex,fragment,descriptors,framebuffer,coordinates,null);
+    }
+    public ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment, ProgramBindings descriptors,
+                             FramebufferBindings framebuffer, CoordinateConvention coordinates, ShaderPackProperties.AlphaTest alphaTest) {
+        this(vertex,null,fragment,descriptors,framebuffer,coordinates,alphaTest,null);
     }
     public static ShaderPackProgram compile(ShaderPackSource pack, String programName,
                                             ShadercCompiler compiler) throws IOException {
@@ -55,17 +64,26 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary fragment,
     /** {@code imageFormats} gives the format of each {@code image.*} a storage declaration may name without one. */
     public static ShaderPackProgram compile(String name,String vertex,String fragment,ShadercCompiler compiler,CoordinateConvention coordinates,
                                              ShaderPackProperties.AlphaTest alphaTest,boolean dynamicCutoff,java.util.Map<String,String> imageFormats) {
+        return compile(name,vertex,null,fragment,compiler,coordinates,alphaTest,dynamicCutoff,imageFormats);
+    }
+
+    /** {@code geometry} is the preprocessed geometry program, or null when the program has none. */
+    public static ShaderPackProgram compile(String name,String vertex,String geometry,String fragment,ShadercCompiler compiler,CoordinateConvention coordinates,
+                                             ShaderPackProperties.AlphaTest alphaTest,boolean dynamicCutoff,java.util.Map<String,String> imageFormats) {
         var framebuffer = FramebufferBindings.parse(fragment);
         String source=PackShadowSettings.stripDirectives(fragment);
         if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
         String vertexSource=PackShadowSettings.stripDirectives(vertex);
         if(EntityColorEmulation.needed(source)){source=EntityColorEmulation.fragment(source);vertexSource=EntityColorEmulation.vertex(vertexSource);}
-        var translated = new PackProgramTranslator(imageFormats).translate(vertexSource,source, coordinates);
+        String geometrySource=geometry==null?null:PackShadowSettings.stripDirectives(geometry);
+        var translated = new PackProgramTranslator(imageFormats).translate(vertexSource,geometrySource,source,coordinates);
         String lowered=FragmentAlphaTest.lower(translated.fragment(),alphaTest);
         if(dynamicCutoff)lowered=FragmentAlphaTest.lowerCutoff(lowered);
         SpirvBinary compiledVertex=compiler.compile(name+".vsh",translated.vertex(),ShaderStage.VERTEX);
+        SpirvBinary compiledGeometry=translated.geometry()==null?null:compiler.compile(name+".gsh",translated.geometry(),ShaderStage.GEOMETRY);
         SpirvBinary compiledFragment=compiler.compile(name+".fsh",lowered,ShaderStage.FRAGMENT);
-        return new ShaderPackProgram(compiledVertex,compiledFragment,SpirvInterface.active(translated.bindings(),compiledVertex,compiledFragment),framebuffer,coordinates,alphaTest);
+        ProgramBindings active=SpirvInterface.active(translated.bindings(),compiledVertex,compiledGeometry,compiledFragment,java.util.Set.of());
+        return new ShaderPackProgram(compiledVertex,compiledGeometry,compiledFragment,active,framebuffer,coordinates,alphaTest,translated.primitive());
     }
 
     /** Native pipelines must not silently use a binary compiled for different fixed alpha state. */

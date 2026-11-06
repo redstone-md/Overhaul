@@ -44,7 +44,12 @@ public final class SpirvInterface {
         return active(declared,vertex,fragment,Set.of());
     }
     public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary fragment,Set<Integer> importedSets){
+        return active(declared,vertex,null,fragment,importedSets);
+    }
+    /** {@code geometry} may be null; a binding any stage reads is live. */
+    public static ProgramBindings active(ProgramBindings declared,SpirvBinary vertex,SpirvBinary geometry,SpirvBinary fragment,Set<Integer> importedSets){
         SpirvInterface vs=new SpirvInterface(vertex,importedSets),fs=new SpirvInterface(fragment,importedSets);Set<Integer> descriptors=new HashSet<>(vs.descriptors);descriptors.addAll(fs.descriptors);
+        if(geometry!=null)descriptors.addAll(new SpirvInterface(geometry,importedSets).descriptors);
         Map<String,Integer> samplers=new LinkedHashMap<>(),attributes=new LinkedHashMap<>();Map<String,String> types=new LinkedHashMap<>(),samplerTypes=new LinkedHashMap<>();
         for(var sampler:declared.samplers().entrySet())if(descriptors.contains(sampler.getValue())){samplers.put(sampler.getKey(),sampler.getValue());samplerTypes.put(sampler.getKey(),declared.samplerTypes().get(sampler.getKey()));}
         for(var attribute:declared.attributes().entrySet())if(vs.inputs.contains(attribute.getValue())){

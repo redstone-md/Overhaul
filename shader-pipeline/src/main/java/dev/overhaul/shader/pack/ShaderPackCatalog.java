@@ -48,14 +48,19 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
             if (relative.contains("/")) continue;
             if (relative.endsWith(".vsh") || relative.endsWith(".fsh")) names.add(path.substring(0,path.length()-4));
             else if (relative.endsWith(".csh")) compute(path,properties,merged,computes,warnings);
-            else if (relative.matches(".*\\.(gsh|tcs|tes)$")) diagnostics.add("Unsupported shader stage: "+path);
+            else if (relative.endsWith(".gsh")) {
+                String base = path.substring(0,path.length()-4);
+                if (!paths.contains(base+".vsh") || !paths.contains(base+".fsh")) diagnostics.add("Geometry program without its vertex/fragment pair: "+path);
+            }
+            else if (relative.matches(".*\\.(tcs|tes)$")) diagnostics.add("Unsupported shader stage: "+path);
         }
         List<Program> programs = new ArrayList<>();
         for (String name : names) {
             if (!paths.contains(name+".vsh") || !paths.contains(name+".fsh")) {
                 diagnostics.add("Incomplete vertex/fragment program: "+name); continue;
             }
-            try { programs.add(new Program(name,name+".vsh",name+".fsh",properties.program(name,merged))); }
+            String geometry = paths.contains(name+".gsh") ? name+".gsh" : null;
+            try { programs.add(new Program(name,name+".vsh",name+".fsh",properties.program(name,merged),geometry)); }
             catch (UnsupportedShaderException failure) { diagnostics.add(name+": "+failure.getMessage()); }
         }
         PackIdMap ids = PackIdMap.load(pack,paths,discovered.defines(options,macros),warnings);
@@ -86,5 +91,10 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
         }
     }
 
-    public record Program(String name, String vertexPath, String fragmentPath, ShaderPackProperties.ProgramState state) {}
+    /** {@code geometryPath} is null unless the pack gives the program a geometry stage. */
+    public record Program(String name, String vertexPath, String fragmentPath, ShaderPackProperties.ProgramState state, String geometryPath) {
+        public Program(String name, String vertexPath, String fragmentPath, ShaderPackProperties.ProgramState state) {
+            this(name,vertexPath,fragmentPath,state,null);
+        }
+    }
 }

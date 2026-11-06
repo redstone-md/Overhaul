@@ -13,7 +13,7 @@ public final class IncludePreprocessor {
     public IncludePreprocessor(ShaderPackSource source) { this.source = java.util.Objects.requireNonNull(source); }
 
     public ExpandedSource expand(String entry) throws IOException {
-        ShaderStage stage = entry.endsWith(".fsh") ? ShaderStage.FRAGMENT : entry.endsWith(".csh") ? ShaderStage.COMPUTE : ShaderStage.VERTEX;
+        ShaderStage stage = entry.endsWith(".fsh") ? ShaderStage.FRAGMENT : entry.endsWith(".csh") ? ShaderStage.COMPUTE : entry.endsWith(".gsh") ? ShaderStage.GEOMETRY : ShaderStage.VERTEX;
         try (var compiler = new ShadercCompiler()) {
             var processed = new PackPreprocessor(source,compiler,Map.of()).processWithSources(entry,stage);
             return new ExpandedSource(processed.text(),processed.sourceIds());

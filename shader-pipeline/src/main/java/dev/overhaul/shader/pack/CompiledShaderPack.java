@@ -19,7 +19,10 @@ public final class CompiledShaderPack {
             if(!mipmaps.isEmpty()&&(stage==Stage.GBUFFER||stage==Stage.SHADOW))throw new UnsupportedShaderException("Mipmap requests require a composite-style program: "+name);}
         public boolean scene(){return stage==Stage.GBUFFER||stage==Stage.SHADOW;}
     }
-    public record Sources(String vertex,String fragment){}
+    /** {@code geometry} is null unless the program has a geometry stage. */
+    public record Sources(String vertex,String fragment,String geometry){
+        public Sources(String vertex,String fragment){this(vertex,fragment,null);}
+    }
     public static final int MAX_PROGRAMS=512;
     public static final long MAX_SOURCE_CHARACTERS=67_108_864;
     private final List<Program> programs;
@@ -36,7 +39,7 @@ public final class CompiledShaderPack {
     private final List<PackComputeProgram> computes;
     private CompiledShaderPack(List<Program> programs,PackRenderTargets targets,PackShadowSettings shadow,Map<String,Sources> sources,PackTextures textures,List<PackDiagnostic> warnings,PackCustomUniforms customUniforms,PackIdMap ids,boolean vanillaClouds,
                                PackImages images,List<PackComputeProgram> computes){this.images=images;this.computes=List.copyOf(computes);this.programs=List.copyOf(programs);this.targets=targets;this.shadow=shadow;this.sources=Map.copyOf(sources);this.textures=textures;this.warnings=List.copyOf(warnings);this.customUniforms=customUniforms;this.ids=ids;this.vanillaClouds=vanillaClouds;
-        List<String> texts=new ArrayList<>();for(Sources value:sources.values()){texts.add(value.vertex());texts.add(value.fragment());}smoothing=PackSmoothing.scan(texts);}
+        List<String> texts=new ArrayList<>();for(Sources value:sources.values()){texts.add(value.vertex());texts.add(value.fragment());if(value.geometry()!=null)texts.add(value.geometry());}smoothing=PackSmoothing.scan(texts);}
     public List<Program> programs(){return programs;}
     /** Storage images the pack declares with {@code image.*}. */
     public PackImages images(){return images;}
@@ -78,8 +81,8 @@ public final class CompiledShaderPack {
             boolean distant=PackDhPrograms.drawn(name)&&macros.containsKey(PackDhPrograms.MACRO);
             var foreign=PackForeignPrograms.owner(name);if(foreign.isPresent()&&!distant){warnings.add(PackDiagnostic.degraded(PackDiagnostic.Category.PROGRAM,discovered.name(),"Not compiled; there is no "+foreign.get()+" integration"));continue;}
             Sources expanded=preprocess(discovered,preprocessor);
-            if(distant){String vertex=PackDhPrograms.lower(expanded.vertex());if(vertex==null)throw new UnsupportedShaderException("Distant Horizons program has no main: "+discovered.name());expanded=new Sources(vertex,expanded.fragment());}
-            sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length();if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
+            if(distant){String vertex=PackDhPrograms.lower(expanded.vertex());if(vertex==null)throw new UnsupportedShaderException("Distant Horizons program has no main: "+discovered.name());expanded=new Sources(vertex,expanded.fragment(),expanded.geometry());}
+            sourceCharacters+=(long)expanded.vertex().length()+expanded.fragment().length()+(expanded.geometry()==null?0:expanded.geometry().length());if(sourceCharacters>MAX_SOURCE_CHARACTERS)throw new UnsupportedShaderException("Expanded shader-pack generation exceeds 64 million characters");
             sources.put(discovered.name(),expanded);
             programs.add(compileProgram(discovered,expanded,compiler,targets,shadow,textures,images.formats()));
         }
@@ -94,7 +97,8 @@ public final class CompiledShaderPack {
     /** An unknown stage fails before any source is read. */
     public static Sources preprocess(ShaderPackCatalog.Program discovered,PackPreprocessor preprocessor)throws IOException{
         stage(discovered.name().substring(discovered.name().lastIndexOf('/')+1));
-        return new Sources(lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)));
+        String geometry=discovered.geometryPath()==null?null:lower(preprocessor.process(discovered.geometryPath(),ShaderStage.GEOMETRY));
+        return new Sources(lower(preprocessor.process(discovered.vertexPath(),ShaderStage.VERTEX)),lower(preprocessor.process(discovered.fragmentPath(),ShaderStage.FRAGMENT)),geometry);
     }
     static String lowerSource(String source){return lower(source);}
     private static String lower(String source){return PackUnusedUniforms.strip(PackUniformDefaults.lower(PackCoreProfile.lower(source)));}
@@ -107,12 +111,13 @@ public final class CompiledShaderPack {
                                          PackRenderTargets.Builder targets,PackShadowSettings.Builder shadow,PackTextures.Builder textures,Map<String,String> imageFormats){
         String name=discovered.name().substring(discovered.name().lastIndexOf('/')+1);
         Stage stage=stage(name);
-        String vertex=sources.vertex(),fragment=sources.fragment();
+        String vertex=sources.vertex(),fragment=sources.fragment(),geometry=sources.geometry();
         targets.scan(fragment);
         shadow.scan(vertex);shadow.scan(fragment);
         textures.scan(vertex);textures.scan(fragment);
+        if(geometry!=null){shadow.scan(geometry);textures.scan(geometry);}
         var alphaTest=discovered.state().alphaTest();
-        ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
+        ShaderPackProgram code=ShaderPackProgram.compile(discovered.name(),vertex,geometry,fragment,compiler,CoordinateConvention.OPENGL_RENDER_TARGET,
                 alphaTest.orElse(null),stage==Stage.GBUFFER&&alphaTest.isEmpty(),imageFormats);
         boolean shadowOutputs=stage==Stage.SHADOW||stage==Stage.SHADOWCOMPOSITE;
         for(String target:discovered.state().flips().keySet())if(shadowOutputs?PackShadowSettings.colorIndex(target)<0:PackRenderTargets.colorIndex(target)<0)

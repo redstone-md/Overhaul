@@ -24,6 +24,7 @@ public final class PackProgramTranslator {
     private static final Set<String> BUILTINS = Set.of("gl_Position", "gl_FragCoord", "gl_FrontFacing",
             "gl_FragDepth", "gl_VertexID", "gl_InstanceID", "gl_PointCoord", "gl_PointSize",
             "gl_FragColor", "gl_FragData");
+    private static final Set<String> GEOMETRY_BUILTINS = Set.of("gl_in","gl_PrimitiveIDIn","gl_PrimitiveID","gl_InvocationID","gl_Layer","gl_ViewportIndex");
     private static final Set<String> COMPUTE_BUILTINS = Set.of("gl_GlobalInvocationID","gl_LocalInvocationID","gl_WorkGroupID",
             "gl_NumWorkGroups","gl_LocalInvocationIndex","gl_WorkGroupSize");
     /** Sampled types a pack may declare; storage images come from {@link PackStorageImages#IMAGE_TYPES}. */
@@ -60,14 +61,25 @@ public final class PackProgramTranslator {
     }
 
     public TranslatedProgram translate(String vertex, String fragment, CoordinateConvention coordinates) {
-        String vs = stripComments(vertex), fs = stripComments(fragment);
-        vs=PackExtensions.lower(vs);fs=PackExtensions.lower(fs);
+        return translate(vertex,null,fragment,coordinates);
+    }
+
+    /**
+     * With a geometry program between them, the vertex stage's varyings feed its {@code in T name[]} inputs and its
+     * outputs feed the fragment stage; it then owns the move from OpenGL clip space, once per emitted vertex.
+     */
+    public TranslatedProgram translate(String vertex, String geometry, String fragment, CoordinateConvention coordinates) {
+        String vs = prepare(vertex), fs = prepare(fragment), gs = geometry == null ? null : prepare(geometry);
         if (coordinates == null) throw new NullPointerException("coordinates");
-        rejectUnprocessedDirectives(vs); rejectUnprocessedDirectives(fs);
         Map<String,PackStorageImages.Storage> storage = PackStorageImages.empty();
         vs = PackStorageImages.lift(vs,storage); fs = PackStorageImages.lift(fs,storage);
         Set<Integer> buffers = new TreeSet<>();
         vs = PackStorageBuffers.lift(vs,buffers); fs = PackStorageBuffers.lift(fs,buffers);
+        PackGeometryInterface.Parsed parsed = null;
+        if (gs != null) {
+            parsed = PackGeometryInterface.parse(PackStorageBuffers.lift(PackStorageImages.lift(gs,storage),buffers));
+            gs = PackDeclarationNormalizer.declarations(parsed.source(),"").vertex();
+        }
         var declarations = PackDeclarationNormalizer.declarations(vs,fs);
         vs = declarations.vertex(); fs = declarations.fragment();
         if (coordinates != CoordinateConvention.NATIVE_VULKAN) {
@@ -75,22 +87,44 @@ public final class PackProgramTranslator {
             vs = varyings.vertex(); fs = varyings.fragment();
             boolean gameFramebuffer=coordinates==CoordinateConvention.OPENGL_LEGACY;
             boolean reversed=coordinates==CoordinateConvention.OPENGL_REVERSED_DEPTH_TARGET;
-            vs = LegacyShaderContract.lower(vs,true,gameFramebuffer,reversed); fs = LegacyShaderContract.lower(fs,false,gameFramebuffer,reversed);
+            vs = gs == null ? LegacyShaderContract.lower(vs,true,gameFramebuffer,reversed) : LegacyShaderContract.lowerVertexBeforeGeometry(vs,gameFramebuffer,reversed);
+            fs = LegacyShaderContract.lower(fs,false,gameFramebuffer,reversed);
+            if (gs != null) gs = LegacyShaderContract.lowerGeometry(gs,gameFramebuffer,reversed);
         }
         validateBuiltins(vs,Set.of()); validateBuiltins(fs,Set.of());
+        if (gs != null) validateBuiltins(gs,GEOMETRY_BUILTINS);
         Map<String,String> uniforms = new TreeMap<>(), samplers = new TreeMap<>();
         Map<String,String> attributes = new TreeMap<>(), vertexVaryings = new TreeMap<>(), fragmentVaryings = new TreeMap<>();
+        Map<String,String> geometryVaryings = new TreeMap<>();
         scan(vs, true, uniforms, samplers, attributes, vertexVaryings);
         scan(fs, false, uniforms, samplers, attributes, fragmentVaryings);
-        for (Map.Entry<String,String> entry : fragmentVaryings.entrySet()) {
-            if (!varyingType(entry.getValue()).equals(varyingType(vertexVaryings.getOrDefault(entry.getKey(),"")))) {
-                throw unsupported("Fragment input has no matching vertex varying: " + entry.getKey());
+        if (gs != null) {
+            Map<String,String> geometryAttributes = new TreeMap<>();
+            scan(gs, true, uniforms, samplers, geometryAttributes, geometryVaryings);
+            if (!geometryAttributes.isEmpty()) throw unsupported("Geometry programs have no vertex attributes");
+            for (var input : parsed.inputs().entrySet()) if (!input.getValue().equals(varyingType(vertexVaryings.getOrDefault(input.getKey(),"")))) {
+                throw unsupported("Geometry input has no matching vertex varying: " + input.getKey());
             }
         }
-        Map<String,Integer> attributeLocations = locations(attributes), varyingLocations = locations(vertexVaryings);
+        Map<String,String> fed = gs == null ? vertexVaryings : geometryVaryings;
+        for (Map.Entry<String,String> entry : fragmentVaryings.entrySet()) {
+            if (!varyingType(entry.getValue()).equals(varyingType(fed.getOrDefault(entry.getKey(),"")))) {
+                throw unsupported("Fragment input has no matching " + (gs == null ? "vertex" : "geometry") + " varying: " + entry.getKey());
+            }
+        }
+        Map<String,Integer> attributeLocations = locations(attributes), varyingLocations = locations(vertexVaryings), fedLocations = locations(fed);
         ProgramBindings bindings = bindings(uniforms,samplers,buffers,attributeLocations,varyingLocations,attributes);
-        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,bindings,storage,buffers),
-                rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,bindings,storage,buffers),bindings,coordinates);
+        String geometryText = gs == null ? null : insertBodyPreamble(rewrite(gs,true,uniforms,samplers,Map.of(),geometryVaryings,fedLocations,bindings,storage,buffers),
+                PackGeometryInterface.declarations(parsed.inputs(),varyingLocations));
+        return new TranslatedProgram(rewrite(vs,true,uniforms,samplers,attributes,vertexVaryings,varyingLocations,bindings,storage,buffers),
+                geometryText,rewrite(fs,false,uniforms,samplers,attributes,fragmentVaryings,fedLocations,bindings,storage,buffers),bindings,coordinates,
+                parsed == null ? null : parsed.primitive());
+    }
+
+    private static String prepare(String source) {
+        String prepared = PackExtensions.lower(stripComments(source));
+        rejectUnprocessedDirectives(prepared);
+        return prepared;
     }
 
     /**
@@ -114,7 +148,7 @@ public final class PackProgramTranslator {
         float[] scale = workGroups == null && render.find() ? new float[]{Float.parseFloat(render.group(1)),Float.parseFloat(render.group(2))} : null;
         if (workGroups == null && scale == null) scale = new float[]{1,1};
         cs = LOCAL_SIZE.matcher(cs).replaceAll("");
-        String body = rewrite(cs,false,uniforms,samplers,Map.of(),Map.of(),bindings,storage,buffers);
+        String body = rewrite(cs,false,uniforms,samplers,Map.of(),Map.of(),Map.of(),bindings,storage,buffers);
         return new TranslatedCompute(insertBodyPreamble(body,"layout(local_size_x="+local[0]+",local_size_y="+local[1]+",local_size_z="+local[2]+") in;\n"),
                 bindings,local,workGroups,scale);
     }
@@ -231,7 +265,7 @@ public final class PackProgramTranslator {
 
     private String rewrite(String source, boolean vertex, Map<String,String> uniforms,
                                   Map<String,String> samplers, Map<String,String> attributes,
-                                  Map<String,String> varyings, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage, Set<Integer> buffers) {
+                                  Map<String,String> varyings, Map<String,Integer> locations, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage, Set<Integer> buffers) {
         String body = DECLARATION.matcher(source).replaceAll("").replaceAll("(?m)^\\s*#version[^\\r\\n]*", "");
         body = PackStorageBuffers.place(body,buffers,bindings.samplers());
         // Legacy packs commonly name a sampler "texture", now also a GLSL function.
@@ -262,7 +296,7 @@ public final class PackProgramTranslator {
                 .append(bindings.attributes().get(attribute.getKey())).append(") in ").append(attribute.getValue())
                 .append(' ').append(attribute.getKey()).append(";\n");
         for (Map.Entry<String,String> varying : varyings.entrySet()) prefix.append("layout(location=")
-                .append(bindings.varyings().get(varying.getKey())).append(vertex ? ") out " : ") in ")
+                .append(locations.get(varying.getKey())).append(vertex ? ") out " : ") in ")
                 .append(varying.getValue()).append(' ').append(varying.getKey()).append(";\n");
         if (!vertex) {
             Set<Integer> outputs = new TreeSet<>();
@@ -290,7 +324,13 @@ public final class PackProgramTranslator {
     }
 
     private static UnsupportedShaderException unsupported(String message) { return new UnsupportedShaderException(message); }
-    public record TranslatedProgram(String vertex, String fragment, ProgramBindings bindings, CoordinateConvention coordinates) {}
+    /** {@code geometry} and {@code primitive} are null for a program without a geometry stage. */
+    public record TranslatedProgram(String vertex, String geometry, String fragment, ProgramBindings bindings, CoordinateConvention coordinates,
+                                    PackGeometryInterface.Primitive primitive) {
+        public TranslatedProgram(String vertex, String fragment, ProgramBindings bindings, CoordinateConvention coordinates) {
+            this(vertex,null,fragment,bindings,coordinates,null);
+        }
+    }
     /** {@code workGroups} is null when the dispatch scales with the screen by {@code workGroupsRender}. */
     public record TranslatedCompute(String source, ProgramBindings bindings, int[] localSize, int[] workGroups, float[] workGroupsRender) {}
 }
