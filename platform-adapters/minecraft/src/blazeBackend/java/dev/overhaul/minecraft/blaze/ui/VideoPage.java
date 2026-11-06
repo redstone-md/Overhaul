@@ -60,7 +60,8 @@ final class VideoPage extends SettingsPage {
         rows.add(new SettingsRow.Slider(Component.translatable("options.entityDistanceScaling"), "How far entities are drawn, relative to the default", 50, 500, 25,
                 () -> (int) Math.round(options.entityDistanceScaling().get() * 100), value -> options.entityDistanceScaling().set(value / 100.0), v -> v + "%"));
         rows.add(slider(options.mipmapLevels(), "options.mipmapLevels", "Smoother distant textures. Applied when this screen closes", 0, 4, 1, v -> v == 0 ? "Off" : String.valueOf(v)));
-        rows.add(slider(options.menuBackgroundBlurriness(), "options.accessibility.menu_background_blurriness", "Blur behind menus over the world", 0, 10, 1, String::valueOf));
+        OptionInstance<Integer> blur = BlazeUiTier.menuBlur(options);
+        if (blur != null) rows.add(slider(blur, "options.accessibility.menu_background_blurriness", "Blur behind menus over the world", 0, 10, 1, String::valueOf));
         rows.add(new SettingsRow.Header("Performance"));
         rows.add(choice(options.prioritizeChunkUpdates(), "options.prioritizeChunkUpdates", "Which chunk updates are built on the main thread. Nearby and Player actions trade stutter for faster updates", PrioritizeChunkUpdates.values()));
         return rows;

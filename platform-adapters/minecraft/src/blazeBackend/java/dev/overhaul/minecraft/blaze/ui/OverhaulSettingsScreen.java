@@ -1,21 +1,20 @@
 package dev.overhaul.minecraft.blaze.ui;
 
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
-import dev.overhaul.minecraft.blaze.mixin.OptionsSubScreen121Access;
 import java.nio.file.Path;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.options.VideoSettingsScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
  * Overhaul's settings: pages on the left, the page's rows in a column, and a side panel that explains the row under
  * the pointer. The shader pack page leaves the side clear, so the world behind it shows the pack that was just picked.
  */
-public final class OverhaulSettingsScreen extends Screen {
+public final class OverhaulSettingsScreen extends BlazeScreenBase {
     private static boolean vanillaOnce;
     private final Screen parent;
     private final List<SettingsPage> pages;
@@ -34,13 +33,13 @@ public final class OverhaulSettingsScreen extends Screen {
 
     /** Called for every screen the game opens; only video settings on the owned device are replaced. */
     public static Screen replace(Screen requested) {
-        if (!(requested instanceof VideoSettingsScreen video)) return requested;
+        if (!BlazeUiTier.isVideo(requested)) return requested;
         if (vanillaOnce) {
             vanillaOnce = false;
             return requested;
         }
         if (BlazeFrontend.current() == null) return requested;
-        return new OverhaulSettingsScreen(((OptionsSubScreen121Access) video).overhaul$lastScreen());
+        return new OverhaulSettingsScreen(BlazeUiTier.parent(requested));
     }
 
     @Override
@@ -52,7 +51,7 @@ public final class OverhaulSettingsScreen extends Screen {
         rows = pages.get(page).rows();
         if (focus != null && !rows.contains(focus)) focus = null;
         dragging = null;
-        scroll = Math.clamp(scroll, 0, maxScroll());
+        scroll = Mth.clamp(scroll, 0, maxScroll());
     }
 
     private void open(int index) {
@@ -66,8 +65,8 @@ public final class OverhaulSettingsScreen extends Screen {
     private void layout() {
         int free = width - SettingsTheme.SIDEBAR_WIDTH - 2 * SettingsTheme.GAP;
         columnWidth = pages.get(page).preview()
-                ? Math.clamp((int) (free * 0.42), Math.min(180, free), 260)
-                : Math.clamp(free - SettingsTheme.GAP - 168, Math.min(200, free), 320);
+                ? Mth.clamp((int) (free * 0.42), Math.min(180, free), 260)
+                : Mth.clamp(free - SettingsTheme.GAP - 168, Math.min(200, free), 320);
         columnX = SettingsTheme.SIDEBAR_WIDTH + SettingsTheme.GAP;
         asideX = columnX + columnWidth + SettingsTheme.GAP;
         asideWidth = width - asideX - SettingsTheme.GAP;
@@ -84,9 +83,9 @@ public final class OverhaulSettingsScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partial) {
+    protected void backdrop(GuiGraphics graphics, float partial) {
         if (minecraft.level == null) {
-            renderPanorama(graphics, partial);
+            noWorldBackground(graphics, partial);
             graphics.fill(0, 0, width, height, 0x66000000);
         } else if (!pages.get(page).preview()) {
             graphics.fill(0, 0, width, height, 0x59000000);
@@ -96,7 +95,7 @@ public final class OverhaulSettingsScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partial) {
         layout();
-        renderBackground(graphics, mouseX, mouseY, partial);
+        backdrop(graphics, partial);
         SettingsPage current = pages.get(page);
         int contentRight = current.preview() ? asideX - SettingsTheme.GAP / 2 : width;
         graphics.fill(0, 0, SettingsTheme.SIDEBAR_WIDTH, height, SettingsTheme.SIDEBAR);
@@ -248,7 +247,7 @@ public final class OverhaulSettingsScreen extends Screen {
         }
         if (inside(mouseX, mouseY, x, vanillaY(), width, SettingsTheme.ROW)) {
             vanillaOnce = true;
-            minecraft.setScreen(new VideoSettingsScreen(this, minecraft, minecraft.options));
+            minecraft.setScreen(BlazeUiTier.vanilla(this, minecraft));
             return true;
         }
         if (inside(mouseX, mouseY, x, doneY(), width, SettingsTheme.ROW)) {
@@ -276,8 +275,8 @@ public final class OverhaulSettingsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        scroll = Math.clamp(scroll - scrollY * SettingsTheme.ROW, 0, maxScroll());
+    protected boolean scrolled(double amount) {
+        scroll = Mth.clamp(scroll - amount * SettingsTheme.ROW, 0, maxScroll());
         return true;
     }
 

@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /** Video settings open the Overhaul screen, which keeps a way back to the game's own one. */
 @Mixin(Minecraft.class)
-abstract class VideoSettingsRedirect121Mixin {
+abstract class VideoSettingsRedirectBlazeMixin {
     @ModifyVariable(method = "setScreen", at = @At("HEAD"), argsOnly = true)
     private Screen overhaul$settings(Screen screen) {
         return OverhaulSettingsScreen.replace(screen);

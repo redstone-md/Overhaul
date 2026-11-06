@@ -172,7 +172,7 @@ final class ShaderPackPage extends SettingsPage {
         } catch (IOException failure) {
             LOG.warn("Cannot create {}", folder, failure);
         }
-        Util.getPlatform().openPath(folder);
+        BlazeUiTier.openFolder(folder);
     }
 
     @Override

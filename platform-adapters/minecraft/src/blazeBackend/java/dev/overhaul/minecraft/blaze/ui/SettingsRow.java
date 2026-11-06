@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 /** One line of a settings page: a label on the left, its value on the right, a description for the side panel. */
 abstract class SettingsRow {
@@ -192,9 +193,9 @@ abstract class SettingsRow {
         @Override
         void drag(double mouseX, int x, int width) {
             int left = x + SettingsTheme.PAD, span = Math.max(1, width - 2 * SettingsTheme.PAD);
-            double fraction = Math.clamp((mouseX - left) / span, 0, 1);
+            double fraction = Mth.clamp((mouseX - left) / span, 0, 1);
             int value = minimum + (int) Math.round(fraction * (maximum - minimum) / step) * step;
-            value = Math.clamp(value, minimum, maximum);
+            value = Mth.clamp(value, minimum, maximum);
             if (value != get.getAsInt()) set.accept(value);
         }
 
