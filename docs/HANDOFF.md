@@ -131,9 +131,12 @@ own debug string.
 
 ## Open items
 
-- BSL flicker while walking, reported by a tester. Not checked again after the latest fixes.
-- A flash with Complementary.
-- Sky mapping.
-- A crash in OpenAL.
+- BSL flicker while walking, reported by a tester. Ten walk frames on 2026-11-06 were steady; not reproduced.
+- A flash with Complementary. Not reproduced in the same walk check.
+- Sky mapping matches Iris at noon, sunset, night and sunrise for BSL and Complementary.
+- Distant Horizons LODs drawn through a pack had block and sky light swapped and stayed lit at
+  night. Fixed by reading block light from the high nibble.
+- A crash in OpenAL on one tester's machine: `OpenAL.dll` 1.23.1, `0xc0000409`, outside our
+  code. Waiting on that machine's log.
 - Hi-Z occlusion on the GPU.
 - With F3 open the 2x target is reached (2.05x horizon, 2.0x looking down) but with little margin; GPU clock modes still swing runs by about 5%.
