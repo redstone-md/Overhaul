@@ -3,7 +3,8 @@ package dev.overhaul.minecraft.blaze;
 import dev.overhaul.minecraft.blaze.BlazeGlBoundary.Answer;
 import dev.overhaul.minecraft.blaze.BlazeGlBoundary.Arguments;
 import dev.overhaul.vulkan.GpuBuffer;
-import java.util.HashMap;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.util.Map;
 import org.lwjgl.system.MemoryUtil;
 
@@ -24,8 +25,8 @@ final class BlazeGlBuffers {
         BlazeRenderer owner;
     }
 
-    private final Map<Integer, Store> stores = new HashMap<>();
-    private final Map<Integer, Integer> bindings = new HashMap<>();
+    private final Int2ObjectOpenHashMap<Store> stores = new Int2ObjectOpenHashMap<>();
+    private final Int2IntOpenHashMap bindings = new Int2IntOpenHashMap();
 
     /** A name argument that selects the buffer: either the target's current binding or the object itself. */
     private interface Selector { int name(Arguments arguments); }
@@ -104,9 +105,9 @@ final class BlazeGlBuffers {
         };
     }
 
-    private int bound(int target) { return bindings.getOrDefault(target, 0); }
+    private int bound(int target) { return bindings.get(target); }
 
-    private Store store(int name) { return stores.computeIfAbsent(name, ignored -> new Store()); }
+    private Store store(int name) { return stores.computeIfAbsent(name, (int ignored) -> new Store()); }
 
     /**
      * Moves a buffer drawn by a native renderer path to device memory and releases its host copy, so geometry is held once.
