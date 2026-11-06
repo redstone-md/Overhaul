@@ -84,7 +84,7 @@ public final class BlazeSectionBatch implements AutoCloseable {
     }
 
     /** A slot of a scan table that copied its mesh's draw fields; the mesh itself is read only to start a group. */
-    public void add(BlazeVisibleSections.Layer table, int index, float x, float y, float z) {
+    public void add(BlazeDrawTable table, int index, float x, float y, float z) {
         int indexCount = table.indexCount(index);
         if (indexCount == 0) return;
         BlazeMeshState.Layout layout = table.layout(index);
