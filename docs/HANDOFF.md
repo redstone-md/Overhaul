@@ -101,8 +101,13 @@ At the horizon the GPU is the limit now: about 4.0 ms of GPU work per frame and
 | Translucent | 0.08 |
 | GUI | 0.07 |
 
+Looking down (spectator at 4.7 140 3.2, pitch 50) the GPU spends about 3.86 ms: shadow 0.6, Distant Horizons
+1.06, opaque 0.79, deferred 0.26, translucent 0.29, composite 0.7. With the 90° FOV in that instance's
+options, the top of the view still reaches about 5° below the horizon, so nearly every LOD is on screen.
+
 `-Doverhaul.blaze.gpuStats=true` logs a `Blaze GPU ms per frame` line every 600
-frames. Each mark ends the open render pass, so frames run slightly slower while it is on.
+frames. Each mark ends the open render pass, so frames run slightly slower while it is on. Prism keeps
+an instance's settings in memory and writes them back, so close Prism before editing `instance.cfg`.
 
 Experiments that did not help, all reverted:
 
@@ -114,6 +119,9 @@ Experiments that did not help, all reverted:
 - Masking Distant Horizons fragments behind vanilla terrain. Complementary discards them itself past 0.4 to
   0.6 of the far plane; an upper-bound probe saved about 0.05 ms, so it was dropped.
 - Batching image barriers, and skipping near Distant Horizons containers: no measurable change.
+- Culling Distant Horizons buffers by the box their vertices span. DH tests each buffer against a box as tall as
+  the world, so this is tighter, but looking down it removed only about 7% of buffers and the distant phase
+  stayed at 1.07 to 1.10 ms. The phase is bound by fragments, not vertices.
 
 ## CPU hot spots in the latest profile
 
