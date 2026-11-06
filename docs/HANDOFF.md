@@ -26,11 +26,12 @@ The remapped jar is in `build/fabric-1.21.1-blaze/libs/` and needs Fabric Loader
 | NeoForge 1.21.1 | Yes, with Complementary, BSL and Distant Horizons |
 | Fabric 1.21.1 | Yes, vanilla and Complementary, in the Prism instance `Overhaul Fabric Test` |
 | Forge 1.21.1 (52.1.21) | Yes, vanilla and Complementary, in `Overhaul Forge Test` |
-| Fabric 1.20.1 | Yes, vanilla only, in `Overhaul Fabric 120 Test` |
-| Forge 1.20.1 (47.4.10) | Yes, vanilla only, in `Overhaul Forge 120 Test` |
+| Fabric 1.20.1 | Yes, vanilla and Complementary, in `Overhaul Fabric 120 Test` |
+| Forge 1.20.1 (47.4.10) | Yes, vanilla and Complementary, in `Overhaul Forge 120 Test` |
 
-The 1.20.1 tier holds only the mesh upload path: no shader packs, section batching,
-occlusion or settings screen yet. On Forge 52.1.21, a world copied from a Fabric instance
+The 1.20.1 tier has mesh uploads, terrain batching and shader packs (shadows, hand, bobbing).
+It has no section-scan reuse, entity occlusion or settings screen yet; the pack is picked
+in `config/overhaul-shaderpack.properties`. On Forge 52.1.21, a world copied from a Fabric instance
 crashes the server with `Can not retrieve LootModifierManager until resources have loaded once`,
 with or without Overhaul. A world created in that instance works.
 
@@ -136,5 +137,5 @@ own debug string.
 - Sky mapping.
 - A crash in OpenAL.
 - Hi-Z occlusion on the GPU.
-- Port the 1.21.1 tier features (shader packs, section batching, occlusion, settings screen) to 1.20.1.
+- Port the remaining 1.21.1 tier features (section-scan reuse, occlusion, settings screen) to 1.20.1.
 - With F3 open, about 0.1 to 0.2 ms of GPU time stands between 1.9x and the 2x target. Without F3 it is past 2x.
