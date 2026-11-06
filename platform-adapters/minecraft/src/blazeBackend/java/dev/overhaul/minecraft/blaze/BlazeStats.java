@@ -14,7 +14,7 @@ final class BlazeStats {
     private static long draws,passes,captureNanos,flushes,flushNanos,presentNanos,views,samplers,sections,runs,hidden,hiddenEntities,hiddenBlockEntityLists;
     private static long compactMeshes,fullMeshes,savedBytes;
     private static int frames;
-    private static long windowStart;
+    private static long windowStart,waitStart;
 
     private BlazeStats() {}
     static long start(){return ENABLED?System.nanoTime():0;}
@@ -29,16 +29,17 @@ final class BlazeStats {
     static void flush(long start){if(ENABLED){flushes++;flushNanos+=System.nanoTime()-start;}}
     static void viewCreated(){if(ENABLED)views++;}
     static void samplerCreated(){if(ENABLED)samplers++;}
-    static void present(long start){
+    /** @param waitTotal the queue's fence wait so far; the window's share of it is the frame time the CPU sat idle */
+    static void present(long start,long waitTotal){
         if(!ENABLED)return;
         long now=System.nanoTime();presentNanos+=now-start;
-        if(windowStart==0){windowStart=now;return;}
+        if(windowStart==0){windowStart=now;waitStart=waitTotal;return;}
         if(++frames<WINDOW)return;
         double perFrame=1e6*frames;
-        LOGGER.info("Blaze stats per frame: frame {} ms, capture {} ms, flush {} ms, present {} ms; draws {}, passes {}, flushes {}, new views {}, new samplers {}; batched sections {} in {} indirect draws, {} hidden, {} entities hidden, {} block entity lists hidden; so far {} section meshes compact, {} left full, {} MiB saved",
-                round((now-windowStart)/perFrame),round(captureNanos/perFrame),round(flushNanos/perFrame),round(presentNanos/perFrame),
+        LOGGER.info("Blaze stats per frame: frame {} ms, fence wait {} ms, capture {} ms, flush {} ms, present {} ms; draws {}, passes {}, flushes {}, new views {}, new samplers {}; batched sections {} in {} indirect draws, {} hidden, {} entities hidden, {} block entity lists hidden; so far {} section meshes compact, {} left full, {} MiB saved",
+                round((now-windowStart)/perFrame),round((waitTotal-waitStart)/perFrame),round(captureNanos/perFrame),round(flushNanos/perFrame),round(presentNanos/perFrame),
                 round((double)draws/frames),round((double)passes/frames),round((double)flushes/frames),round((double)views/frames),round((double)samplers/frames),round((double)sections/frames),round((double)runs/frames),round((double)hidden/frames),round((double)hiddenEntities/frames),round((double)hiddenBlockEntityLists/frames),compactMeshes,fullMeshes,savedBytes>>20);
-        draws=passes=captureNanos=flushes=flushNanos=presentNanos=views=samplers=sections=runs=hidden=hiddenEntities=hiddenBlockEntityLists=0;frames=0;windowStart=now;
+        draws=passes=captureNanos=flushes=flushNanos=presentNanos=views=samplers=sections=runs=hidden=hiddenEntities=hiddenBlockEntityLists=0;frames=0;windowStart=now;waitStart=waitTotal;
     }
     private static double round(double value){return Math.round(value*100)/100d;}
 }

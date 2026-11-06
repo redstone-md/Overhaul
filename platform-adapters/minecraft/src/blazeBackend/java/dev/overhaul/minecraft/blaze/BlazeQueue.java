@@ -85,6 +85,7 @@ final class BlazeQueue implements AutoCloseable {
     void drain(){if(failedSubmission==null)flush();frames.drain();}
     void reclaim(){drain();}
     long blockingWaitCalls(){return frames.blockingWaitCalls();}
+    long waitNanos(){return frames.waitNanos();}
     private void requireUsable(){
         context.device();
         if(closed)throw new IllegalStateException("Blaze submission lane is closed");

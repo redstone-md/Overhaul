@@ -31,7 +31,8 @@ final class BlazeGpuTimer implements AutoCloseable {
     private final double period;
     private final Map<String,Double> totals=new LinkedHashMap<>();
     private int frame,frames;
-    private long lastEnd;
+    private long lastEnd,lastMark;
+    private final Map<String,Double> cpuTotals=new LinkedHashMap<>();
 
     BlazeGpuTimer(VulkanContext context){
         this.context=context;
@@ -52,6 +53,9 @@ final class BlazeGpuTimer implements AutoCloseable {
     /** Records a timestamp once every earlier command in the queue has finished; a label seen this frame is ignored. */
     BlazeQueue.Operation mark(String label){
         if(!marked[frame].add(label))return null;
+        long now=System.nanoTime();
+        if(lastMark!=0)cpuTotals.merge(label,(now-lastMark)/1e6,Double::sum);
+        lastMark=now;
         return new BlazeQueue.Operation(){
             @Override public void record(VkCommandBuffer command){stamp(command,label);}
             @Override public void close(){}
@@ -88,7 +92,11 @@ final class BlazeGpuTimer implements AutoCloseable {
         StringBuilder line=new StringBuilder("Blaze GPU ms per frame:");
         for(var entry:totals.entrySet())line.append(' ').append(entry.getKey()).append(' ').append(Math.round(entry.getValue()/frames*100)/100d);
         LOGGER.info(line.toString());
-        totals.clear();frames=0;
+        // Wall time on the render thread from the previous mark to each one, so a CPU phase reads next to its GPU phase.
+        StringBuilder cpu=new StringBuilder("Blaze CPU ms per frame:");
+        for(var entry:cpuTotals.entrySet())cpu.append(' ').append(entry.getKey()).append(' ').append(Math.round(entry.getValue()/frames*100)/100d);
+        LOGGER.info(cpu.toString());
+        totals.clear();cpuTotals.clear();frames=0;
     }
 
     @Override public void close(){dev.overhaul.vulkan.VulkanRenderGraph.observe(null);for(long pool:pools)if(pool!=0)vkDestroyQueryPool(context.device(),pool,null);}

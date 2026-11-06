@@ -20,6 +20,7 @@ public final class FrameRing implements AutoCloseable {
     private long submitted;
     private long completed;
     private long blockingWaitCalls;
+    private long waitNanos;
     private boolean recording;
     private boolean retiring;
     private boolean closed;
@@ -93,6 +94,8 @@ public final class FrameRing implements AutoCloseable {
     public int capacity() { return slots.length; }
     /** Native vkWaitForFences calls with nonzero timeout; this does not measure CPU blocked time. */
     public long blockingWaitCalls(){context.requireOwner();return blockingWaitCalls;}
+    /** Wall time spent in fence waits so far, which splits a frame into CPU work and waiting on the GPU. */
+    public long waitNanos(){context.requireOwner();return waitNanos;}
 
     private void awaitSlot(Slot slot) {
         if(!awaitSlot(slot,-1L))throw new IllegalStateException("infinite frame fence wait timed out");
@@ -101,7 +104,9 @@ public final class FrameRing implements AutoCloseable {
     private boolean awaitSlot(Slot slot,long timeoutNanos) {
         if (!slot.pending) return true;
         if(timeoutNanos!=0)blockingWaitCalls++;
+        long start=System.nanoTime();
         int result=vkWaitForFences(context.device(),slot.fence,true,timeoutNanos);
+        waitNanos+=System.nanoTime()-start;
         if(result==VK_TIMEOUT)return false;
         check(result,"frame fence wait");complete(slot);return true;
     }

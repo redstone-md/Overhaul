@@ -330,7 +330,7 @@ public final class BlazeRenderer implements AutoCloseable {
     /** Counts presented frames, for work that must make one choice per frame. */
     public long frame(){return frames;}
     /** A swapchain the surface outgrew without a size change, as when the window moves to another monitor, is rebuilt here: the game sends no resize for it. */
-    public void present(){requireOpen();frames++;gpuMark("gui");queue.flush();if(gpuTimer!=null)gpuTimer.endFrame();long start=BlazeStats.start();if(width>0&&height>0&&presenter.suspended())presenter.configure(width,height,mode);if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}gpuMark("present");BlazeStats.present(start);}
+    public void present(){requireOpen();frames++;gpuMark("gui");queue.flush();if(gpuTimer!=null)gpuTimer.endFrame();long start=BlazeStats.start();if(width>0&&height>0&&presenter.suspended())presenter.configure(width,height,mode);if(width>0&&height>0&&presenter.acquireNextTexture()){presenter.blitAcquiredImageAsync(backBuffer.colorView(),true);presenter.presentAcquired();}gpuMark("present");BlazeStats.present(start,queue.waitNanos());}
     private void requireOpen(){context.device();if(closed)throw new IllegalStateException("Blaze3D device is closed");}
     @Override public void close(){
         if(closed)return;
