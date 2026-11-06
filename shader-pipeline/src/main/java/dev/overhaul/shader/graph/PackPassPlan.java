@@ -112,6 +112,7 @@ public final class PackPassPlan {
 
     private static Phase phase(String bare, boolean particlesFirst) {
         return switch (CompiledShaderPack.stage(bare)) {
+            case SETUP -> throw new UnsupportedShaderException("Setup programs are compute only: "+bare);
             case BEGIN -> Phase.BEGIN;
             case SHADOW -> Phase.SHADOW;
             case SHADOWCOMPOSITE -> Phase.SHADOWCOMP;

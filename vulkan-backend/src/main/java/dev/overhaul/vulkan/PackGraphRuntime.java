@@ -137,7 +137,8 @@ public final class PackGraphRuntime implements AutoCloseable {
         if(!initialized){clear(plan,images.depth,new PackRenderTargets.Color(1,1,1,1));clear(plan,images.opaqueDepth,new PackRenderTargets.Color(1,1,1,1));}
         if(!initialized&&shadows!=null)shadows.clear(plan);
         try{
-            recordPasses(plan,uniforms,shadows==null?Set.of(CompiledShaderPack.Stage.BEGIN,CompiledShaderPack.Stage.PREPARE):Set.of(CompiledShaderPack.Stage.BEGIN),frame.textures());
+            var stages=java.util.EnumSet.of(CompiledShaderPack.Stage.BEGIN);if(shadows==null)stages.add(CompiledShaderPack.Stage.PREPARE);if(!initialized)stages.add(CompiledShaderPack.Stage.SETUP);
+            recordPasses(plan,uniforms,stages,frame.textures());
             execute(plan,lane);if(shadows!=null)shadows.initialized();initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
             shadowsPrepared=false;shadowOpaque=false;shadowsComplete=shadows==null;
         }catch(RuntimeException|Error failure){swaps.restore(prior);throw failure;}
@@ -336,7 +337,7 @@ public final class PackGraphRuntime implements AutoCloseable {
         requireOpen();if(!scene)throw new IllegalStateException("Pack has no scene programs");PackFrameGraph plan=new PackFrameGraph();
         if(shadows!=null)throw new IllegalStateException("Use beginFrame and capture the light-camera geometry before the world scene");
         if(frameBegun)throw new IllegalStateException("Shader-pack world frame is already open");
-        if(passes.keySet().stream().anyMatch(program->program.stage()==CompiledShaderPack.Stage.BEGIN||program.stage()==CompiledShaderPack.Stage.PREPARE))
+        if(steps.stream().map(Step::owner).anyMatch(program->java.util.EnumSet.of(CompiledShaderPack.Stage.SETUP,CompiledShaderPack.Stage.BEGIN,CompiledShaderPack.Stage.PREPARE).contains(program.stage())))
             throw new IllegalStateException("Use beginFrame to bind uniforms for pre-scene pack programs");
         customTextures.initialize(lane);clearTargets(plan,fog);clearPackImages(plan,lane);execute(plan,lane);initialized=true;frameBegun=true;opaqueComplete=false;frameLane=lane;
     }

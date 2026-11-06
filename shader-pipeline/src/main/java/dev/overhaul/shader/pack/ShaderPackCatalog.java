@@ -67,7 +67,7 @@ public record ShaderPackCatalog(List<Program> programs, ShaderPackProperties pro
         return new ShaderPackCatalog(programs,properties,diagnostics,warnings,ids,List.copyOf(computes));
     }
 
-    /** Kept when the program it belongs to is enabled and runs between fullscreen passes; setup programs are not run. */
+    /** Kept when the program it belongs to is enabled and runs between fullscreen passes, or once before the first frame for setup. */
     private static void compute(String path, ShaderPackProperties properties, Map<String,Boolean> merged, Set<String> computes, List<PackDiagnostic> warnings) {
         String base = PackComputeProgram.base(path);
         String program = path.substring(0,path.lastIndexOf('/')+1)+base;

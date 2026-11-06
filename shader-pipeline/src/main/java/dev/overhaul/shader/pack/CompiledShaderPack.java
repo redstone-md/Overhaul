@@ -12,7 +12,8 @@ import java.util.Map;
 
 /** Immutable executable pack generation. Compilation never mutates the currently installed generation. */
 public final class CompiledShaderPack {
-    public enum Stage { BEGIN,SHADOW,SHADOWCOMPOSITE,PREPARE,GBUFFER,DEFERRED,COMPOSITE,FINAL }
+    /** SETUP holds only compute programs, which run once before the first frame of an installed pack. */
+    public enum Stage { SETUP,BEGIN,SHADOW,SHADOWCOMPOSITE,PREPARE,GBUFFER,DEFERRED,COMPOSITE,FINAL }
     public record Program(String name,Stage stage,int ordinal,ShaderPackProgram code,ShaderPackProperties.ProgramState state,java.util.Set<Integer> mipmaps) {
         public Program(String name,Stage stage,int ordinal,ShaderPackProgram code,ShaderPackProperties.ProgramState state){this(name,stage,ordinal,code,state,java.util.Set.of());}
         public Program{mipmaps=java.util.Set.copyOf(mipmaps);for(int index:mipmaps)if(index<0||index>15)throw new IllegalArgumentException("Invalid mipmap color target");
