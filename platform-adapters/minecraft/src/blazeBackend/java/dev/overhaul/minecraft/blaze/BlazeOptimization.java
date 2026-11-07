@@ -82,6 +82,8 @@ public enum BlazeOptimization {
     PARTICLE_COLLISIONS("particleCollisions", "Particles collide against block shapes gathered straight into a list, not through vanilla's iterator and immutable list builder"),
     RAIN_LIGHT("rainLight", "Rain and snow light each column once per client tick and reuse it for the frames until the next"),
     LEVEL_HEIGHT("levelHeight", "A level keeps its build floor and height in a field instead of asking its dimension type on every block lookup"),
+    ENTITY_BLOCK_COLLISIONS("entityBlockCollisions", "Entity moves gather the block shapes around them straight into a list, not through vanilla's iterator"),
+    SUPPORTING_BLOCK("supportingBlock", "Grounded entities find the block they stand on without vanilla's collision iterator"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;

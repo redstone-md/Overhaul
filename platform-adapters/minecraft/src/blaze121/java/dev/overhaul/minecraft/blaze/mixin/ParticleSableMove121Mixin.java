@@ -3,7 +3,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
-import dev.overhaul.minecraft.blaze.BlazeParticleCollisions;
+import dev.overhaul.minecraft.blaze.BlazeBlockCollisions;
 import dev.overhaul.minecraft.blaze.BlazeSableParticles;
 import java.util.List;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -45,7 +45,7 @@ abstract class ParticleSableMove121Mixin {
             Vec3 asked = new Vec3(x, y, z);
             AABB box = getBoundingBox();
             Vec3 allowed = BlazeOptimization.PARTICLE_COLLISIONS.on()
-                    ? BlazeParticleCollisions.collide(level, asked, box) : Entity.collideBoundingBox(null, asked, box, level, List.of());
+                    ? BlazeBlockCollisions.collide(level, asked, box) : Entity.collideBoundingBox(null, asked, box, level, List.of());
             x = allowed.x;
             y = allowed.y;
             z = allowed.z;

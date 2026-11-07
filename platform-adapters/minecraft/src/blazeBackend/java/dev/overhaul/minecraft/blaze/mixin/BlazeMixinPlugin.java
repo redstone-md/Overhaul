@@ -57,6 +57,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ParticleCollisions121Mixin", BlazeOptimization.PARTICLE_COLLISIONS),
             Map.entry("LevelRendererRainLight121Mixin", BlazeOptimization.RAIN_LIGHT),
             Map.entry("LevelHeight121Mixin", BlazeOptimization.LEVEL_HEIGHT),
+            Map.entry("EntityBlockCollisions121Mixin", BlazeOptimization.ENTITY_BLOCK_COLLISIONS),
+            Map.entry("EntitySupportingBlock121Mixin", BlazeOptimization.SUPPORTING_BLOCK),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
     /** Mixins that serve several optimisations, applied while any of them is on. */
