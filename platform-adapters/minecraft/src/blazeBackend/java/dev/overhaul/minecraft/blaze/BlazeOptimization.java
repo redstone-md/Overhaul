@@ -73,6 +73,7 @@ public enum BlazeOptimization {
     SELECTOR_ORDER("selectorOrder", "Entity selectors such as @e[tag=x] in datapack tick functions test an entity's tags, type and scores before reading its health"),
     MOD_ENTITY_TICKS("modEntityTicks", "Born in Chaos animation sync skips entities of other mods instead of testing each against 83 of its classes every tick"),
     SERVER_CLASS_SCANS("serverClassScans", "Server entity scans, such as mob goals looking for a wither, skipped for classes no entity in the level belongs to; needs entityClassScans"),
+    SECTION_LOOKUP("entitySectionLookup", "Entity queries with a small box, such as mobs pushing each other, look their few entity sections up by key instead of walking every section in the world's x slab"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;

@@ -48,6 +48,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("EntityDispatcherLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
             Map.entry("EntitySelectorAlive121Mixin", BlazeOptimization.SELECTOR_ORDER),
             Map.entry("ServerEntityClasses121Mixin", BlazeOptimization.SERVER_CLASS_SCANS),
+            Map.entry("EntitySectionLookup121Mixin", BlazeOptimization.SECTION_LOOKUP),
             Map.entry("BornInChaosAnimationTick121Mixin", BlazeOptimization.MOD_ENTITY_TICKS),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
