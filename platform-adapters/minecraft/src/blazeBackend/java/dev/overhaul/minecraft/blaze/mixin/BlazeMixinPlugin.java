@@ -54,6 +54,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("DamageTextSight121Mixin", BlazeOptimization.DAMAGE_TEXT_SIGHT),
             Map.entry("ParticleSableMove121Mixin", BlazeOptimization.SABLE_PARTICLES),
             Map.entry("LevelRendererSableRain121Mixin", BlazeOptimization.SABLE_RAIN),
+            Map.entry("AtmosphereWeatherProxies121Mixin", BlazeOptimization.ATMOSPHERE_WEATHER),
+            Map.entry("AtmosphereLocalWeather121Access", BlazeOptimization.ATMOSPHERE_WEATHER),
             Map.entry("LevelRendererRainBiomes121Mixin", BlazeOptimization.RAIN_BIOMES),
             Map.entry("ParticleLight121Mixin", BlazeOptimization.PARTICLE_LIGHT),
             Map.entry("ParticleCollisions121Mixin", BlazeOptimization.PARTICLE_COLLISIONS),
@@ -87,6 +89,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
         // Vanilla targets: without Sable these wrappers would only add a boxed call to every particle move or rain column.
         if (name.contains("Sable") && BlazeMixinPlugin.class.getClassLoader().getResource("dev/ryanhcode/sable/Sable.class") == null) return false;
+        if (name.startsWith("Atmosphere") && BlazeMixinPlugin.class.getClassLoader().getResource("com/possible_triangle/atmosphere/impl/ServerLevelWeather.class") == null) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
