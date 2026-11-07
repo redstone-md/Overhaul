@@ -64,6 +64,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("EntityTagCounts121Mixin", BlazeOptimization.SELECTOR_TAGS),
             Map.entry("EntitySelectorParserTags121Mixin", BlazeOptimization.SELECTOR_TAGS),
             Map.entry("EntitySelectorTags121Mixin", BlazeOptimization.SELECTOR_TAGS),
+            Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
+            Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
     /** Mixins that serve several optimisations, applied while any of them is on. */
