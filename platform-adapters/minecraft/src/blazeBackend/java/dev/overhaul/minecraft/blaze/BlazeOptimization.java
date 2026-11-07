@@ -72,6 +72,7 @@ public enum BlazeOptimization {
     MERGED_BARRIERS("mergedBarriers", "Image layout changes over several mips or layers recorded as one barrier instead of one per mip and layer"),
     SELECTOR_ORDER("selectorOrder", "Entity selectors such as @e[tag=x] in datapack tick functions test an entity's tags, type and scores before reading its health"),
     MOD_ENTITY_TICKS("modEntityTicks", "Born in Chaos animation sync skips entities of other mods instead of testing each against 83 of its classes every tick"),
+    SERVER_CLASS_SCANS("serverClassScans", "Server entity scans, such as mob goals looking for a wither, skipped for classes no entity in the level belongs to; needs entityClassScans"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
