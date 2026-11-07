@@ -12,6 +12,8 @@ import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
@@ -29,6 +31,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  */
 public final class BlazeBlockCollisions {
     private static final double EPSILON = 1.0E-7;
+    private static final boolean SECTIONS = BlazeOptimization.COLLISION_SECTIONS.on();
     private static final ClassValue<Boolean> VANILLA_SHAPES = vanilla("getBlockCollisions");
     private static final ClassValue<Boolean> VANILLA_SUPPORT = vanilla("findSupportingBlock");
 
@@ -88,8 +91,9 @@ public final class BlazeBlockCollisions {
             BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
             VoxelShape sweptShape = null;
             BlockGetter chunk = null;
-            int chunkX = 0, chunkZ = 0;
-            boolean cached = false;
+            LevelChunkSection[] sections = null;
+            int chunkX = 0, chunkZ = 0, minSection = 0;
+            boolean cached = false, direct = SECTIONS && !level.isDebug();
             for (int z = minZ; z <= maxZ; z++) {
                 int edgeZ = z == minZ || z == maxZ ? 1 : 0;
                 for (int y = minY; y <= maxY; y++) {
@@ -102,10 +106,20 @@ public final class BlazeBlockCollisions {
                             chunkZ = z >> 4;
                             chunk = level.getChunkForCollisions(chunkX, chunkZ);
                             cached = true;
+                            sections = direct && chunk != null && chunk.getClass() == LevelChunk.class ? ((LevelChunk) chunk).getSections() : null;
+                            if (sections != null) minSection = ((LevelChunk) chunk).getMinSection();
                         }
                         if (chunk == null) continue;
                         pos.set(x, y, z);
-                        BlockState state = chunk.getBlockState(pos);
+                        BlockState state;
+                        if (sections != null) {
+                            // LevelChunk.getBlockState answers air here, and air passes none of the filters below.
+                            int index = (y >> 4) - minSection;
+                            if (index < 0 || index >= sections.length) continue;
+                            LevelChunkSection section = sections[index];
+                            if (section.hasOnlyAir()) continue;
+                            state = section.getBlockState(x & 15, y & 15, z & 15);
+                        } else state = chunk.getBlockState(pos);
                         if (edges == 1 && !state.hasLargeCollisionShape()) continue;
                         if (edges == 2 && !state.is(Blocks.MOVING_PISTON)) continue;
                         VoxelShape shape = state.getCollisionShape(level, pos, context);
