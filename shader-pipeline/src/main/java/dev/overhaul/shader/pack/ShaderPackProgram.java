@@ -74,8 +74,12 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary geometry, SpirvB
         String source=PackShadowSettings.stripDirectives(fragment);
         if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
         String vertexSource=PackShadowSettings.stripDirectives(vertex);
-        if(EntityColorEmulation.needed(source)){source=EntityColorEmulation.fragment(source);vertexSource=EntityColorEmulation.vertex(vertexSource);}
         String geometrySource=geometry==null?null:PackShadowSettings.stripDirectives(geometry);
+        if(EntityColorEmulation.needed(source)){
+            source=EntityColorEmulation.fragment(source);
+            if(geometrySource==null)vertexSource=EntityColorEmulation.vertex(vertexSource);
+            else{vertexSource=EntityColorEmulation.vertexBeforeGeometry(vertexSource);geometrySource=EntityColorEmulation.geometry(geometrySource);}
+        }
         var translated = new PackProgramTranslator(imageFormats).translate(vertexSource,geometrySource,source,coordinates);
         String lowered=FragmentAlphaTest.lower(translated.fragment(),alphaTest);
         if(dynamicCutoff)lowered=FragmentAlphaTest.lowerCutoff(lowered);

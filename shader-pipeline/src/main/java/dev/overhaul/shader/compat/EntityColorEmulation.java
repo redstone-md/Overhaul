@@ -6,16 +6,21 @@ import java.util.regex.Pattern;
 /**
  * Iris's {@code entityColor}: the hurt and white flash tint an entity's overlay texture would apply, as colour and
  * strength. The game batches entities into shared draws, so one uniform cannot tell them apart; like Iris, the vertex
- * stage derives it from each vertex's overlay coordinates and hands it on as a varying.
+ * stage derives it from each vertex's overlay coordinates and hands it on as a varying. With a geometry stage between,
+ * the vertex stage hands it on under {@link #FROM_VERTEX} and the geometry stage passes its first vertex's value on.
  */
 public final class EntityColorEmulation {
     /** Overlay texture coordinates (game UV1); a mesh without them reads the no-overlay texel. */
     public static final String OVERLAY = "overhaulEntityColorOverlay";
+    /** The vertex stage's output when a geometry stage reads it; every vertex of one entity carries the same value. */
+    public static final String FROM_VERTEX = "overhaulEntityColorVertex";
     private static final Pattern UNIFORM = Pattern.compile("\\buniform\\s+vec4\\s+entityColor\\s*;");
     private static final Pattern MAIN = Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void)?\\s*\\)\\s*\\{");
     private static final Pattern VERSION = Pattern.compile("(?m)^\\s*#version[^\\r\\n]*\\R?");
+    private static final Pattern EMIT = Pattern.compile("\\bEmitVertex\\s*\\(\\s*\\)\\s*;");
     // OverlayTexture: rows below 8 are red at 178/255 opacity of the base colour; the rest fade to white with the column.
     private static final String VALUE = "entityColor=" + OVERLAY + ".y<8.0?vec4(1.0,0.0,0.0,77.0/255.0):vec4(1.0,1.0,1.0," + OVERLAY + ".x/15.0*0.75);";
+    private static final String PASSED = "entityColor=" + FROM_VERTEX + "[0];";
 
     private EntityColorEmulation() {}
 
@@ -28,11 +33,31 @@ public final class EntityColorEmulation {
     }
 
     public static String vertex(String source) {
-        var main = MAIN.matcher(source);
-        if (!main.find()) throw new UnsupportedShaderException("entityColor needs a canonical vertex main entry point");
-        String body = source.substring(0, main.end()) + VALUE + source.substring(main.end());
+        String body = atMainStart(source, VALUE, "vertex");
         String declarations = "attribute vec2 " + OVERLAY + ";\n" + (UNIFORM.matcher(body).find() ? "" : "varying vec4 entityColor;\n");
-        body = UNIFORM.matcher(body).replaceAll(Matcher.quoteReplacement("varying vec4 entityColor;"));
+        return afterVersion(UNIFORM.matcher(body).replaceAll(Matcher.quoteReplacement("varying vec4 entityColor;")), declarations);
+    }
+
+    /** The vertex stage when a geometry stage follows: its own {@code entityColor} stays a plain global. */
+    public static String vertexBeforeGeometry(String source) {
+        String body = UNIFORM.matcher(atMainStart(source, VALUE + FROM_VERTEX + "=entityColor;", "vertex")).replaceAll("");
+        return afterVersion(body, "attribute vec2 " + OVERLAY + ";\nvarying vec4 " + FROM_VERTEX + ";\nvec4 entityColor;\n");
+    }
+
+    /** Sets the output before every emitted vertex, since outputs are undefined after each {@code EmitVertex}. */
+    public static String geometry(String source) {
+        String body = UNIFORM.matcher(atMainStart(source, PASSED, "geometry")).replaceAll("");
+        body = EMIT.matcher(body).replaceAll(Matcher.quoteReplacement("{" + PASSED + "EmitVertex();}"));
+        return afterVersion(body, "in vec4 " + FROM_VERTEX + "[];\nout vec4 entityColor;\n");
+    }
+
+    private static String atMainStart(String source, String statement, String stage) {
+        var main = MAIN.matcher(source);
+        if (!main.find()) throw new UnsupportedShaderException("entityColor needs a canonical " + stage + " main entry point");
+        return source.substring(0, main.end()) + statement + source.substring(main.end());
+    }
+
+    private static String afterVersion(String body, String declarations) {
         var version = VERSION.matcher(body);
         int at = version.find() ? version.end() : 0;
         return body.substring(0, at) + declarations + body.substring(at);
