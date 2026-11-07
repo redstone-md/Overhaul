@@ -6,6 +6,7 @@ import dev.overhaul.shader.compat.ProgramBindings;
 import dev.overhaul.shader.compat.CoordinateConvention;
 import dev.overhaul.shader.compat.EntityColorEmulation;
 import dev.overhaul.shader.compat.FragmentAlphaTest;
+import dev.overhaul.shader.compat.GeometryAdjacency;
 import dev.overhaul.shader.compat.PackGeometryInterface;
 import dev.overhaul.shader.compat.UnsupportedShaderException;
 import dev.overhaul.shader.compile.ShaderStage;
@@ -74,7 +75,7 @@ public record ShaderPackProgram(SpirvBinary vertex, SpirvBinary geometry, SpirvB
         String source=PackShadowSettings.stripDirectives(fragment);
         if(dynamicCutoff)source=FragmentAlphaTest.declareCutoff(source);
         String vertexSource=PackShadowSettings.stripDirectives(vertex);
-        String geometrySource=geometry==null?null:PackShadowSettings.stripDirectives(geometry);
+        String geometrySource=geometry==null?null:GeometryAdjacency.lower(PackShadowSettings.stripDirectives(geometry));
         if(EntityColorEmulation.needed(source)){
             source=EntityColorEmulation.fragment(source);
             if(geometrySource==null)vertexSource=EntityColorEmulation.vertex(vertexSource);
