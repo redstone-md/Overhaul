@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.ParticleMoveCheck;
+import dev.overhaul.minecraft.blaze.RainHeightCheck;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +53,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("BornInChaosAnimationTick121Mixin", BlazeOptimization.MOD_ENTITY_TICKS),
             Map.entry("DamageTextSight121Mixin", BlazeOptimization.DAMAGE_TEXT_SIGHT),
             Map.entry("ParticleSableMove121Mixin", BlazeOptimization.SABLE_PARTICLES),
+            Map.entry("LevelRendererSableRain121Mixin", BlazeOptimization.SABLE_RAIN),
             Map.entry("LevelRendererRainBiomes121Mixin", BlazeOptimization.RAIN_BIOMES),
             Map.entry("ParticleLight121Mixin", BlazeOptimization.PARTICLE_LIGHT),
             Map.entry("ParticleCollisions121Mixin", BlazeOptimization.PARTICLE_COLLISIONS),
@@ -81,8 +83,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String name = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
-        // A vanilla target: without Sable the wrapper would only add a boxed call to every particle move.
-        if (name.equals("ParticleSableMove121Mixin") && BlazeMixinPlugin.class.getClassLoader().getResource("dev/ryanhcode/sable/Sable.class") == null) return false;
+        // Vanilla targets: without Sable these wrappers would only add a boxed call to every particle move or rain column.
+        if (name.contains("Sable") && BlazeMixinPlugin.class.getClassLoader().getResource("dev/ryanhcode/sable/Sable.class") == null) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
@@ -94,5 +96,6 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {}
     @Override public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
         if (mixinClassName.endsWith(".ParticleSableMove121Mixin")) ParticleMoveCheck.inspect(targetClass, "overhaul$skipIdleSable");
+        else if (mixinClassName.endsWith(".LevelRendererSableRain121Mixin")) RainHeightCheck.inspect(targetClass, "overhaul$skipEmptySable");
     }
 }

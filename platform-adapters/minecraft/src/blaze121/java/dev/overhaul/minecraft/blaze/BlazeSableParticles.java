@@ -16,11 +16,11 @@ import org.slf4j.LoggerFactory;
  * the build does not depend on it.
  */
 public final class BlazeSableParticles {
-    private static final MethodHandle TRACKING, INHERITED, CONTAINER, LOADED;
+    private static final MethodHandle TRACKING, INHERITED;
     private static final boolean READY;
 
     static {
-        MethodHandle tracking = null, inherited = null, container = null, loaded = null;
+        MethodHandle tracking = null, inherited = null;
         boolean ready = false;
         try {
             Field tracked = Particle.class.getDeclaredField("sable$trackingSubLevel");
@@ -30,19 +30,12 @@ public final class BlazeSableParticles {
             MethodHandles.Lookup lookup = MethodHandles.lookup();
             tracking = lookup.unreflectGetter(tracked).asType(MethodType.methodType(Object.class, Particle.class));
             inherited = lookup.unreflectGetter(velocity).asType(MethodType.methodType(Vector3d.class, Particle.class));
-            Class<?> holder = Class.forName("dev.ryanhcode.sable.api.sublevel.SubLevelContainer", false, BlazeSableParticles.class.getClassLoader());
-            container = MethodHandles.publicLookup().findStatic(holder, "getContainer", MethodType.methodType(holder, Level.class))
-                    .asType(MethodType.methodType(Object.class, Level.class));
-            loaded = MethodHandles.publicLookup().findVirtual(holder, "getLoadedCount", MethodType.methodType(int.class))
-                    .asType(MethodType.methodType(int.class, Object.class));
-            ready = ParticleMoveCheck.clean();
+            ready = BlazeSableLevels.ready() && ParticleMoveCheck.clean();
         } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
             LoggerFactory.getLogger(BlazeSableParticles.class).info("Overhaul sableParticles idle path off: {}", failure.toString());
         }
         TRACKING = tracking;
         INHERITED = inherited;
-        CONTAINER = container;
-        LOADED = loaded;
         READY = ready;
     }
 
@@ -55,10 +48,9 @@ public final class BlazeSableParticles {
             if ((Object) TRACKING.invokeExact(particle) != null) return false;
             Vector3d velocity = (Vector3d) INHERITED.invokeExact(particle);
             if (velocity.x != 0.0 || velocity.y != 0.0 || velocity.z != 0.0) return false;
-            Object container = (Object) CONTAINER.invokeExact(level);
-            return container != null && (int) LOADED.invokeExact(container) == 0;
         } catch (Throwable failure) {
             return false;
         }
+        return BlazeSableLevels.empty(level);
     }
 }
