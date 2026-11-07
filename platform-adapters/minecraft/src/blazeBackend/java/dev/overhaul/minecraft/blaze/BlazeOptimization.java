@@ -80,6 +80,7 @@ public enum BlazeOptimization {
     RAIN_BIOMES("rainBiomes", "Rain and snow keep each column's blended biome for the client tick instead of blending eight biome cells per column every frame"),
     PARTICLE_LIGHT("particleLight", "Light at each particle sampled once per tick instead of once per frame"),
     PARTICLE_COLLISIONS("particleCollisions", "Particles collide against block shapes gathered straight into a list, not through vanilla's iterator and immutable list builder"),
+    RAIN_LIGHT("rainLight", "Rain and snow light each column once per client tick and reuse it for the frames until the next"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
