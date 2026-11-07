@@ -1,6 +1,7 @@
 package dev.overhaul.minecraft.blaze.mixin;
 
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
+import dev.overhaul.minecraft.blaze.ParticleMoveCheck;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +51,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("EntityCollisions121Mixin", BlazeOptimization.COLLISION_SCANS),
             Map.entry("BornInChaosAnimationTick121Mixin", BlazeOptimization.MOD_ENTITY_TICKS),
             Map.entry("DamageTextSight121Mixin", BlazeOptimization.DAMAGE_TEXT_SIGHT),
+            Map.entry("ParticleSableMove121Mixin", BlazeOptimization.SABLE_PARTICLES),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
     /** Mixins that serve several optimisations, applied while any of them is on. */
@@ -69,6 +71,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String name = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
+        // A vanilla target: without Sable the wrapper would only add a boxed call to every particle move.
+        if (name.equals("ParticleSableMove121Mixin") && BlazeMixinPlugin.class.getClassLoader().getResource("dev/ryanhcode/sable/Sable.class") == null) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
@@ -78,5 +82,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {}
     @Override public List<String> getMixins() { return null; }
     @Override public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {}
-    @Override public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {}
+    @Override public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
+        if (mixinClassName.endsWith(".ParticleSableMove121Mixin")) ParticleMoveCheck.inspect(targetClass, "overhaul$skipIdleSable");
+    }
 }

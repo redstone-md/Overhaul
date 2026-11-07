@@ -76,6 +76,7 @@ public enum BlazeOptimization {
     SECTION_LOOKUP("entitySectionLookup", "Entity queries with a small box, such as mobs pushing each other, look their few entity sections up by key instead of walking every section in the world's x slab"),
     COLLISION_SCANS("entityCollisionScans", "A moving entity skips the search for boats, minecarts and other entities it could stand on while the level holds none of them"),
     DAMAGE_TEXT_SIGHT("damageTextSight", "JDamageIndicators casts its line-of-sight ray to each floating damage number once per tick instead of once per frame"),
+    SABLE_PARTICLES("sableParticles", "Particles in a level with no Sable sub-level loaded, riding none and carrying no velocity from one, move as vanilla instead of through Sable's per-move sub-level search"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
