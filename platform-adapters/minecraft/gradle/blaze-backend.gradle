@@ -10,7 +10,7 @@ def tiers = [
                                'LevelRendererSections120Mixin']],
         '1.21.1': [source: 'blaze121', lwjgl: '3.3.3', java: 21,
                    loaders: ['fabric', 'forge', 'neoforge'], uploadMixin: 'VertexBufferUpload121Mixin',
-                   loaderMixins: [neoforge: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin']],
+                   loaderMixins: [neoforge: ['WindowEarlyHandoff121Mixin', 'MinecraftEarlyOverlay121Mixin', 'ClientModLoaderEarlyTick121Mixin', 'BornInChaosAnimationTick121Mixin']],
                    tierMixins: [
                                 'VeilCompiledProgram121Mixin', 'VeilShaderCompiler121Mixin', 'LodestoneProgram121Mixin', 'VeilCompiledShader121Mixin', 'VeilShaderSource121Access',
                                 'VeilUniformCache121Mixin', 'VeilShaderProgram121Mixin', 'VeilUniform121Access', 'VeilTextureCache121Access',

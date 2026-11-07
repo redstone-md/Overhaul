@@ -25,7 +25,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS, BlazeOptimization.HEAD_CURIOS,
-                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES, BlazeOptimization.RAW_DRAWS)));
+                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES, BlazeOptimization.RAW_DRAWS, BlazeOptimization.MOD_ENTITY_TICKS)));
     private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
 
     OptimizationPage(Runnable refresh) {
@@ -131,6 +131,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.PARTICLE_QUADS, "Direct particle quads");
         labels.put(BlazeOptimization.ENTITY_CLASS_SCANS, "Skipped entity class scans");
         labels.put(BlazeOptimization.SELECTOR_ORDER, "Cheap selector tests first");
+        labels.put(BlazeOptimization.MOD_ENTITY_TICKS, "Born in Chaos tick filter");
         labels.put(BlazeOptimization.ENTITY_LIGHT, "Entity light per tick");
         labels.put(BlazeOptimization.HUD_CACHE, "HUD at 30 Hz");
         labels.put(BlazeOptimization.DEBUG_TEXT, "F3 text at 10 Hz");
