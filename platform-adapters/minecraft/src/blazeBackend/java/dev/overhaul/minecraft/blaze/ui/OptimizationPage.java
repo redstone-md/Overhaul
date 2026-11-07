@@ -20,7 +20,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.STRIDE_OFFSETS)),
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ITEM_AXES, BlazeOptimization.ENTITY_RENDERER_CACHE,
-                    BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS)),
+                    BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS, BlazeOptimization.SELECTOR_ORDER)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
@@ -130,6 +130,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SECTION_GRID, "Incremental section grid");
         labels.put(BlazeOptimization.PARTICLE_QUADS, "Direct particle quads");
         labels.put(BlazeOptimization.ENTITY_CLASS_SCANS, "Skipped entity class scans");
+        labels.put(BlazeOptimization.SELECTOR_ORDER, "Cheap selector tests first");
         labels.put(BlazeOptimization.ENTITY_LIGHT, "Entity light per tick");
         labels.put(BlazeOptimization.HUD_CACHE, "HUD at 30 Hz");
         labels.put(BlazeOptimization.DEBUG_TEXT, "F3 text at 10 Hz");
