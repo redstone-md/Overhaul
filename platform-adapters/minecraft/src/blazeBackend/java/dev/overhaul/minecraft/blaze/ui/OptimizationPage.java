@@ -21,7 +21,7 @@ final class OptimizationPage extends SettingsPage {
             new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ITEM_AXES, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS, BlazeOptimization.SELECTOR_ORDER, BlazeOptimization.SERVER_CLASS_SCANS,
-                    BlazeOptimization.SECTION_LOOKUP)),
+                    BlazeOptimization.SECTION_LOOKUP, BlazeOptimization.COLLISION_SCANS)),
             new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
@@ -134,6 +134,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SELECTOR_ORDER, "Cheap selector tests first");
         labels.put(BlazeOptimization.SERVER_CLASS_SCANS, "Skipped server entity class scans");
         labels.put(BlazeOptimization.SECTION_LOOKUP, "Entity sections by key");
+        labels.put(BlazeOptimization.COLLISION_SCANS, "Skipped entity collision scans");
         labels.put(BlazeOptimization.MOD_ENTITY_TICKS, "Born in Chaos tick filter");
         labels.put(BlazeOptimization.ENTITY_LIGHT, "Entity light per tick");
         labels.put(BlazeOptimization.HUD_CACHE, "HUD at 30 Hz");

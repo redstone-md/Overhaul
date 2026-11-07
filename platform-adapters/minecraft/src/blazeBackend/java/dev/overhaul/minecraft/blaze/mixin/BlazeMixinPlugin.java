@@ -43,15 +43,18 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("BufferBuilderParticles121Mixin", BlazeOptimization.PARTICLE_QUADS),
             Map.entry("ParticleQuads121Mixin", BlazeOptimization.PARTICLE_QUADS),
             Map.entry("LevelEntityClasses121Mixin", BlazeOptimization.ENTITY_CLASS_SCANS),
-            Map.entry("EntitySectionManagerClasses121Mixin", BlazeOptimization.ENTITY_CLASS_SCANS),
             Map.entry("EntityLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
             Map.entry("EntityDispatcherLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
             Map.entry("EntitySelectorAlive121Mixin", BlazeOptimization.SELECTOR_ORDER),
-            Map.entry("ServerEntityClasses121Mixin", BlazeOptimization.SERVER_CLASS_SCANS),
             Map.entry("EntitySectionLookup121Mixin", BlazeOptimization.SECTION_LOOKUP),
+            Map.entry("EntityCollisions121Mixin", BlazeOptimization.COLLISION_SCANS),
             Map.entry("BornInChaosAnimationTick121Mixin", BlazeOptimization.MOD_ENTITY_TICKS),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
+    /** Mixins that serve several optimisations, applied while any of them is on. */
+    private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
+            "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS),
+            "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS));
 
     @Override public void onLoad(String mixinPackage) {
         BlazeOptimization.describeInFile();
@@ -65,6 +68,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String name = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
+        List<BlazeOptimization> shared = SHARED.get(name);
+        if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
         return owner == null || owner.on();
     }
