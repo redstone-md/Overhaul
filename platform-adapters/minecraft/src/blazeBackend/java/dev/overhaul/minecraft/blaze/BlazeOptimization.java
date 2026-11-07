@@ -78,6 +78,7 @@ public enum BlazeOptimization {
     DAMAGE_TEXT_SIGHT("damageTextSight", "JDamageIndicators casts its line-of-sight ray to each floating damage number once per tick instead of once per frame"),
     SABLE_PARTICLES("sableParticles", "Particles in a level with no Sable sub-level loaded, riding none and carrying no velocity from one, move as vanilla instead of through Sable's per-move sub-level search"),
     RAIN_BIOMES("rainBiomes", "Rain and snow keep each column's blended biome for the client tick instead of blending eight biome cells per column every frame"),
+    PARTICLE_LIGHT("particleLight", "Light at each particle sampled once per tick instead of once per frame"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
