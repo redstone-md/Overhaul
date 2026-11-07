@@ -41,11 +41,15 @@ public final class ParticleMoveCheck {
         LoggerFactory.getLogger(ParticleMoveCheck.class).info("Overhaul sableParticles idle path {}: Particle.move wrapped by {}", clean ? "on" : "off", wrappers);
     }
 
-    /** Whether the method calls a mixin-generated method of the class itself, which a plain vanilla body never does. */
+    /**
+     * Whether the method calls a mixin-generated method of the class itself, which a plain vanilla body never does.
+     * Overhaul's own collision shortcut is the one exception: the fast path repeats it.
+     */
     private static boolean callsGenerated(ClassNode owner, MethodNode method, String prefix) {
         for (AbstractInsnNode instruction : method.instructions) {
             if (instruction instanceof MethodInsnNode call && call.owner.equals(owner.name)
-                    && call.name.indexOf('$') >= 0 && call.name.startsWith(prefix)) return true;
+                    && call.name.indexOf('$') >= 0 && call.name.startsWith(prefix)
+                    && !call.name.endsWith("$overhaul$openAir")) return true;
         }
         return false;
     }

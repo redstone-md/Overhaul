@@ -2,6 +2,8 @@ package dev.overhaul.minecraft.blaze.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
+import dev.overhaul.minecraft.blaze.BlazeParticleCollisions;
 import dev.overhaul.minecraft.blaze.BlazeSableParticles;
 import java.util.List;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -40,7 +42,10 @@ abstract class ParticleSableMove121Mixin {
         if (stoppedByCollision) return;
         double askedX = x, askedY = y, askedZ = z;
         if (hasPhysics && (x != 0.0 || y != 0.0 || z != 0.0) && x * x + y * y + z * z < 10000.0) {
-            Vec3 allowed = Entity.collideBoundingBox(null, new Vec3(x, y, z), getBoundingBox(), level, List.of());
+            Vec3 asked = new Vec3(x, y, z);
+            AABB box = getBoundingBox();
+            Vec3 allowed = BlazeOptimization.PARTICLE_COLLISIONS.on()
+                    ? BlazeParticleCollisions.collide(level, asked, box) : Entity.collideBoundingBox(null, asked, box, level, List.of());
             x = allowed.x;
             y = allowed.y;
             z = allowed.z;
