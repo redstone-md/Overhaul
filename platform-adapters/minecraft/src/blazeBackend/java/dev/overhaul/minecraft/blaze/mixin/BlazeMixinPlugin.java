@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.mixin;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.ParticleMoveCheck;
 import dev.overhaul.minecraft.blaze.RainHeightCheck;
+import dev.overhaul.minecraft.blaze.SableCullPatch;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,6 +55,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("DamageTextSight121Mixin", BlazeOptimization.DAMAGE_TEXT_SIGHT),
             Map.entry("ParticleSableMove121Mixin", BlazeOptimization.SABLE_PARTICLES),
             Map.entry("LevelRendererSableRain121Mixin", BlazeOptimization.SABLE_RAIN),
+            Map.entry("EntityRendererSableCull121Mixin", BlazeOptimization.SABLE_ENTITY_CULL),
             Map.entry("AtmosphereWeatherProxies121Mixin", BlazeOptimization.ATMOSPHERE_WEATHER),
             Map.entry("AtmosphereLocalWeather121Access", BlazeOptimization.ATMOSPHERE_WEATHER),
             Map.entry("LevelRendererRainBiomes121Mixin", BlazeOptimization.RAIN_BIOMES),
@@ -102,5 +104,6 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     @Override public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
         if (mixinClassName.endsWith(".ParticleSableMove121Mixin")) ParticleMoveCheck.inspect(targetClass, "overhaul$skipIdleSable");
         else if (mixinClassName.endsWith(".LevelRendererSableRain121Mixin")) RainHeightCheck.inspect(targetClass, "overhaul$skipEmptySable");
+        else if (mixinClassName.endsWith(".EntityRendererSableCull121Mixin")) SableCullPatch.apply(targetClass);
     }
 }

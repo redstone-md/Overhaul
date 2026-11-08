@@ -79,6 +79,7 @@ public enum BlazeOptimization {
     SABLE_PARTICLES("sableParticles", "Particles in a level with no Sable sub-level loaded, riding none and carrying no velocity from one, move as vanilla instead of through Sable's per-move sub-level search"),
     ATMOSPHERE_WEATHER("atmosphereWeather", "Atmosphere's rain check skips asking local weather areas and Sable's proxy for every position when no local weather area exists"),
     SABLE_RAIN("sableRain", "Rain and snow in a level with no Sable sub-level loaded take vanilla's column height instead of Sable's per-column sub-level search"),
+    SABLE_ENTITY_CULL("sableEntityCull", "Entity culling in a level with no Sable sub-level loaded skips Sable's per-entity plot lookup and culls as vanilla"),
     RAIN_BIOMES("rainBiomes", "Rain and snow keep each column's blended biome for the client tick instead of blending eight biome cells per column every frame"),
     PARTICLE_LIGHT("particleLight", "Light at each particle sampled once per tick instead of once per frame"),
     PARTICLE_COLLISIONS("particleCollisions", "Particles collide against block shapes gathered straight into a list, not through vanilla's iterator and immutable list builder"),
