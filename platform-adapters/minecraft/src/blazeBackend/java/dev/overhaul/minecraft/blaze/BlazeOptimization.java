@@ -42,6 +42,7 @@ public enum BlazeOptimization {
     ENTITY_SCANS("entityScans", "Cataclysm and Alex's Caves camera effect entity scans once a tick instead of every frame"),
     WITHER_GLOWS("witherGlows", "Wither Reincarnated's per-frame walk over every client entity for withers is skipped while the level holds none"),
     EFFECT_POSES("effectPoses", "Alex's Mobs' per-frame clinging, sting and ender flu pose checks skipped for entities with no active effects"),
+    VILLAGER_TEXTURES("villagerTextures", "Villager type, profession and level texture paths built once per layer instead of on every frame"),
     HEAD_CURIOS("headCurios", "Youkai's Feasts camellia head check answered once per tick per entity instead of searching curios every frame"),
     SECTION_SCAN_REUSE("sectionScanReuse", "Visible section walks skipped while no section or the visible list has changed"),
     DH_CLOUDS("dhClouds", "Distant Horizons cloud movement updated at 60 Hz"),
