@@ -71,6 +71,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("LevelRendererRainBiomes121Mixin", BlazeOptimization.RAIN_BIOMES),
             Map.entry("ParticleLight121Mixin", BlazeOptimization.PARTICLE_LIGHT),
             Map.entry("ParticleCollisions121Mixin", BlazeOptimization.PARTICLE_COLLISIONS),
+            Map.entry("SectionRim121Mixin", BlazeOptimization.PARTICLE_RIMS),
             Map.entry("LevelRendererRainLight121Mixin", BlazeOptimization.RAIN_LIGHT),
             Map.entry("LevelHeight121Mixin", BlazeOptimization.LEVEL_HEIGHT),
             Map.entry("EntityBlockCollisions121Mixin", BlazeOptimization.ENTITY_BLOCK_COLLISIONS),

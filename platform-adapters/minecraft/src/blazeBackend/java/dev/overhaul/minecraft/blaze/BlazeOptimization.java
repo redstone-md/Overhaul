@@ -94,6 +94,7 @@ public enum BlazeOptimization {
     LEVEL_HEIGHT("levelHeight", "A level keeps its build floor and height in a field instead of asking its dimension type on every block lookup"),
     ENTITY_BLOCK_COLLISIONS("entityBlockCollisions", "Entity moves gather the block shapes around them straight into a list, not through vanilla's iterator"),
     COLLISION_SECTIONS("collisionSections", "Block collision walks read loaded chunk sections directly and pass over sections holding only air in one check"),
+    PARTICLE_RIMS("particleRims", "Particle collisions skip the ring of blocks around them in sections whose palette holds no block reaching past its cell and no moving piston, checked once per client tick; needs collisionSections"),
     SUPPORTING_BLOCK("supportingBlock", "Grounded entities find the block they stand on without vanilla's collision iterator"),
     BLOCK_SEARCH("blockSearch", "Mobs out to break one kind of block, like zombies after turtle eggs, skip their block-by-block search when no loaded section around them holds that block"),
     SELECTOR_TAGS("selectorTags", "Entity selectors that require a tag no entity carries match nothing without scanning every entity"),

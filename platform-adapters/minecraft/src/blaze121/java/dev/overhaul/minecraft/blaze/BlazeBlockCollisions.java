@@ -49,21 +49,22 @@ public final class BlazeBlockCollisions {
 
     /** {@code Entity.collideBoundingBox} with no entity and no extra shapes. */
     public static Vec3 collide(Level level, Vec3 motion, AABB box) {
-        List<VoxelShape> shapes = shapes(level, CollisionContext.empty(), box.expandTowards(motion));
-        return shapes.isEmpty() ? motion : clip(motion, box, shapes);
+        Gather gather = new Gather();
+        gather.walk(level, CollisionContext.empty(), box.expandTowards(motion), BlazeRimSections.on);
+        return gather.shapes.isEmpty() ? motion : clip(motion, box, gather.shapes);
     }
 
     /** {@code BlockCollisions} that are not only suffocating, gathered into a list. */
     public static List<VoxelShape> shapes(Level level, CollisionContext context, AABB swept) {
         Gather gather = new Gather();
-        gather.walk(level, context, swept);
+        gather.walk(level, context, swept, false);
         return gather.shapes;
     }
 
     /** {@code CollisionGetter.findSupportingBlock}: the colliding block nearest the entity, ties to the greatest. */
     public static Optional<BlockPos> supportingBlock(Level level, Entity entity, AABB box) {
         Support support = new Support(entity.position());
-        support.walk(level, CollisionContext.of(entity), box);
+        support.walk(level, CollisionContext.of(entity), box, false);
         return Optional.ofNullable(support.best);
     }
 
@@ -80,11 +81,14 @@ public final class BlazeBlockCollisions {
         };
     }
 
-    /** The {@code BlockCollisions} cursor unrolled: x fastest, then y, then z, with its edge and shape filters. */
+    /**
+     * The {@code BlockCollisions} cursor unrolled: x fastest, then y, then z, with its edge and shape filters. With
+     * {@code rims}, the ring cells of a section {@link BlazeRimSections} clears are passed over unread.
+     */
     private abstract static class Walk {
         abstract void hit(BlockPos.MutableBlockPos pos, VoxelShape placed);
 
-        final void walk(Level level, CollisionContext context, AABB swept) {
+        final void walk(Level level, CollisionContext context, AABB swept, boolean rims) {
             int minX = Mth.floor(swept.minX - EPSILON) - 1, maxX = Mth.floor(swept.maxX + EPSILON) + 1;
             int minY = Mth.floor(swept.minY - EPSILON) - 1, maxY = Mth.floor(swept.maxY + EPSILON) + 1;
             int minZ = Mth.floor(swept.minZ - EPSILON) - 1, maxZ = Mth.floor(swept.maxZ + EPSILON) + 1;
@@ -94,6 +98,8 @@ public final class BlazeBlockCollisions {
             LevelChunkSection[] sections = null;
             int chunkX = 0, chunkZ = 0, minSection = 0;
             boolean cached = false, direct = SECTIONS && !level.isDebug();
+            LevelChunkSection rimSection = null;
+            boolean rimReach = true;
             for (int z = minZ; z <= maxZ; z++) {
                 int edgeZ = z == minZ || z == maxZ ? 1 : 0;
                 for (int y = minY; y <= maxY; y++) {
@@ -118,6 +124,13 @@ public final class BlazeBlockCollisions {
                             if (index < 0 || index >= sections.length) continue;
                             LevelChunkSection section = sections[index];
                             if (section.hasOnlyAir()) continue;
+                            if (rims && edges != 0) {
+                                if (section != rimSection) {
+                                    rimSection = section;
+                                    rimReach = BlazeRimSections.mayReach(level, section);
+                                }
+                                if (!rimReach) continue;
+                            }
                             state = section.getBlockState(x & 15, y & 15, z & 15);
                         } else state = chunk.getBlockState(pos);
                         if (edges == 1 && !state.hasLargeCollisionShape()) continue;
