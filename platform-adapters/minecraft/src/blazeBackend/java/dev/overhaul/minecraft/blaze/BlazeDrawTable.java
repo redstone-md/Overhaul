@@ -30,6 +30,11 @@ public class BlazeDrawTable {
         Arrays.fill(layouts, from, to, null);
     }
 
+    /** Empties slot {@code at} if it still holds {@code mesh}, so its stale copy is read again. */
+    final void forget(int at, BlazeMesh mesh) {
+        if (at < meshes.length && meshes[at] == mesh) meshes[at] = null;
+    }
+
     /** Grows every per-slot array to {@code slots}; a subclass grows its own arrays alongside. */
     void grow(int slots) {
         meshes = Arrays.copyOf(meshes, slots);

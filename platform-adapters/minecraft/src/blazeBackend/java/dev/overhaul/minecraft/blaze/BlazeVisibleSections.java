@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import net.minecraft.client.renderer.RenderType;
 
 /**
@@ -54,6 +55,7 @@ public abstract class BlazeVisibleSections<T> {
         long now=BlazeSectionChanges.changes();
         if(reuse()&&tables==this.tables&&now==scannedAt&&!missingMesh&&scanned(visible))return;
         missingMesh=false;
+        Layer.dropStale();
         this.tables=tables;
         for(Layer layer:layers)if(layer!=null)layer.cursor=0;
         withBlockEntities.cursor=0;
@@ -69,9 +71,12 @@ public abstract class BlazeVisibleSections<T> {
             for(;contents!=0;contents&=contents-1){
                 int id=Long.numberOfTrailingZeros(contents);
                 if(tables){
+                    Layer layer=layerOf(id);
+                    int x=flat.overhaul$originX(),y=flat.overhaul$originY(),z=flat.overhaul$originZ();
+                    if(layer.putKept(entry,x,y,z))continue;
                     BlazeMesh mesh=flat.overhaul$mesh(id);
                     if(mesh==null)missingMesh=true;
-                    layerOf(id).put(entry,mesh,flat.overhaul$originX(),flat.overhaul$originY(),flat.overhaul$originZ());
+                    layer.put(entry,mesh,x,y,z);
                 }
                 else layerOf(id).put(entry);
             }
@@ -131,6 +136,8 @@ public abstract class BlazeVisibleSections<T> {
     public static final class Layer extends BlazeDrawTable {
         private static final Layer EMPTY=new Layer();
         private static final boolean DRAWS=BlazeOptimization.SECTION_DRAWS.on();
+        private static final boolean KEEP=BlazeOptimization.SECTION_SLOT_KEEP.on();
+        private static final ConcurrentLinkedQueue<BlazeMesh> STALE=new ConcurrentLinkedQueue<>();
         private final ObjectArrayList<Object> sections=new ObjectArrayList<>();
         private int cursor;
         private int[] origins=new int[3*256];
@@ -143,9 +150,38 @@ public abstract class BlazeVisibleSections<T> {
             int at=cursor;
             put(section);
             put(at,mesh,DRAWS);
+            if(KEEP&&mesh!=null){mesh.slotOwner=this;mesh.slotAt=at;}
+            origin(at,x,y,z);
+        }
+        /**
+         * Keeps a slot that already holds this section and its mesh's copy, so the scan reads neither the section's mesh
+         * list nor the mesh: a mesh's layer never changes, and a changed mesh dropped its copy through {@link #stale}.
+         */
+        private boolean putKept(Object section,int x,int y,int z){
+            int at=cursor;
+            if(!KEEP||at>=sections.size()||sections.get(at)!=section||at>=capacity()||mesh(at)==null)return false;
+            cursor++;
+            origin(at,x,y,z);
+            return true;
+        }
+        private void origin(int at,int x,int y,int z){
             origins[at*3]=x;
             origins[at*3+1]=y;
             origins[at*3+2]=z;
+        }
+        /** Called by a copied mesh after its draw fields change, from any thread; the next scan drops that copy. */
+        static void stale(BlazeMesh mesh){
+            if(!KEEP||mesh.slotQueued)return;
+            mesh.slotQueued=true;
+            STALE.add(mesh);
+        }
+        /** Runs on the render thread before a scan, so every dropped slot is filled again from its mesh. */
+        private static void dropStale(){
+            for(BlazeMesh mesh;(mesh=STALE.poll())!=null;){
+                mesh.slotQueued=false;
+                Layer owner=mesh.slotOwner;
+                if(owner!=null)owner.forget(mesh.slotAt,mesh);
+            }
         }
         @Override void grow(int slots){
             super.grow(slots);

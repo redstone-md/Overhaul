@@ -25,6 +25,10 @@ public final class BlazeMesh implements AutoCloseable {
     BlazeSectionRun drawRun;
     /** Set once a section scan copied the draw fields above, so a change to them must make that scan stale. */
     volatile boolean tabled;
+    /** The visible-section slot holding this mesh's copy, so a change drops only that copy. Render thread only. */
+    BlazeVisibleSections.Layer slotOwner;
+    int slotAt;
+    volatile boolean slotQueued;
 
     BlazeMesh(BlazeQueue queue, BlazeTransfers transfers, BlazeSequenceIndices sequences, boolean stream, Consumer<BlazeMesh> onClose) { this.queue=queue;this.transfers=transfers;this.sequences=sequences;this.stream=stream;this.onClose=onClose; }
 
@@ -65,7 +69,10 @@ public final class BlazeMesh implements AutoCloseable {
 
     private void flatten() {
         flattenFields();
-        if (tabled) BlazeSectionChanges.changed();
+        if (tabled) {
+            BlazeVisibleSections.Layer.stale(this);
+            BlazeSectionChanges.changed();
+        }
     }
 
     private void flattenFields() {
