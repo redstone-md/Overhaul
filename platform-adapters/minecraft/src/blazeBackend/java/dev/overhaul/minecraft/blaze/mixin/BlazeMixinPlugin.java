@@ -4,6 +4,7 @@ import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.ParticleMoveCheck;
 import dev.overhaul.minecraft.blaze.RainHeightCheck;
 import dev.overhaul.minecraft.blaze.SableCullPatch;
+import dev.overhaul.minecraft.blaze.VeilSkeletonPatch;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +42,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("AlexsCavesScans121Mixin", BlazeOptimization.ENTITY_SCANS),
             Map.entry("WitherGlowScan121Mixin", BlazeOptimization.WITHER_GLOWS),
             Map.entry("WitherMusicScan121Mixin", BlazeOptimization.WITHER_GLOWS),
+            Map.entry("LevelRendererVeilSkeletons121Mixin", BlazeOptimization.VEIL_SKELETONS),
             Map.entry("AlexsMobsEffectPoses121Mixin", BlazeOptimization.EFFECT_POSES),
             Map.entry("VillagerLayerTextures121Mixin", BlazeOptimization.VILLAGER_TEXTURES),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
@@ -79,7 +81,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     /** Mixins that serve several optimisations, applied while any of them is on. */
     private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
             "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS,
-                    BlazeOptimization.WITHER_GLOWS),
+                    BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS),
             "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS));
 
     @Override public void onLoad(String mixinPackage) {
@@ -110,5 +112,6 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".ParticleSableMove121Mixin")) ParticleMoveCheck.inspect(targetClass, "overhaul$skipIdleSable");
         else if (mixinClassName.endsWith(".LevelRendererSableRain121Mixin")) RainHeightCheck.inspect(targetClass, "overhaul$skipEmptySable");
         else if (mixinClassName.endsWith(".EntityRendererSableCull121Mixin")) SableCullPatch.apply(targetClass);
+        else if (mixinClassName.endsWith(".LevelRendererVeilSkeletons121Mixin")) VeilSkeletonPatch.apply(targetClass);
     }
 }

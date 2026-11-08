@@ -41,6 +41,7 @@ public enum BlazeOptimization {
     SECTION_BOUNDS("sectionBounds", "Frustum test over flat section bounds instead of the graph's linked nodes"),
     ENTITY_SCANS("entityScans", "Cataclysm and Alex's Caves camera effect entity scans once a tick instead of every frame"),
     WITHER_GLOWS("witherGlows", "Wither Reincarnated's per-frame glow walk and per-tick music walk over every client entity for withers are skipped while the level holds none"),
+    VEIL_SKELETONS("veilSkeletons", "Veil's per-tick walk over every client entity for skeleton animators is skipped while the level holds no skeleton parent"),
     EFFECT_POSES("effectPoses", "Alex's Mobs' per-frame clinging, sting and ender flu pose checks skipped for entities with no active effects"),
     VILLAGER_TEXTURES("villagerTextures", "Villager type, profession and level texture paths built once per layer instead of on every frame"),
     HEAD_CURIOS("headCurios", "Youkai's Feasts camellia head check answered once per tick per entity instead of searching curios every frame"),
