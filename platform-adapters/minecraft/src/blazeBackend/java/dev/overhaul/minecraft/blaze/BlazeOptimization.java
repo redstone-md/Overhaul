@@ -117,6 +117,7 @@ public enum BlazeOptimization {
     TINT_BIOMES("tintBiomes", "Each thread keeps the blended biome of recently tinted positions until the client loads, drops or rewrites a chunk, since neighbouring tinted blocks average over squares that share all but one row"),
     FLUID_TINT("fluidTint", "A fluid block checks its six faces before it asks for its biome-blended tint, since one with no face showing draws nothing and enclosed water is most of the water a section meshes; off by default, meshing got cheaper but the flight bench measured fewer frames", false),
     DH_STORED_BYTES("dhStoredBytes", "Distant Horizons copies and decodes stored LODs in blocks and through byte streams that skip a lock no other thread takes, instead of one locked read per byte"),
+    DH_STRING_POOL("dhStringPool", "Distant Horizons hands back the pooled block or biome name a thread was last given for the same characters before it walks its pool's trie one character at a time"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
