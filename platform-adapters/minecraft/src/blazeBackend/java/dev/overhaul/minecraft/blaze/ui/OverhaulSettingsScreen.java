@@ -6,6 +6,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.FormattedCharSequence;
@@ -15,8 +16,14 @@ import net.minecraft.util.FormattedCharSequence;
  * the pointer. The shader pack page leaves the side clear, so the world behind it shows the pack that was just picked.
  */
 public final class OverhaulSettingsScreen extends BlazeScreenBase {
-    private static boolean vanillaOnce;
+    /** Starts the benchmark once the main menu first shows, then shows its result; for measuring a machine from a script. */
+    private static final boolean AUTO_BENCHMARK = Boolean.getBoolean("overhaul.dev.benchmark");
+    /** Some mods finish their setup on the first ticks of the menu and fail if a world opens before that. */
+    private static final int AUTO_START_TICKS = 200;
+    private static boolean vanillaOnce, autoBenchmarked;
+    private int autoStart;
     private final Screen parent;
+    private final QualityPage quality;
     private final List<SettingsPage> pages;
     private int page;
     private List<SettingsRow> rows = List.of();
@@ -28,23 +35,39 @@ public final class OverhaulSettingsScreen extends BlazeScreenBase {
         super(Component.literal("Overhaul"));
         this.parent = parent;
         Minecraft game = Minecraft.getInstance();
-        this.pages = List.of(new VideoPage(game, this::refresh), new OptimizationPage(this::refresh), new ShaderPackPage(game, this::refresh));
+        this.quality = new QualityPage(game, this::refresh, finished -> BenchmarkWorld.start(game, this, finished));
+        this.pages = List.of(quality, new VideoPage(game, this::refresh), new OptimizationPage(this::refresh), new ShaderPackPage(game, this::refresh));
     }
 
     /** Called for every screen the game opens; only video settings on the owned device are replaced. */
     public static Screen replace(Screen requested) {
+        Minecraft game = Minecraft.getInstance();
+        if (BlazeFrontend.current() == null) return requested;
+        if (AUTO_BENCHMARK && !autoBenchmarked && requested instanceof TitleScreen) {
+            autoBenchmarked = true;
+            OverhaulSettingsScreen settings = new OverhaulSettingsScreen(requested);
+            settings.autoStart = AUTO_START_TICKS;
+            return settings;
+        }
+        Screen benchmark = BenchmarkWorld.joined(game, requested);
+        if (benchmark != requested) return benchmark;
         if (!BlazeUiTier.isVideo(requested)) return requested;
         if (vanillaOnce) {
             vanillaOnce = false;
             return requested;
         }
-        if (BlazeFrontend.current() == null) return requested;
         return new OverhaulSettingsScreen(BlazeUiTier.parent(requested));
     }
 
     @Override
     protected void init() {
         refresh();
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (autoStart > 0 && --autoStart == 0) quality.start();
     }
 
     private void refresh() {
