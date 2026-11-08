@@ -29,11 +29,21 @@ final class BlazeGlVertexArrays {
     /** An enabled pointer as the draw sees it. */
     record Pointer(int location, int buffer, int size, int type, boolean normalized, boolean integer, int stride, long offset, int divisor) {}
 
+    /** How an attribute reads its binding, as glVertexAttribFormat states it. */
+    private record Format(int size, int type, boolean normalized, boolean integer, int relative) {}
+
+    /** A buffer bound to a binding point, as glBindVertexBuffer states it. */
+    private record Binding(int buffer, long offset, int stride) {}
+
+    /** GL 4.3 splits a pointer into a format and a binding; the older calls set both with the binding at the location. */
     private static final class Array {
-        final Pointer[] pointers = new Pointer[SLOTS];
-        final boolean[] enabled = new boolean[SLOTS];
+        final Format[] formats = new Format[SLOTS];
+        final int[] attributeBindings = new int[SLOTS];
+        final Binding[] bindings = new Binding[SLOTS];
         final int[] divisors = new int[SLOTS];
+        final boolean[] enabled = new boolean[SLOTS];
         int elements;
+        Array() { for (int slot = 0; slot < SLOTS; slot++) attributeBindings[slot] = slot; }
     }
 
     private final BlazeGlBuffers buffers;
@@ -90,18 +100,51 @@ final class BlazeGlVertexArrays {
             }
             return 0;
         }));
-        table.put("glEnableVertexAttribArray", locked(arguments -> enable(arguments.integer(0), true)));
-        table.put("glDisableVertexAttribArray", locked(arguments -> enable(arguments.integer(0), false)));
+        table.put("glEnableVertexAttribArray", locked(arguments -> enable(array(), arguments.integer(0), true)));
+        table.put("glDisableVertexAttribArray", locked(arguments -> enable(array(), arguments.integer(0), false)));
         table.put("glVertexAttribPointer", locked(arguments -> point(arguments.integer(0), arguments.integer(1), arguments.integer(2),
                 arguments.flag(3), false, arguments.integer(4), arguments.pointer(5))));
         table.put("glVertexAttribIPointer", locked(arguments -> point(arguments.integer(0), arguments.integer(1), arguments.integer(2),
                 false, true, arguments.integer(3), arguments.pointer(4))));
         table.put("glVertexAttribDivisor", locked(arguments -> {
             int location = arguments.integer(0);
-            if (location >= 0 && location < SLOTS) array().divisors[location] = arguments.integer(1);
+            if (!slot(location)) return 0;
+            array().attributeBindings[location] = location;
+            array().divisors[location] = arguments.integer(1);
             return 0;
         }));
+        separate(table);
+        direct(table);
         draws(table);
+    }
+
+    /** ARB_vertex_attrib_binding on the bound array. */
+    private void separate(Map<String, Answer> table) {
+        table.put("glBindVertexBuffer", locked(arguments -> bindBuffer(array(), arguments.integer(0), arguments.integer(1), arguments.pointer(2), arguments.integer(3))));
+        table.put("glVertexBindingDivisor", locked(arguments -> divisor(array(), arguments.integer(0), arguments.integer(1))));
+        table.put("glVertexAttribBinding", locked(arguments -> attributeBinding(array(), arguments.integer(0), arguments.integer(1))));
+        table.put("glVertexAttribFormat", locked(arguments -> format(array(), arguments.integer(0), arguments.integer(1), arguments.integer(2), arguments.flag(3), false, arguments.integer(4))));
+        table.put("glVertexAttribIFormat", locked(arguments -> format(array(), arguments.integer(0), arguments.integer(1), arguments.integer(2), false, true, arguments.integer(3))));
+    }
+
+    /**
+     * Direct state access names the array instead of using the bound one. Every entry point has an address, so
+     * Flywheel takes this path whenever its pointers are non-zero.
+     */
+    private void direct(Map<String, Answer> table) {
+        table.put("glVertexArrayElementBuffer", locked(arguments -> {
+            int name = arguments.integer(0), elements = arguments.integer(1);
+            named(name).elements = elements;
+            if (name == bound) buffers.bind(ELEMENT_ARRAY_BUFFER, elements);
+            return 0;
+        }));
+        table.put("glVertexArrayVertexBuffer", locked(arguments -> bindBuffer(named(arguments.integer(0)), arguments.integer(1), arguments.integer(2), arguments.pointer(3), arguments.integer(4))));
+        table.put("glVertexArrayBindingDivisor", locked(arguments -> divisor(named(arguments.integer(0)), arguments.integer(1), arguments.integer(2))));
+        table.put("glVertexArrayAttribBinding", locked(arguments -> attributeBinding(named(arguments.integer(0)), arguments.integer(1), arguments.integer(2))));
+        table.put("glEnableVertexArrayAttrib", locked(arguments -> enable(named(arguments.integer(0)), arguments.integer(1), true)));
+        table.put("glDisableVertexArrayAttrib", locked(arguments -> enable(named(arguments.integer(0)), arguments.integer(1), false)));
+        table.put("glVertexArrayAttribFormat", locked(arguments -> format(named(arguments.integer(0)), arguments.integer(1), arguments.integer(2), arguments.integer(3), arguments.flag(4), false, arguments.integer(5))));
+        table.put("glVertexArrayAttribIFormat", locked(arguments -> format(named(arguments.integer(0)), arguments.integer(1), arguments.integer(2), arguments.integer(3), false, true, arguments.integer(4))));
     }
 
     private void draws(Map<String, Answer> table) {
@@ -132,28 +175,60 @@ final class BlazeGlVertexArrays {
         return 0;
     }
 
+    /** Each enabled attribute with a format and a filled binding, joined into the pointer the draw reads. */
     private static List<Pointer> pointers(Array array) {
         List<Pointer> result = new ArrayList<>(SLOTS);
         for (int location = 0; location < SLOTS; location++) {
-            Pointer pointer = array.pointers[location];
-            if (!array.enabled[location] || pointer == null) continue;
-            result.add(new Pointer(location, pointer.buffer(), pointer.size(), pointer.type(), pointer.normalized(), pointer.integer(),
-                    pointer.stride(), pointer.offset(), array.divisors[location]));
+            Format format = array.formats[location];
+            int point = array.attributeBindings[location];
+            Binding binding = array.bindings[point];
+            if (!array.enabled[location] || format == null || binding == null) continue;
+            result.add(new Pointer(location, binding.buffer(), format.size(), format.type(), format.normalized(), format.integer(),
+                    binding.stride(), binding.offset() + format.relative(), array.divisors[point]));
         }
         return result;
     }
 
-    private long enable(int location, boolean on) {
-        if (location >= 0 && location < SLOTS) array().enabled[location] = on;
+    private static boolean slot(int index) { return index >= 0 && index < SLOTS; }
+
+    private static long enable(Array array, int location, boolean on) {
+        if (slot(location)) array.enabled[location] = on;
         return 0;
     }
 
+    /** The older call is a format at offset zero, the binding at its own location, and the bound buffer there. */
     private long point(int location, int size, int type, boolean normalized, boolean integer, int stride, long offset) {
-        if (location >= 0 && location < SLOTS) array().pointers[location] = new Pointer(location, buffers.bound(ARRAY_BUFFER), size, type, normalized, integer, stride, offset, 0);
+        if (!slot(location)) return 0;
+        Array array = array();
+        array.formats[location] = new Format(size, type, normalized, integer, 0);
+        array.attributeBindings[location] = location;
+        array.bindings[location] = new Binding(buffers.bound(ARRAY_BUFFER), offset, stride);
         return 0;
     }
 
-    private Array array() { return arrays.computeIfAbsent(bound, (int ignored) -> new Array()); }
+    private static long bindBuffer(Array array, int point, int buffer, long offset, int stride) {
+        if (slot(point)) array.bindings[point] = buffer == 0 ? null : new Binding(buffer, offset, stride);
+        return 0;
+    }
+
+    private static long divisor(Array array, int point, int divisor) {
+        if (slot(point)) array.divisors[point] = divisor;
+        return 0;
+    }
+
+    private static long attributeBinding(Array array, int location, int point) {
+        if (slot(location) && slot(point)) array.attributeBindings[location] = point;
+        return 0;
+    }
+
+    private static long format(Array array, int location, int size, int type, boolean normalized, boolean integer, int relative) {
+        if (slot(location)) array.formats[location] = new Format(size, type, normalized, integer, relative);
+        return 0;
+    }
+
+    private Array array() { return named(bound); }
+
+    private Array named(int name) { return arrays.computeIfAbsent(name, (int ignored) -> new Array()); }
 
     private Answer locked(Answer answer) {
         return arguments -> {
