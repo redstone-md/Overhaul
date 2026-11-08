@@ -132,6 +132,7 @@ public enum BlazeOptimization {
     POI_RANGE_SECTIONS("poiRangeSections", "A point of interest query within a distance reads only the sections that span that height, not the whole column"),
     PUPFISH_SEARCH("pupfishSearch", "Alex's Mobs samples world generator noise for the pupfish chunk on a background thread, one try at a time, instead of on the server thread"),
     CAMPFIRE_SCAN("campfireScan", "Comfortable Campfires skips streaming the blocks around a player when no section there holds a block it gives an effect for"),
+    PARTICLE_ATLAS_WRITE("particleAtlasWrite", "Inventory Particles copies its atlas cache rows at once and encodes and writes the PNG off the render thread"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
