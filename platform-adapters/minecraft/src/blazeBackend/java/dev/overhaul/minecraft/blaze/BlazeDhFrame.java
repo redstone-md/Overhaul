@@ -243,6 +243,13 @@ public final class BlazeDhFrame {
         renderer.dh().ssao(activeColor, activeDepth, projection, inverse, RenderUtil.getNearClipPlaneInBlocks(), RenderUtil.getFarClipPlaneDistanceInBlocks());
     }
 
+    /** DH's TAA after its fog and fades, on the LOD colour the composite then reads. */
+    public static void antiAlias(BlazeRenderer renderer, RenderParams params) {
+        if (activeColor <= 0 || activeDepth <= 0 || packDraws(renderer) || params.exactCameraPosition == null) return;
+        var camera = params.exactCameraPosition;
+        renderer.dh().antiAlias(activeColor, activeDepth, columns(params.dhProjectionMatrix), columns(params.dhModelViewMatrix), camera.x, camera.y, camera.z);
+    }
+
     /** The original copy leaves the frame's framebuffer bound, and everything after it draws there. */
     public static void composite(BlazeRenderer renderer, RenderParams params, int colorTexture, int depthTexture) {
         GlStateManager._glBindFramebuffer(36160, Minecraft.getInstance().getMainRenderTarget().frameBufferId);

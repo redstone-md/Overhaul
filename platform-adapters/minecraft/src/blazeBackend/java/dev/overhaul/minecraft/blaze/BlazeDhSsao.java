@@ -19,12 +19,12 @@ import static org.lwjgl.vulkan.VK10.*;
 final class BlazeDhSsao implements AutoCloseable {
     private static final int OCCLUSION_BYTES = 128, APPLY_BYTES = 16;
     private static final int WRITE_RGBA = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    private static final NativeGraphicsPipeline.Color REPLACE = new NativeGraphicsPipeline.Color(false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
+    static final NativeGraphicsPipeline.Color REPLACE =new NativeGraphicsPipeline.Color(false, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
             VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, WRITE_RGBA);
     /** DH's {@code glBlendFuncSeparate(ZERO, SRC_ALPHA, ZERO, ONE)}. */
     private static final NativeGraphicsPipeline.Color DARKEN = new NativeGraphicsPipeline.Color(true, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_OP_ADD,
             VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, WRITE_RGBA);
-    private static final BlazeTerrainPass.Draw FULLSCREEN = (command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0);
+    static final BlazeTerrainPass.Draw FULLSCREEN =(command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0);
 
     private final BlazeRenderer owner;
     private final BlazeTerrainPass.Pipelines pipelines;
@@ -91,7 +91,8 @@ final class BlazeDhSsao implements AutoCloseable {
         return applyTarget;
     }
 
-    private static BlazeDrawState.Snapshot raster(BlazeTarget target, NativeGraphicsPipeline.Color color) {
+    /** A fullscreen pass over the whole target with no depth test. */
+    static BlazeDrawState.Snapshot raster(BlazeTarget target, NativeGraphicsPipeline.Color color) {
         return new BlazeDrawState.Snapshot(new NativeGraphicsPipeline.Depth(false, false, VK_COMPARE_OP_ALWAYS, 0, 0), color,
                 NativeGraphicsPipeline.ColorLogic.disabled(), VK_CULL_MODE_NONE, VK_POLYGON_MODE_FILL, 1, 0, 0, target.width(), target.height(), false, 0, 0, 0, 0);
     }

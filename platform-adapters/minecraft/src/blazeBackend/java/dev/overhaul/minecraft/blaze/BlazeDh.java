@@ -81,6 +81,7 @@ public final class BlazeDh implements AutoCloseable {
     private final BlazeRenderer owner;
     private final BlazeProgramCompiler.Program terrain, boxes, composite, vanillaFade;
     private final BlazeDhSsao ssao;
+    private final BlazeDhTaa taa;
     private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
     private BlazeTerrainPass pending;
     private TerrainSettings settings;
@@ -108,6 +109,7 @@ public final class BlazeDh implements AutoCloseable {
                     compiler.compile("dh_vanilla_fade.fsh", BlazeDhShaders.VANILLA_FADE_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2, "uMcDepth", 3), Map.of(), Map.of(), Map.of()));
             ssao = new BlazeDhSsao(owner, compiler, composite, this::pipeline);
+            taa = new BlazeDhTaa(owner, compiler, composite, this::pipeline);
         }
     }
 
@@ -158,6 +160,11 @@ public final class BlazeDh implements AutoCloseable {
     /** DH's ambient occlusion over the LODs drawn into its targets so far. */
     public void ssao(int colorTexture, int depthTexture, float[] projection, float[] inverse, float near, float far) {
         if (!owner.drawingNowhere()) ssao.render(colorTexture, depthTexture, projection, inverse, near, far);
+    }
+
+    /** DH's temporal anti-aliasing of the LOD colour, before the composite reads it. */
+    public void antiAlias(int colorTexture, int depthTexture, float[] projection, float[] modelView, double x, double y, double z) {
+        if (!owner.drawingNowhere()) taa.render(colorTexture, depthTexture, projection, modelView, x, y, z);
     }
 
     /** Fog is optional per frame in DH, so its absence is what the composite reads when the fog pass never ran. */
@@ -279,6 +286,7 @@ public final class BlazeDh implements AutoCloseable {
         if (pending != null) { pending.close(); pending = null; }
         if (fadeTarget != null) { fadeTarget.close(); fadeTarget = null; }
         ssao.close();
+        taa.close();
         for (NativeGraphicsPipeline pipeline : new ArrayList<>(pipelines.values())) pipeline.close();
         pipelines.clear();
     }
