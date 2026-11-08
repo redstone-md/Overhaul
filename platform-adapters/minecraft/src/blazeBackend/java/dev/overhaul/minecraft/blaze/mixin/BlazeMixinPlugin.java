@@ -55,6 +55,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ParticleQuads121Mixin", BlazeOptimization.PARTICLE_QUADS),
             Map.entry("ParticleBox121Mixin", BlazeOptimization.PARTICLE_CULLING),
             Map.entry("ParticleCulling121Mixin", BlazeOptimization.PARTICLE_CULLING),
+            Map.entry("ParticleBounds121Mixin", BlazeOptimization.PARTICLE_BOUNDS),
             Map.entry("LevelEntityClasses121Mixin", BlazeOptimization.ENTITY_CLASS_SCANS),
             Map.entry("EntityLight121Mixin", BlazeOptimization.ENTITY_LIGHT),
             Map.entry("EntityDispatcherLight121Mixin", BlazeOptimization.ENTITY_LIGHT),

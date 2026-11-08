@@ -3,10 +3,10 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import dev.overhaul.minecraft.blaze.BlazeParticleBounds;
 import dev.overhaul.minecraft.blaze.BlazeParticleBox;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
-import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,28 +15,30 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Every particle's render box was built as a fresh AABB only to be read once by the frustum. A particle whose class keeps
- * SingleQuadParticle's box answers the test itself, and the box handed on is a marker the frustum call turns back into
- * that answer. Particles with their own box keep the game's path.
+ * SingleQuadParticle's box answers the test itself, or from the copy {@link BlazeParticleBounds} took after the tick,
+ * and the box handed on is a marker the frustum call turns back into that answer. Particles with their own box keep the
+ * game's path.
  */
 @Mixin(ParticleEngine.class)
 abstract class ParticleCulling121Mixin {
     private static final String RENDER = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V";
     @Unique private static final AABB HIDDEN = new AABB(0, 0, 0, 0, 0, 0);
-    @Unique private static final ClassValue<Boolean> PLAIN_BOX = new ClassValue<>() {
-        @Override
-        protected Boolean computeValue(Class<?> type) {
-            try {
-                return type.getMethod("getRenderBoundingBox", float.class).getDeclaringClass() == SingleQuadParticle.class;
-            } catch (NoSuchMethodException missing) {
-                return false;
-            }
-        }
-    };
 
     @WrapOperation(method = RENDER, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/Particle;getRenderBoundingBox(F)Lnet/minecraft/world/phys/AABB;"), require = 0)
     private AABB overhaul$box(Particle particle, float partialTick, Operation<AABB> original, @Local(argsOnly = true) Frustum frustum) {
-        if (!(particle instanceof BlazeParticleBox box) || !PLAIN_BOX.get(particle.getClass())) return original.call(particle, partialTick);
         Frustum121Accessor view = (Frustum121Accessor) frustum;
+        if (BlazeParticleBounds.on) {
+            int at = BlazeParticleBounds.find(particle);
+            if (at >= 0) {
+                float[] boxes = BlazeParticleBounds.boxes();
+                float x = boxes[at] - (float) (view.overhaul$camX() - BlazeParticleBounds.anchorX());
+                float y = boxes[at + 1] - (float) (view.overhaul$camY() - BlazeParticleBounds.anchorY());
+                float z = boxes[at + 2] - (float) (view.overhaul$camZ() - BlazeParticleBounds.anchorZ());
+                float half = boxes[at + 3];
+                return view.overhaul$intersection().testAab(x - half, y - half, z - half, x + half, y + half, z + half) ? AABB.INFINITE : HIDDEN;
+            }
+        }
+        if (!(particle instanceof BlazeParticleBox box) || !BlazeParticleBounds.plainBox(particle)) return original.call(particle, partialTick);
         return box.overhaul$inView(view.overhaul$intersection(), view.overhaul$camX(), view.overhaul$camY(), view.overhaul$camZ(), partialTick) ? AABB.INFINITE : HIDDEN;
     }
 

@@ -52,6 +52,7 @@ public enum BlazeOptimization {
     SECTION_GRID("sectionGrid", "Section grid moves only the columns that wrapped around the camera"),
     PARTICLE_QUADS("particleQuads", "Particle quads written in one go instead of vertex by vertex"),
     PARTICLE_CULLING("particleCulling", "Particles keeping the plain quad box test it against the view in place instead of building an AABB per particle per frame"),
+    PARTICLE_BOUNDS("particleBounds", "Plain particle boxes copied into one packed array after each particle tick, so frames cull from the array and read only the particles they draw; needs particleCulling"),
     ENTITY_CLASS_SCANS("entityClassScans", "Client entity scans skipped for classes no loaded entity belongs to"),
     ENTITY_LIGHT("entityLight", "Light at each entity sampled once per tick instead of once per frame"),
     HUD_CACHE("hudCache", "HUD drawn at 30 Hz into its own image, composited every frame"),
