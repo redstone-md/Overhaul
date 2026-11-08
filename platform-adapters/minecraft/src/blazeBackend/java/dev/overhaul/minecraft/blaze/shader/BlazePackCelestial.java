@@ -88,7 +88,7 @@ final class BlazePackCelestial {
     }
 
     private void celestial(Matrix4fc camera, float path, float degrees, Vector3f result) {
-        matrix.set(camera).rotateY(radians(-90)).rotateZ(radians(path)).rotateX(radians(degrees)).transformPosition(0, 100, 0, result);
+        matrix.set(camera).rotateY(radians(-90)).rotateZ(radians(path)).rotateX(radians(degrees)).transformDirection(0, 100, 0, result);
     }
 
     private static void vector(UniformBlock values, String name, Vector3f vector) {
