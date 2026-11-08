@@ -77,6 +77,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ServerLevelEntityManager121Access", BlazeOptimization.SELECTOR_INDEX),
             Map.entry("PersistentEntityLookup121Access", BlazeOptimization.SELECTOR_INDEX),
             Map.entry("AttributeOperations121Mixin", BlazeOptimization.ATTRIBUTE_OPERATIONS),
+            Map.entry("ServerEventListeners121Mixin", BlazeOptimization.EVENT_LISTENERS),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),

@@ -97,6 +97,7 @@ public enum BlazeOptimization {
     SELECTOR_TAGS("selectorTags", "Entity selectors that require a tag no entity carries match nothing without scanning every entity"),
     SELECTOR_INDEX("selectorIndex", "Entity selectors that require a tag, a type or a type tag walk only the entities meeting it, in the level's own order, instead of every entity of the level"),
     ATTRIBUTE_OPERATIONS("attributeOperations", "New attribute instances copy one empty map of modifier operations instead of looking up the operation constants reflectively each time"),
+    EVENT_LISTENERS("eventListeners", "Event listeners read whether they take cancelled events from a plain object instead of their annotation proxy, which costs a reflective lookup on every cancellable event"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
