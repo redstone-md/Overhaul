@@ -115,6 +115,7 @@ public enum BlazeOptimization {
     BIOME_FIDDLE("biomeFiddle", "Each thread keeps the seeded jitter of the quart corners a block's biome lookup measures against, which depends only on the seed and the corner, so biome tinting stops working it out again for every neighbour"),
     CLIENT_PLAINS("clientPlains", "Each client level keeps the plains holder its biome lookup falls back to where it holds no chunk, instead of resolving the key through the registry for every neighbour biome tinting blends at the edge of loaded terrain"),
     TINT_BIOMES("tintBiomes", "Each thread keeps the blended biome of recently tinted positions until the client loads, drops or rewrites a chunk, since neighbouring tinted blocks average over squares that share all but one row"),
+    FLUID_TINT("fluidTint", "A fluid block checks its six faces before it asks for its biome-blended tint, since one with no face showing draws nothing and enclosed water is most of the water a section meshes"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
