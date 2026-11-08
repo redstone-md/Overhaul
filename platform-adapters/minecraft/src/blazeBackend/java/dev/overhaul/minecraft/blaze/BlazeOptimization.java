@@ -101,6 +101,7 @@ public enum BlazeOptimization {
     COMMAND_SOURCE_NAMES("commandSourceNames", "Command sources made for an entity by execute as or at take that entity's name and display name only when chat feedback asks for them, not once per target"),
     PUPFISH_SAVE("pupfishSave", "Alex's Mobs' pupfish chunk, once found or given up on, is saved with the world instead of being searched for again by noise sampling every session"),
     ARCHITECTURY_EVENT_INVOKE("architecturyEventInvoke", "Architectury events call listeners reflectively instead of building a method handle per call"),
+    ZETA_EVENT_INVOKE("zetaEventInvoke", "Zeta's forwarded events call a listener handle adapted once instead of converting its type on every post"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
