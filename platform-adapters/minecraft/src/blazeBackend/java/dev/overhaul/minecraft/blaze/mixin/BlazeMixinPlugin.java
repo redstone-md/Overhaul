@@ -88,6 +88,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("MekanismRadiationLookup121Mixin", BlazeOptimization.MEKANISM_RADIATION_LOOKUP),
             Map.entry("WitherPossessedIdle121Mixin", BlazeOptimization.WITHER_POSSESSED_IDLE),
             Map.entry("WitherPossessedState121Mixin", BlazeOptimization.WITHER_POSSESSED_IDLE),
+            Map.entry("PuzzlesConfigHolder121Mixin", BlazeOptimization.PUZZLES_CONFIG_LOOKUP),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
