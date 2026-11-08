@@ -11,8 +11,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 /**
- * A {@link RemoveBlockGoal} that finds its target as vanilla does skips the block walk when no loaded section around
- * the mob holds the block it is after, see {@link BlazeBlockSearch#mayFind}. The walk would have found nothing.
+ * A {@link RemoveBlockGoal} that finds its target as vanilla does, or an Alex's Mobs crow after crops, skips the block
+ * walk when no section around the mob holds a block it is after, see {@link BlazeBlockSearch#mayFind}. The walk would
+ * have found nothing.
  */
 @Mixin(MoveToBlockGoal.class)
 abstract class MoveToBlockSearch121Mixin {
@@ -25,10 +26,13 @@ abstract class MoveToBlockSearch121Mixin {
     private boolean overhaul$skipAbsentBlock(Operation<Boolean> original) {
         MoveToBlockGoal goal = (MoveToBlockGoal) (Object) this;
         // The walk offsets y by k - 1 for k from min(start, -range) up to range; past that it runs no step at all.
-        if (goal instanceof RemoveBlockGoal remove && verticalSearchStart <= verticalSearchRange && BlazeBlockSearch.vanilla(goal)
-                && !BlazeBlockSearch.mayFind(mob.level(), mob.blockPosition(), searchRange,
-                        1 - Math.min(verticalSearchStart, -verticalSearchRange), verticalSearchRange - 1,
+        if (verticalSearchStart > verticalSearchRange) return original.call();
+        int below = 1 - Math.min(verticalSearchStart, -verticalSearchRange), above = verticalSearchRange - 1;
+        if (goal instanceof RemoveBlockGoal remove && BlazeBlockSearch.vanilla(goal)
+                && !BlazeBlockSearch.mayFind(mob.level(), mob.blockPosition(), searchRange, below, above,
                         ((RemoveBlockGoalAccess121Mixin) remove).overhaul$blockToRemove())) return false;
+        if (BlazeBlockSearch.crowCrops(goal)
+                && !BlazeBlockSearch.mayFindCrowFood(mob.level(), mob.blockPosition(), searchRange, below, above)) return false;
         return original.call();
     }
 }

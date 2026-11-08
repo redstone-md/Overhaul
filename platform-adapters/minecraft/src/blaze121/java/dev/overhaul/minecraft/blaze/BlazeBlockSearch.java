@@ -3,6 +3,9 @@ package dev.overhaul.minecraft.blaze;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
 import net.minecraft.world.entity.ai.goal.RemoveBlockGoal;
 import net.minecraft.world.level.Level;
@@ -28,7 +31,30 @@ public final class BlazeBlockSearch {
         }
     };
 
+    private static final String CROW_CROPS = "com.github.alexthe666.alexsmobs.entity.ai.CrowAICircleCrops";
+    private static final TagKey<Block> CROW_FOOD =
+            TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath("alexsmobs", "crow_foodblocks"));
+    private static final ClassValue<Boolean> CROW = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            return type.getName().equals(CROW_CROPS) && declarer(type, "findNearestBlock") == MoveToBlockGoal.class;
+        }
+    };
+
     private BlazeBlockSearch() {}
+
+    /** Whether the goal is an Alex's Mobs crow circling crops, which takes any block in the crow food tag. */
+    public static boolean crowCrops(MoveToBlockGoal goal) {
+        return CROW.get(goal.getClass());
+    }
+
+    /**
+     * Whether a crow's walk in the box {@link #mayFind} describes may find crow food. The crow reads blocks through
+     * the level, which loads a missing chunk, so a chunk not loaded may hold food.
+     */
+    public static boolean mayFindCrowFood(Level level, BlockPos center, int range, int below, int above) {
+        return mayHold(level, center, range - 1, below, above, state -> state.is(CROW_FOOD), true);
+    }
 
     /** Whether the goal finds its target as {@code RemoveBlockGoal} does. */
     public static boolean vanilla(MoveToBlockGoal goal) {
