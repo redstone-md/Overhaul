@@ -31,6 +31,8 @@ public final class BlazeTextures implements AutoCloseable {
         public static Sampled storage(GpuBuffer buffer){return new Sampled(null,0,true,java.util.Objects.requireNonNull(buffer));}
         static Sampled texel(GpuBuffer buffer,long view){return new Sampled(null,0,false,java.util.Objects.requireNonNull(buffer),view);}
         int layout(){return general?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
+        /** Whether a pass must move this binding's image into the read layout; buffers and general images stay put. */
+        boolean readsImage(){return !general&&view!=null;}
     }
     /** One subresource of a texture that a framebuffer renders to. */
     record Attachment(GpuImage image,int mip,int layer){}

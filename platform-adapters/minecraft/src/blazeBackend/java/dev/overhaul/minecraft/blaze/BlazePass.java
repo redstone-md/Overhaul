@@ -96,7 +96,7 @@ final class BlazePass implements BlazeQueue.Operation {
         if(clip==null)return open;
         if(open!=null&&(open.target!=target||!samplesSettled())){vkCmdEndRenderPass(command);open=null;}
         for(BlazeTextures.Sampled sample:samples){
-            if(sample.general())continue;
+            if(!sample.readsImage())continue;
             GpuImageView view=sample.view();
             images.transition(command,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
@@ -117,7 +117,7 @@ final class BlazePass implements BlazeQueue.Operation {
         return this;
     }
     private boolean samplesSettled(){
-        for(BlazeTextures.Sampled sample:samples)if(!sample.general()&&!BlazeImageUse.settled(sample.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))return false;
+        for(BlazeTextures.Sampled sample:samples)if(sample.readsImage()&&!BlazeImageUse.settled(sample.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))return false;
         return true;
     }
     /** The scissor rectangle as x, y, width, height clipped to the target; null when nothing can be drawn. */
