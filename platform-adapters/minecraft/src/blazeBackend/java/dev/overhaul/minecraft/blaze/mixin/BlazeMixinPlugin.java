@@ -106,6 +106,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("FlowingFluidSourceEvent121Mixin", BlazeOptimization.FLUID_SOURCE_EVENT),
             Map.entry("PalettedContainerSinglePack121Mixin", BlazeOptimization.SINGLE_PACK),
             Map.entry("PalettedContainerPackRemap121Mixin", BlazeOptimization.PACK_REMAP),
+            Map.entry("EntityFireScan121Mixin", BlazeOptimization.FIRE_SCAN),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
