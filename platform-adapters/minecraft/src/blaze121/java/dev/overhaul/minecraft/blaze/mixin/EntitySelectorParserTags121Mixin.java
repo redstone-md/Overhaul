@@ -23,7 +23,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Notes the tag each {@code tag=name} option and the type tag each {@code type=#name} option requires, read back from
- * the text the option consumed, and the tag each {@code tag=!name} option excludes, and hands them to the selector.
+ * the text the option consumed, the tag each {@code tag=!name} option excludes and the objectives a {@code scores=}
+ * option requires a score in, and hands them to the selector.
  */
 @Mixin(EntitySelectorParser.class)
 abstract class EntitySelectorParserTags121Mixin {
@@ -32,6 +33,7 @@ abstract class EntitySelectorParserTags121Mixin {
     @Unique private List<String> overhaul$tags;
     @Unique private List<String> overhaul$excluded;
     @Unique private List<TagKey<EntityType<?>>> overhaul$typeTags;
+    @Unique private List<String> overhaul$scores;
 
     @WrapOperation(method = "parseOptions", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/commands/arguments/selector/options/EntitySelectorOptions;get(Lnet/minecraft/commands/arguments/selector/EntitySelectorParser;Ljava/lang/String;I)Lnet/minecraft/commands/arguments/selector/options/EntitySelectorOptions$Modifier;"),
@@ -48,8 +50,13 @@ abstract class EntitySelectorParserTags121Mixin {
         int start = reader.getCursor();
         handle.call(modifier, parser);
         boolean tag = "tag".equals(overhaul$option);
-        if (!tag && !"type".equals(overhaul$option)) return;
+        boolean scores = "scores".equals(overhaul$option);
+        if (!tag && !scores && !"type".equals(overhaul$option)) return;
         String value = reader.getString().substring(start, reader.getCursor()).trim();
+        if (scores) {
+            overhaul$noteScores(value);
+            return;
+        }
         if (tag && value.length() > 1 && value.charAt(0) == '!') {
             if (overhaul$excluded == null) overhaul$excluded = new ArrayList<>(4);
             overhaul$excluded.add(value.substring(1).trim());
@@ -67,6 +74,20 @@ abstract class EntitySelectorParserTags121Mixin {
         overhaul$typeTags.add(TagKey.create(Registries.ENTITY_TYPE, id));
     }
 
+    /** Notes each objective of {@code {name=range,...}}; the ranges hold neither commas nor equals signs. */
+    @Unique
+    private void overhaul$noteScores(String value) {
+        if (value.length() < 2 || value.charAt(0) != '{' || value.charAt(value.length() - 1) != '}') return;
+        for (String entry : value.substring(1, value.length() - 1).split(",")) {
+            int equals = entry.indexOf('=');
+            if (equals <= 0) continue;
+            String name = entry.substring(0, equals).trim();
+            if (name.isEmpty()) continue;
+            if (overhaul$scores == null) overhaul$scores = new ArrayList<>(2);
+            overhaul$scores.add(name);
+        }
+    }
+
     @Inject(method = "getSelector", at = @At("RETURN"))
     @SuppressWarnings("unchecked")
     private void overhaul$handTags(CallbackInfoReturnable<EntitySelector> info) {
@@ -74,5 +95,6 @@ abstract class EntitySelectorParserTags121Mixin {
         if (overhaul$tags != null) selector.overhaul$requiredTags(overhaul$tags.toArray(String[]::new));
         if (overhaul$excluded != null) selector.overhaul$excludedTags(overhaul$excluded.toArray(String[]::new));
         if (overhaul$typeTags != null) selector.overhaul$requiredTypeTags(overhaul$typeTags.toArray(TagKey[]::new));
+        if (overhaul$scores != null) selector.overhaul$requiredScores(overhaul$scores.toArray(String[]::new));
     }
 }

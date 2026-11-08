@@ -32,6 +32,7 @@ abstract class EntitySelectorTags121Mixin implements BlazeSelectorTags {
     @Unique private String[] overhaul$requiredTags;
     @Unique private String[] overhaul$excludedTags;
     @Unique private TagKey<EntityType<?>>[] overhaul$requiredTypeTags;
+    @Unique private String[] overhaul$requiredScores;
 
     @Override
     public void overhaul$requiredTags(String[] tags) {
@@ -61,6 +62,16 @@ abstract class EntitySelectorTags121Mixin implements BlazeSelectorTags {
     @Override
     public TagKey<EntityType<?>>[] overhaul$requiredTypeTags() {
         return overhaul$requiredTypeTags;
+    }
+
+    @Override
+    public void overhaul$requiredScores(String[] objectives) {
+        overhaul$requiredScores = objectives;
+    }
+
+    @Override
+    public String[] overhaul$requiredScores() {
+        return overhaul$requiredScores;
     }
 
     @Inject(method = "findEntities", at = @At(value = "INVOKE",

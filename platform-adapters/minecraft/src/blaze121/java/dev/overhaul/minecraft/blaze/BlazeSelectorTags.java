@@ -19,4 +19,9 @@ public interface BlazeSelectorTags {
 
     /** The required type tags, or null when it requires none. */
     TagKey<EntityType<?>>[] overhaul$requiredTypeTags();
+
+    void overhaul$requiredScores(String[] objectives);
+
+    /** The objectives its {@code scores=} option requires a score in, or null when it requires none. */
+    String[] overhaul$requiredScores();
 }
