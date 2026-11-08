@@ -122,6 +122,27 @@ public final class GpuAllocator implements AutoCloseable {
         }
     }
 
+    /** Per memory heap, the bytes in live allocations and the bytes VMA holds in blocks, in MiB. */
+    public String usage() {
+        requireOpen();
+        try (MemoryStack stack = VulkanStack.push()) {
+            VkPhysicalDeviceMemoryProperties properties = VkPhysicalDeviceMemoryProperties.malloc(stack);
+            vkGetPhysicalDeviceMemoryProperties(context.physicalDevice(), properties);
+            VmaBudget.Buffer budgets = VmaBudget.malloc(VK_MAX_MEMORY_HEAPS, stack);
+            vmaGetHeapBudgets(handle, budgets);
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i < properties.memoryHeapCount(); i++) {
+                VmaStatistics statistics = budgets.get(i).statistics();
+                boolean device = (properties.memoryHeaps(i).flags() & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0;
+                if (i > 0) out.append(", ");
+                out.append(device ? "device " : "host ").append(i).append(' ')
+                        .append(statistics.allocationBytes() >> 20).append('/').append(statistics.blockBytes() >> 20)
+                        .append(" in ").append(statistics.allocationCount());
+            }
+            return out.toString();
+        }
+    }
+
     ByteBuffer map(long allocation, int size) {
         requireOpen();
         try (MemoryStack stack = VulkanStack.push()) {

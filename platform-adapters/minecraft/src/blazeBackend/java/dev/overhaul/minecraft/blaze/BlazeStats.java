@@ -30,8 +30,9 @@ final class BlazeStats {
     static void viewCreated(){if(ENABLED)views++;}
     static void samplerCreated(){if(ENABLED)samplers++;}
     /** @param waitTotal the queue's fence wait so far; the window's share of it is the frame time the CPU sat idle */
-    static void present(long start,long waitTotal){
+    static void present(long start,long waitTotal,dev.overhaul.vulkan.GpuAllocator allocator){
         if(!ENABLED)return;
+        if(frames==WINDOW-1)LOGGER.info("Blaze memory by heap, live/held: {}",allocator.usage());
         long now=System.nanoTime();presentNanos+=now-start;
         if(windowStart==0){windowStart=now;waitStart=waitTotal;return;}
         if(++frames<WINDOW)return;
