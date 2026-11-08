@@ -1,11 +1,12 @@
 package com.seibel.distanthorizons.core.render.renderer;
 
+import com.seibel.distanthorizons.api.interfaces.render.IDhApiRenderableBoxGroup;
 import com.seibel.distanthorizons.api.methods.events.sharedParameterObjects.DhApiRenderParam;
 import com.seibel.distanthorizons.api.objects.math.DhApiVec3d;
 import com.seibel.distanthorizons.api.objects.render.DhApiRenderableBoxGroupShading;
 import com.seibel.distanthorizons.core.wrapperInterfaces.render.objects.IDhGenericObjectVertexBufferContainer;
 
-public class RenderableBoxGroup {
+public class RenderableBoxGroup implements IDhApiRenderableBoxGroup {
     public boolean active, ssaoEnabled;
     public DhApiRenderableBoxGroupShading shading;
     public IDhGenericObjectVertexBufferContainer vertexBufferContainer;

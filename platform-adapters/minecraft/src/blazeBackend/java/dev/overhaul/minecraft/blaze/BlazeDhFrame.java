@@ -2,13 +2,20 @@ package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.seibel.distanthorizons.api.enums.rendering.EDhApiHeightFogMixMode;
+import com.seibel.distanthorizons.api.methods.events.abstractEvents.DhApiBeforeBufferRenderEvent;
+import com.seibel.distanthorizons.api.methods.events.abstractEvents.DhApiBeforeGenericObjectRenderEvent;
+import com.seibel.distanthorizons.api.methods.events.abstractEvents.DhApiBeforeGenericRenderCleanupEvent;
+import com.seibel.distanthorizons.api.methods.events.abstractEvents.DhApiBeforeGenericRenderSetupEvent;
+import com.seibel.distanthorizons.api.methods.events.abstractEvents.DhApiBeforeRenderPassEvent;
 import com.seibel.distanthorizons.api.methods.events.sharedParameterObjects.DhApiFogRenderParam;
 import com.seibel.distanthorizons.api.objects.math.DhApiMat4f;
 import com.seibel.distanthorizons.api.objects.math.DhApiVec3d;
+import com.seibel.distanthorizons.api.objects.math.DhApiVec3f;
 import com.seibel.distanthorizons.api.objects.render.DhApiRenderableBoxGroupShading;
 import com.seibel.distanthorizons.common.render.openGl.generic.GlGenericObjectVertexContainer;
 import com.seibel.distanthorizons.common.render.openGl.glObject.buffer.GLVertexBuffer;
 import com.seibel.distanthorizons.common.render.openGl.glObject.buffer.GlQuadIndexBuffer;
+import com.seibel.distanthorizons.coreapi.DependencyInjection.ApiEventInjector;
 import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Debugging;
 import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Graphics.Experimental;
 import com.seibel.distanthorizons.core.config.Config.Client.Advanced.Graphics.NoiseTexture;
@@ -44,6 +51,7 @@ public final class BlazeDhFrame {
             GlStateManager._blendFuncSeparate(770, 771, 1, 771);
         }
         GlStateManager._colorMask(true, true, true, true);
+        ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeRenderPassEvent.class, params.apiCopy);
         if (containers == null) return;
         if (packDraws(renderer)) {
             drawThroughPack(renderer, params, opaque, containers);
@@ -57,6 +65,7 @@ public final class BlazeDhFrame {
             float x = (float) (container.minCornerBlockPos.getX() - params.exactCameraPosition.x);
             float y = (float) (container.minCornerBlockPos.getY() - params.exactCameraPosition.y);
             float z = (float) (container.minCornerBlockPos.getZ() - params.exactCameraPosition.z);
+            beforeBuffer(params, x, y, z);
             for (IVertexBufferWrapper wrapper : opaque ? container.vboOpaqueWrappers : container.vboTransparentWrappers) {
                 if (wrapper != null) draw(dh, (GLVertexBuffer) wrapper, x, y, z);
             }
@@ -87,6 +96,7 @@ public final class BlazeDhFrame {
                 float x = (float) (container.minCornerBlockPos.getX() - params.exactCameraPosition.x);
                 float y = (float) (container.minCornerBlockPos.getY() - params.exactCameraPosition.y);
                 float z = (float) (container.minCornerBlockPos.getZ() - params.exactCameraPosition.z);
+                beforeBuffer(params, x, y, z);
                 for (IVertexBufferWrapper wrapper : opaque ? container.vboOpaqueWrappers : container.vboTransparentWrappers) {
                     if (wrapper != null) add(renderer, buffers, batch, (GLVertexBuffer) wrapper, x, y, z);
                 }
@@ -131,6 +141,25 @@ public final class BlazeDhFrame {
     }
 
     private static final boolean SHARED_PAGES = BlazeOptimization.DH_SHARED_PAGES.on();
+
+    /** DH's API listeners still hear every pass and buffer the native paths draw; DH itself ignores their answer here. */
+    private static final DhApiVec3f MODEL_POS = new DhApiVec3f();
+    private static final DhApiBeforeBufferRenderEvent.EventParam BUFFER_EVENT = new DhApiBeforeBufferRenderEvent.EventParam();
+    private static final DhApiBeforeGenericObjectRenderEvent.EventParam OBJECT_EVENT = new DhApiBeforeGenericObjectRenderEvent.EventParam();
+
+    private static void beforeBuffer(RenderParams params, float x, float y, float z) {
+        MODEL_POS.x = x;
+        MODEL_POS.y = y;
+        MODEL_POS.z = z;
+        BUFFER_EVENT.update(params, MODEL_POS);
+        ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeBufferRenderEvent.class, BUFFER_EVENT);
+    }
+
+    /** A listener may cancel one generic group, which DH then skips without its post-render hook. */
+    private static boolean objectCancelled(RenderParams params, RenderableBoxGroup group) {
+        OBJECT_EVENT.update(params, group);
+        return ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeGenericObjectRenderEvent.class, OBJECT_EVENT);
+    }
 
     private static long pair(int high, int low) {
         return (long) high << 32 | low & 0xFFFFFFFFL;
@@ -198,11 +227,12 @@ public final class BlazeDhFrame {
         GlStateManager._enableBlend();
         GlStateManager._blendEquation(32774);
         GlStateManager._blendFuncSeparate(770, 771, 1, 771);
+        ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeGenericRenderSetupEvent.class, params.apiCopy);
         List<BlazeDh.BoxGroup> draws = new ArrayList<>();
         for (RenderableBoxGroup group : groups) {
             if (group == null || group.ssaoEnabled != ssao) continue;
             group.preRender(params);
-            if (!group.active) continue;
+            if (!group.active || objectCancelled(params, group)) continue;
             group.tryUpdateInstancedDataAsync();
             if (group.vertexBufferContainer.getState() != EState.RENDER) continue;
             GlGenericObjectVertexContainer boxes = (GlGenericObjectVertexContainer) group.vertexBufferContainer;
@@ -210,6 +240,7 @@ public final class BlazeDhFrame {
             group.postRender(params);
         }
         renderer.dh().drawBoxes(columns(params.dhMvmProjMatrix), vertices, indices, draws);
+        ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeGenericRenderCleanupEvent.class, params.apiCopy);
     }
 
     private static BlazeDh.BoxGroup boxGroup(RenderableBoxGroup group, GlGenericObjectVertexContainer boxes, DhVec3d camera) {
