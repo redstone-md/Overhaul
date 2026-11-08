@@ -40,7 +40,7 @@ public final class ImageCommand implements AutoCloseable {
     }
 
     public static ImageCommand copyBufferToImage(VulkanContext context,GpuBuffer source,long offset,int pitch,GpuImage target,ImageRegion region) {
-        validateImage(context,target,region,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        validateImage(context,target,region,VK_IMAGE_USAGE_TRANSFER_DST_BIT); requireSingleSampled(target);
         validateBuffer(context,source,offset,region.byteSize(target,pitch),VK_BUFFER_USAGE_TRANSFER_SRC_BIT,target);
         return new ImageCommand(context,(operation,command)-> {
             int before=target.layout(region.mipLevel(),region.arrayLayer());
@@ -56,7 +56,7 @@ public final class ImageCommand implements AutoCloseable {
 
     /** One transition per touched subresource and one barrier, however many regions the list holds. */
     public static ImageCommand copyBufferToImage(VulkanContext context,ImageCopies copies) {
-        GpuImage target=copies.target();
+        GpuImage target=copies.target(); requireSingleSampled(target);
         return new ImageCommand(context,(operation,command)-> {
             List<ImageRegion> touched=copies.subresources();
             int[] before=new int[touched.size()];
@@ -83,7 +83,7 @@ public final class ImageCommand implements AutoCloseable {
     }
 
     public static ImageCommand copyImageToBuffer(VulkanContext context,GpuImage source,ImageRegion region,GpuBuffer target,long offset,int pitch) {
-        validateImage(context,source,region,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        validateImage(context,source,region,VK_IMAGE_USAGE_TRANSFER_SRC_BIT); requireSingleSampled(source);
         validateBuffer(context,target,offset,region.byteSize(source,pitch),VK_BUFFER_USAGE_TRANSFER_DST_BIT,source);
         return new ImageCommand(context,(operation,command)-> {
             requireDefined(source,region);
@@ -106,6 +106,10 @@ public final class ImageCommand implements AutoCloseable {
         validateImage(context,source,from,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         validateImage(context,target,to,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         if (source.format()!=target.format() || from.width()!=to.width() || from.height()!=to.height()) throw new IllegalArgumentException("Image copy formats/extents differ");
+        if (source.samples()!=target.samples()) {
+            requireResolve(source,target);
+            return new ImageCommand(context,(operation,command)->operation.resolve(command,source,from,target,to));
+        }
         if (source==target && from.mipLevel()==to.mipLevel() && from.arrayLayer()==to.arrayLayer()) {
             GpuImage intermediate=source.allocator().createImage(source.format(),from.width(),from.height(),1,1,
                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -136,6 +140,27 @@ public final class ImageCommand implements AutoCloseable {
         transition(target,to,command,finish(target,targetBefore));
     }
 
+    /** Averages the samples of a multisampled colour image into a single-sampled one of the same format. */
+    private void resolve(VkCommandBuffer command,GpuImage source,ImageRegion from,GpuImage target,ImageRegion to) {
+        requireDefined(source,from);
+        int sourceBefore=source.layout(from.mipLevel(),from.arrayLayer()),targetBefore=target.layout(to.mipLevel(),to.arrayLayer());
+        transition(source,from,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        transition(target,to,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        try (MemoryStack stack=VulkanStack.push()) {
+            VkImageResolve.Buffer resolve=VkImageResolve.calloc(1,stack);
+            resolve.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(from.mipLevel()).baseArrayLayer(from.arrayLayer()).layerCount(1);
+            resolve.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(to.mipLevel()).baseArrayLayer(to.arrayLayer()).layerCount(1);
+            resolve.srcOffset().set(from.x(),from.y(),0); resolve.dstOffset().set(to.x(),to.y(),0); resolve.extent().set(from.width(),from.height(),1);
+            vkCmdResolveImage(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,resolve);
+        }
+        transition(source,from,command,sourceBefore);
+        transition(target,to,command,finish(target,targetBefore));
+    }
+    private static void requireResolve(GpuImage source,GpuImage target) {
+        if (target.samples()!=VK_SAMPLE_COUNT_1_BIT || source.format().aspectMask()!=VK_IMAGE_ASPECT_COLOR_BIT)
+            throw new IllegalArgumentException("Only a multisampled colour image resolves, and only into a single-sampled one");
+    }
+
     /** Scales or flips between two base levels; each rectangle is {x0,y0,x1,y1} and must lie inside its image. */
     public static ImageCommand blit(VulkanContext context,GpuImage source,int[] from,GpuImage target,int[] to,int filter) {
         return blit(context,source,ImageRegion.whole(source,0,0),from,target,ImageRegion.whole(target,0,0),to,filter);
@@ -149,28 +174,45 @@ public final class ImageCommand implements AutoCloseable {
         if (source.format().isDepth()&&(source.format()!=target.format()||filter!=VK_FILTER_NEAREST)) throw new IllegalArgumentException("Depth blits require one format and nearest filtering");
         int sourceMip=sourceLevel.mipLevel(),sourceLayer=sourceLevel.arrayLayer(),targetMip=targetLevel.mipLevel(),targetLayer=targetLevel.arrayLayer();
         requireRectangle(from,source.width(sourceMip),source.height(sourceMip)); requireRectangle(to,target.width(targetMip),target.height(targetMip));
-        return new ImageCommand(context,(operation,command)-> {
-            requireDefined(source,sourceLevel);
-            int sourceBefore=source.layout(sourceMip,sourceLayer),targetBefore=target.layout(targetMip,targetLayer);
-            operation.transition(source,sourceLevel,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            operation.transition(target,targetLevel,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            try (MemoryStack stack=VulkanStack.push()) {
-                VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
-                blit.srcSubresource().aspectMask(source.format().aspectMask()).mipLevel(sourceMip).baseArrayLayer(sourceLayer).layerCount(1);
-                blit.dstSubresource().aspectMask(target.format().aspectMask()).mipLevel(targetMip).baseArrayLayer(targetLayer).layerCount(1);
-                blit.srcOffsets(0).set(from[0],from[1],0); blit.srcOffsets(1).set(from[2],from[3],1);
-                blit.dstOffsets(0).set(to[0],to[1],0); blit.dstOffsets(1).set(to[2],to[3],1);
-                vkCmdBlitImage(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,blit,filter);
-            }
-            operation.transition(source,sourceLevel,command,sourceBefore);
-            operation.transition(target,targetLevel,command,finish(target,targetBefore));
-        });
+        if (target.samples()!=VK_SAMPLE_COUNT_1_BIT) throw new IllegalArgumentException("Image blits cannot write a multisampled image");
+        if (source.samples()!=VK_SAMPLE_COUNT_1_BIT) {
+            // Vulkan blits only read single-sampled images, so average the samples into a scratch level first.
+            requireResolve(source,target);
+            GpuImage intermediate=source.allocator().createImage(source.format(),sourceLevel.width(),sourceLevel.height(),1,1,
+                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            try {
+                ImageRegion whole=ImageRegion.whole(intermediate,0,0);
+                return new ImageCommand(context,(operation,command)-> {
+                    operation.resolve(command,source,sourceLevel,intermediate,whole);
+                    operation.blit(command,intermediate,whole,from,target,targetLevel,to,filter);
+                }).own(intermediate,whole.byteSize(intermediate,0));
+            } catch (RuntimeException|Error failure) { intermediate.close(); throw failure; }
+        }
+        return new ImageCommand(context,(operation,command)->operation.blit(command,source,sourceLevel,from,target,targetLevel,to,filter));
+    }
+    private void blit(VkCommandBuffer command,GpuImage source,ImageRegion sourceLevel,int[] from,GpuImage target,ImageRegion targetLevel,int[] to,int filter) {
+        requireDefined(source,sourceLevel);
+        int sourceMip=sourceLevel.mipLevel(),sourceLayer=sourceLevel.arrayLayer(),targetMip=targetLevel.mipLevel(),targetLayer=targetLevel.arrayLayer();
+        int sourceBefore=source.layout(sourceMip,sourceLayer),targetBefore=target.layout(targetMip,targetLayer);
+        transition(source,sourceLevel,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        transition(target,targetLevel,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        try (MemoryStack stack=VulkanStack.push()) {
+            VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
+            blit.srcSubresource().aspectMask(source.format().aspectMask()).mipLevel(sourceMip).baseArrayLayer(sourceLayer).layerCount(1);
+            blit.dstSubresource().aspectMask(target.format().aspectMask()).mipLevel(targetMip).baseArrayLayer(targetLayer).layerCount(1);
+            blit.srcOffsets(0).set(from[0],from[1],0); blit.srcOffsets(1).set(from[2],from[3],1);
+            blit.dstOffsets(0).set(to[0],to[1],0); blit.dstOffsets(1).set(to[2],to[3],1);
+            vkCmdBlitImage(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,blit,filter);
+        }
+        transition(source,sourceLevel,command,sourceBefore);
+        transition(target,targetLevel,command,finish(target,targetBefore));
     }
     /** Fills every level above {@code base} by downsampling the one before it, like glGenerateMipmap. */
     public static ImageCommand mipmaps(VulkanContext context,GpuImage image,int base,int layer) {
         ImageRegion first=ImageRegion.whole(image,base,layer);
         validateImage(context,image,first,VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         if (image.format().isDepth()) throw new IllegalArgumentException("Mipmaps require a colour image");
+        requireSingleSampled(image);
         return new ImageCommand(context,(operation,command)-> {
             requireDefined(image,first);
             int finished=finish(image,image.layout(base,layer));
@@ -280,6 +322,9 @@ public final class ImageCommand implements AutoCloseable {
     static void validateImage(VulkanContext context,GpuImage image,ImageRegion region,int usage) {
         requireContext(context,image); region.validate(image); image.requireUsage(usage);
         if (Integer.bitCount(image.format().aspectMask())!=1) throw new IllegalArgumentException("Combined depth/stencil transfers require an explicit single aspect");
+    }
+    private static void requireSingleSampled(GpuImage image) {
+        if (image.samples()!=VK_SAMPLE_COUNT_1_BIT) throw new IllegalArgumentException("Buffer transfers and mipmaps need a single-sampled image; resolve it first");
     }
     private static void requireContext(VulkanContext context,GpuImage image) {
         if (image.context()!=context) throw new IllegalArgumentException("Image belongs to another Vulkan context");

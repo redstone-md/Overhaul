@@ -46,7 +46,12 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
     private long pipeline,layout,cache;
 
     public NativeGraphicsPipeline(VulkanContext context,long renderPass,Description description) {
+        this(context,renderPass,description,VK_SAMPLE_COUNT_1_BIT);
+    }
+    /** @param samples the {@code VK_SAMPLE_COUNT_*_BIT} value every attachment of the render pass holds */
+    public NativeGraphicsPipeline(VulkanContext context,long renderPass,Description description,int samples) {
         this.context=context;context.device();
+        if(Integer.bitCount(samples)!=1)throw new IllegalArgumentException("Invalid sample count");
         validateFeatures(description);
         long[] modules=new long[description.shaders().size()];
         try(MemoryStack stack=VulkanStack.push()) {
@@ -84,7 +89,7 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
             VkPipelineRasterizationStateCreateInfo raster=VkPipelineRasterizationStateCreateInfo.calloc(stack).sType$Default()
                     .polygonMode(description.polygonMode()).cullMode(description.cullMode()).frontFace(description.frontFace()).lineWidth(1)
                     .depthBiasEnable(value.constantBias()!=0||value.slopeBias()!=0).depthBiasConstantFactor(value.constantBias()).depthBiasSlopeFactor(value.slopeBias());
-            VkPipelineMultisampleStateCreateInfo samples=VkPipelineMultisampleStateCreateInfo.calloc(stack).sType$Default().rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
+            VkPipelineMultisampleStateCreateInfo multisample=VkPipelineMultisampleStateCreateInfo.calloc(stack).sType$Default().rasterizationSamples(samples);
             VkPipelineDepthStencilStateCreateInfo depth=VkPipelineDepthStencilStateCreateInfo.calloc(stack).sType$Default()
                     .depthTestEnable(value.test()).depthWriteEnable(value.write()).depthCompareOp(value.compare()).stencilTestEnable(false);
             VkPipelineColorBlendAttachmentState.Buffer colors=VkPipelineColorBlendAttachmentState.calloc(description.colors().size(),stack);
@@ -97,7 +102,7 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
                     .logicOpEnable(description.colorLogic().enabled()).logicOp(description.colorLogic().operation());
             VkGraphicsPipelineCreateInfo.Buffer info=VkGraphicsPipelineCreateInfo.calloc(1,stack).sType$Default().pStages(stages)
                     .pVertexInputState(input).pInputAssemblyState(assembly).pViewportState(viewport).pRasterizationState(raster)
-                    .pMultisampleState(samples).pDepthStencilState(depth).pColorBlendState(blending).layout(layout).renderPass(renderPass).subpass(0);
+                    .pMultisampleState(multisample).pDepthStencilState(depth).pColorBlendState(blending).layout(layout).renderPass(renderPass).subpass(0);
             if(description.dynamicViewport())info.pDynamicState(VkPipelineDynamicStateCreateInfo.calloc(stack).sType$Default().pDynamicStates(stack.ints(VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR)));
             check(vkCreateGraphicsPipelines(context.device(),cache,info,null,pointer),"vkCreateGraphicsPipelines");pipeline=pointer.get(0);
         }catch(RuntimeException|Error failure){close();throw failure;}

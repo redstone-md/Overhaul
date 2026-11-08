@@ -9,7 +9,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class GpuImage implements AutoCloseable {
     private final GpuAllocator allocator;
     private final ImageFormat format;
-    private final int width,height,depth,mips,layers,usage,flags;
+    private final int width,height,depth,mips,layers,usage,flags,samples;
     private final boolean volume;
     private final long allocation;
     private long handle;
@@ -19,8 +19,8 @@ public final class GpuImage implements AutoCloseable {
     private static volatile boolean mergeBarriers=true;
     /** Off, every subresource of a transition records its own pipeline barrier call, as before barriers merged. */
     public static void mergeBarriers(boolean merge){mergeBarriers=merge;}
-    GpuImage(GpuAllocator allocator,long handle,long allocation,ImageFormat format,int width,int height,int depth,boolean volume,int mips,int layers,int usage,int flags){
-        this.allocator=allocator;this.handle=handle;this.allocation=allocation;this.format=format;this.depth=depth;this.volume=volume;
+    GpuImage(GpuAllocator allocator,long handle,long allocation,ImageFormat format,int width,int height,int depth,boolean volume,int mips,int layers,int usage,int flags,int samples){
+        this.allocator=allocator;this.handle=handle;this.allocation=allocation;this.format=format;this.depth=depth;this.volume=volume;this.samples=samples;
         this.width=width;this.height=height;this.mips=mips;this.layers=layers;this.usage=usage;this.flags=flags;layouts=new int[Math.multiplyExact(mips,layers)];
     }
     public VulkanContext context(){requireOpen();return allocator.context();}
@@ -32,6 +32,8 @@ public final class GpuImage implements AutoCloseable {
     public int depth(){return depth;}
     public boolean volume(){return volume;}
     public int mipLevels(){return mips;}public int layers(){return layers;}public int usage(){return usage;}
+    /** Samples per pixel, a {@code VK_SAMPLE_COUNT_*_BIT} value; 1 for every image that is not a multisampled attachment. */
+    public int samples(){return samples;}
     public int layout(int mip,int layer){requireOpen();checkSubresource(mip,layer);return layouts[layer*mips+mip];}
     public GpuImageView view(int baseMip,int mipCount,int baseLayer,int layerCount){
         return view(baseMip,mipCount,baseLayer,layerCount,volume()?VK_IMAGE_VIEW_TYPE_3D:layerCount==1?VK_IMAGE_VIEW_TYPE_2D:VK_IMAGE_VIEW_TYPE_2D_ARRAY,format.aspectMask());
