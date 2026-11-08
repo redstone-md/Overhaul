@@ -50,7 +50,7 @@ final class PackStorageImages {
         String format = storage != null && storage.format() != null ? storage.format() : formats.get(name);
         if (format == null) throw new UnsupportedShaderException("Storage image "+name+" has no format: declare image."+name+" or layout(format)");
         String qualifiers = storage == null || storage.qualifiers().isEmpty() ? "" : storage.qualifiers()+" ";
-        return "layout(set=0,binding="+binding+","+format+") "+qualifiers+"uniform "+type+" overhaulSampler_"+name+";\n";
+        return "layout(set=0,binding="+binding+","+format+") "+qualifiers+"uniform "+type+" "+PackProgramTranslator.samplerName(name)+";\n";
     }
 
     static Map<String,Storage> empty() { return new LinkedHashMap<>(); }

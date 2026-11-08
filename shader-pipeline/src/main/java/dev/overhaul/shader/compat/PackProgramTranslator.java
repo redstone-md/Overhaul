@@ -267,6 +267,11 @@ public final class PackProgramTranslator {
     }
     private static int align(int value, int alignment) { return (value+alignment-1)/alignment*alignment; }
 
+    /** The name a sampler is declared under; a leading underscore would make "__", which GLSL reserves. */
+    static String samplerName(String sampler) {
+        return (sampler.startsWith("_") ? "overhaulSamplerU" : "overhaulSampler_") + sampler;
+    }
+
     private String rewrite(String source, boolean vertex, Map<String,String> uniforms,
                                   Map<String,String> samplers, Map<String,String> attributes,
                                   Map<String,String> varyings, Map<String,Integer> locations, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage, Set<Integer> buffers) {
@@ -274,7 +279,7 @@ public final class PackProgramTranslator {
         body = PackStorageBuffers.place(body,buffers,bindings.samplers());
         // Legacy packs commonly name a sampler "texture", now also a GLSL function.
         for (String sampler : samplers.keySet()) {
-            body = body.replaceAll("\\b" + Pattern.quote(sampler) + "\\b", "overhaulSampler_" + sampler);
+            body = body.replaceAll("\\b" + Pattern.quote(sampler) + "\\b", Matcher.quoteReplacement(samplerName(sampler)));
         }
         for(var function:TEXTURE_FUNCTIONS.entrySet())body=body.replaceAll("\\b"+function.getKey()+"\\b",function.getValue());
         boolean shadow2D=Pattern.compile("\\bshadow2D\\s*\\(").matcher(body).find(),shadowProj=Pattern.compile("\\bshadow2DProj\\s*\\(").matcher(body).find();
@@ -294,7 +299,7 @@ public final class PackProgramTranslator {
             String type = samplers.get(sampler);
             int binding = bindings.samplers().get(sampler);
             if (PackStorageImages.IMAGE_TYPES.contains(type)) prefix.append(PackStorageImages.declaration(sampler,type,binding,storage.get(sampler),imageFormats));
-            else prefix.append("layout(set=0,binding=").append(binding).append(") uniform ").append(type).append(" overhaulSampler_").append(sampler).append(";\n");
+            else prefix.append("layout(set=0,binding=").append(binding).append(") uniform ").append(type).append(' ').append(samplerName(sampler)).append(";\n");
         }
         if (vertex) for (Map.Entry<String,String> attribute : attributes.entrySet()) prefix.append("layout(location=")
                 .append(bindings.attributes().get(attribute.getKey())).append(") in ").append(attribute.getValue())
