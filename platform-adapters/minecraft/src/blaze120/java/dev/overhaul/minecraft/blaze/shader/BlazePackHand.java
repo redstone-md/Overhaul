@@ -30,6 +30,11 @@ public final class BlazePackHand {
         return was;
     }
 
+    /** A hand the pack drew in a frame whose hand pass never ran must not hide the next frame's hand. */
+    public static void frameStarts() {
+        drawn = false;
+    }
+
     static boolean wanted(Minecraft minecraft, GameRenderer game) {
         boolean sleeping = minecraft.getCameraEntity() instanceof LivingEntity living && living.isSleeping();
         return ((GameRendererHand120Access) game).overhaul$rendersHand() && !game.isPanoramicMode()
