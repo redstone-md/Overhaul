@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import net.minecraft.world.entity.Entity;
 
 /**
  * How many entities that are not removed carry each command tag. Datapack tick functions run {@code @e[tag=...]}
@@ -33,9 +34,30 @@ public final class BlazeEntityTags {
         if (count != null) count.decrementAndGet();
     }
 
-    /** An entity's tag set that keeps the counts while its entity is not removed. */
+    /** An entity's tag set that keeps the counts while its entity is not removed, and its lookup's tag index while it is in one. */
     public static final class TagSet extends HashSet<String> {
+        private final Entity owner;
         private boolean live = true;
+        private BlazeLookupIndex index;
+        private long entry;
+
+        public TagSet(Entity owner) {
+            this.owner = owner;
+        }
+
+        /** The lookup index the entity is in, and when it entered; null and 0 once it left. */
+        void indexed(BlazeLookupIndex index, long entry) {
+            this.index = index;
+            this.entry = entry;
+        }
+
+        BlazeLookupIndex index() {
+            return index;
+        }
+
+        long entry() {
+            return entry;
+        }
 
         /** Called as the entity is removed or brought back. */
         public void live(boolean live) {
@@ -51,6 +73,7 @@ public final class BlazeEntityTags {
         public boolean add(String tag) {
             if (!super.add(tag)) return false;
             if (live) counted(tag);
+            if (index != null) index.tagged(tag, owner);
             return true;
         }
 
@@ -58,12 +81,16 @@ public final class BlazeEntityTags {
         public boolean remove(Object tag) {
             if (!super.remove(tag)) return false;
             if (live) uncounted((String) tag);
+            if (index != null) index.untagged((String) tag, owner);
             return true;
         }
 
         @Override
         public void clear() {
-            if (live) for (String tag : this) uncounted(tag);
+            for (String tag : this) {
+                if (live) uncounted(tag);
+                if (index != null) index.untagged(tag, owner);
+            }
             super.clear();
         }
 
@@ -106,6 +133,7 @@ public final class BlazeEntityTags {
                 public void remove() {
                     tags.remove();
                     if (live) uncounted(last);
+                    if (index != null) index.untagged(last, owner);
                 }
             };
         }

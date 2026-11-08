@@ -20,7 +20,7 @@ abstract class EntityTagCounts121Mixin {
 
     @WrapOperation(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/google/common/collect/Sets;newHashSet()Ljava/util/HashSet;"), require = 1)
     private HashSet<?> overhaul$countedTags(Operation<HashSet<?>> create) {
-        return new BlazeEntityTags.TagSet();
+        return new BlazeEntityTags.TagSet((Entity) (Object) this);
     }
 
     @Inject(method = "setRemoved", at = @At("TAIL"))

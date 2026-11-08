@@ -72,9 +72,10 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("LevelHeight121Mixin", BlazeOptimization.LEVEL_HEIGHT),
             Map.entry("EntityBlockCollisions121Mixin", BlazeOptimization.ENTITY_BLOCK_COLLISIONS),
             Map.entry("EntitySupportingBlock121Mixin", BlazeOptimization.SUPPORTING_BLOCK),
-            Map.entry("EntityTagCounts121Mixin", BlazeOptimization.SELECTOR_TAGS),
-            Map.entry("EntitySelectorParserTags121Mixin", BlazeOptimization.SELECTOR_TAGS),
-            Map.entry("EntitySelectorTags121Mixin", BlazeOptimization.SELECTOR_TAGS),
+            Map.entry("EntitySelectorIndex121Mixin", BlazeOptimization.SELECTOR_INDEX),
+            Map.entry("EntityLookupIndex121Mixin", BlazeOptimization.SELECTOR_INDEX),
+            Map.entry("ServerLevelEntityManager121Access", BlazeOptimization.SELECTOR_INDEX),
+            Map.entry("PersistentEntityLookup121Access", BlazeOptimization.SELECTOR_INDEX),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
@@ -83,7 +84,10 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
             "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS,
                     BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS, BlazeOptimization.MOD_ENTITY_WALKS),
-            "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS));
+            "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS),
+            "EntityTagCounts121Mixin", List.of(BlazeOptimization.SELECTOR_TAGS, BlazeOptimization.SELECTOR_INDEX),
+            "EntitySelectorParserTags121Mixin", List.of(BlazeOptimization.SELECTOR_TAGS, BlazeOptimization.SELECTOR_INDEX),
+            "EntitySelectorTags121Mixin", List.of(BlazeOptimization.SELECTOR_TAGS, BlazeOptimization.SELECTOR_INDEX));
 
     @Override public void onLoad(String mixinPackage) {
         BlazeOptimization.describeInFile();

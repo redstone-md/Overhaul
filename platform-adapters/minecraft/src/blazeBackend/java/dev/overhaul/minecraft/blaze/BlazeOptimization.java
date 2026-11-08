@@ -95,6 +95,7 @@ public enum BlazeOptimization {
     SUPPORTING_BLOCK("supportingBlock", "Grounded entities find the block they stand on without vanilla's collision iterator"),
     BLOCK_SEARCH("blockSearch", "Mobs out to break one kind of block, like zombies after turtle eggs, skip their block-by-block search when no loaded section around them holds that block"),
     SELECTOR_TAGS("selectorTags", "Entity selectors that require a tag no entity carries match nothing without scanning every entity"),
+    SELECTOR_INDEX("selectorIndex", "Entity selectors that require a tag, a type or a type tag walk only the entities meeting it, in the level's own order, instead of every entity of the level"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
