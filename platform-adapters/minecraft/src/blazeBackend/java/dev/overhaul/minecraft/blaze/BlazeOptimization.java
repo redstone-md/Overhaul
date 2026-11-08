@@ -111,6 +111,7 @@ public enum BlazeOptimization {
     FLUID_STATES("fluidStates", "A spreading fluid keeps the source and flowing states it already looked up, instead of walking its property table at every neighbour it checks"),
     SELECTOR_SCORES("selectorScores", "Entity selectors that require a score walk only the holders of that objective instead of every entity of the level; needs selectorIndex"),
     TACZ_UNARMED("taczUnarmed", "TACZ skips its gun state tick on mobs that have never held a gun, where that state never leaves its start"),
+    PALETTE_ENTRIES("paletteEntries", "Chunk saves list a section palette's entries straight from its ids in order, instead of walking its whole id array through a filter"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
