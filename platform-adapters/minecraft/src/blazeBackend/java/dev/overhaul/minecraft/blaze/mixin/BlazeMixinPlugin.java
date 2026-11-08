@@ -109,6 +109,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("EntityFireScan121Mixin", BlazeOptimization.FIRE_SCAN),
             Map.entry("AlexsMobsCrowPumpkins121Mixin", BlazeOptimization.CROW_PUMPKINS),
             Map.entry("FarmCharmCoopSearch121Mixin", BlazeOptimization.COOP_SEARCH),
+            Map.entry("PoiRangeSections121Mixin", BlazeOptimization.POI_RANGE_SECTIONS),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),

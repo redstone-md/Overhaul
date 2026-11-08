@@ -129,6 +129,7 @@ public enum BlazeOptimization {
     FIRE_SCAN("fireScan", "A move by something not burning skips streaming the blocks inside it for fire, since either answer leaves it the same"),
     CROW_PUMPKINS("crowPumpkins", "A wild crow skips walking for a pumpkin to flee when no loaded section around it holds one in its palette"),
     COOP_SEARCH("coopSearch", "A Farm and Charm chicken skips walking for a coop when no loaded section around it holds one in its palette"),
+    POI_RANGE_SECTIONS("poiRangeSections", "A point of interest query within a distance reads only the sections that span that height, not the whole column"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
