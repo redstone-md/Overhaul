@@ -154,8 +154,15 @@ public final class BlazePrograms implements AutoCloseable {
     private Map<String,Object> boundTextures(int id){
         requireOpen();var renderer=BlazeFrontend.require();if(renderer.programs()!=this)throw new IllegalStateException("Foreign shader device");
         var entry=entry(id);var types=entry.program.bindings().samplerTypes();
-        Map<String,Object> textures=new LinkedHashMap<>();for(var sampler:entry.samplerUnits.entrySet())textures.put(sampler.getKey(),renderer.textures().boundId(sampler.getValue(),types.get(sampler.getKey())));
+        Map<String,Object> textures=new LinkedHashMap<>();
+        for(var sampler:entry.samplerUnits.entrySet())textures.put(sampler.getKey(),entry.program.bindings().texelBuffer(sampler.getKey())?texel(renderer,entry,sampler.getValue()):renderer.textures().boundId(sampler.getValue(),types.get(sampler.getKey())));
         return textures;
+    }
+    /** A buffer texture has no blank to read: a unit with no buffer behind it cannot draw. */
+    private static BlazeTextures.Sampled texel(BlazeRenderer renderer,Entry entry,int unit){
+        var sampled=renderer.texelBuffers().sampled(renderer,unit);
+        if(sampled==null)throw new IllegalStateException("Shader "+entry.name+" reads texture buffer unit "+unit+" with no buffer bound");
+        return sampled;
     }
     /** Names the active program when a draw cannot use it, because its shader instance never finished constructing. */
     int activeId(){return active;}

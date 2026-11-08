@@ -29,7 +29,8 @@ public final class PackProgramTranslator {
             "gl_NumWorkGroups","gl_LocalInvocationIndex","gl_WorkGroupSize");
     /** Sampled types a pack may declare; storage images come from {@link PackStorageImages#IMAGE_TYPES}. */
     private static final Set<String> SAMPLER_TYPES = Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D",
-            "samplerCube","samplerCubeShadow","sampler2DArray","sampler2DArrayShadow","isampler2DArray","usampler2DArray");
+            "samplerCube","samplerCubeShadow","sampler2DArray","sampler2DArrayShadow","isampler2DArray","usampler2DArray",
+            "samplerBuffer","usamplerBuffer","isamplerBuffer");
     private static final Pattern LOCAL_SIZE = Pattern.compile("\\blayout\\s*\\(([^)]*local_size_[xyz][^)]*)\\)\\s*in\\s*;");
     private static final Pattern WORK_GROUPS = Pattern.compile("\\bconst\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
     private static final Pattern WORK_GROUPS_RENDER = Pattern.compile("\\bconst\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)");

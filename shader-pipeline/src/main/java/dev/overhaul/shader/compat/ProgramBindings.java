@@ -22,7 +22,7 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
     }
     private static final java.util.Set<String> TYPES=java.util.Set.of("sampler2D","sampler2DShadow","sampler3D","usampler2D","isampler2D","usampler3D","isampler3D",
             "samplerCube","samplerCubeShadow","sampler2DArray","sampler2DArrayShadow","isampler2DArray","usampler2DArray",
-            "image2D","image3D","uimage2D","uimage3D","iimage2D","iimage3D",ProgramBindings.BUFFER);
+            "image2D","image3D","uimage2D","uimage3D","iimage2D","iimage3D","samplerBuffer","usamplerBuffer","isamplerBuffer",ProgramBindings.BUFFER);
     /** The type of a storage buffer binding, named by the pack's {@code bufferObject} index. */
     public static final String BUFFER="buffer";
     private static final String BUFFER_PREFIX="overhaulBuffer";
@@ -32,6 +32,8 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
     public boolean storageBuffer(String name){return type(name).equals(BUFFER);}
     /** The {@code bufferObject} index a storage buffer binding names. */
     public int bufferIndex(String name){if(!storageBuffer(name))throw new IllegalArgumentException("Not a storage buffer: "+name);return Integer.parseInt(name.substring(BUFFER_PREFIX.length()));}
+    /** A buffer texture, bound as a uniform texel buffer over a mod's buffer object. */
+    public boolean texelBuffer(String name){return type(name).endsWith("samplerBuffer");}
     /** A 3D sampler or image, bound to a 3D view. */
     public boolean volume(String name){return type(name).endsWith("3D");}
     /** True when any binding is a storage image, which needs the storage descriptor layout. */

@@ -22,12 +22,14 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeTextures implements AutoCloseable {
     /**
      * A bound image; {@code general} marks a pack storage image that stays in GENERAL layout and is never transitioned.
-     * A pack storage buffer binds through {@code buffer} and has no view.
+     * A pack storage buffer binds through {@code buffer} and has no view; a texel buffer binds its {@code texel} view of it.
      */
-    public record Sampled(GpuImageView view,long sampler,boolean general,GpuBuffer buffer){
+    public record Sampled(GpuImageView view,long sampler,boolean general,GpuBuffer buffer,long texel){
+        public Sampled(GpuImageView view,long sampler,boolean general,GpuBuffer buffer){this(view,sampler,general,buffer,0);}
         public Sampled(GpuImageView view,long sampler,boolean general){this(view,sampler,general,null);}
         public Sampled(GpuImageView view,long sampler){this(view,sampler,false,null);}
         public static Sampled storage(GpuBuffer buffer){return new Sampled(null,0,true,java.util.Objects.requireNonNull(buffer));}
+        static Sampled texel(GpuBuffer buffer,long view){return new Sampled(null,0,false,java.util.Objects.requireNonNull(buffer),view);}
         int layout(){return general?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
     }
     /** One subresource of a texture that a framebuffer renders to. */

@@ -24,7 +24,7 @@ public final class BlazeRenderer implements AutoCloseable {
     static final int FOREIGN_FRAMEBUFFERS=0x40000000;
     /** A multiple of both terrain strides, so one indirect draw reaches every section in a page by base vertex alone. */
     private static final int GEOMETRY_ALIGNMENT=160;
-    private static final int GL_BUFFER_USAGE=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    private static final int GL_BUFFER_USAGE=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     /** Distant Horizons vertices are 16 bytes, so every shared buffer starts on a whole vertex. */
     static final int GL_SHARED_ALIGNMENT=16;
     /** Pages free as soon as they empty, so the budget only bounds what mods hold at once, as their own buffers did. */
@@ -183,6 +183,8 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeDh dhIfUsed(){return dh;}
     private BlazeRawDraws rawDraws;
     BlazeRawDraws rawDraws(){requireOpen();if(rawDraws==null)rawDraws=new BlazeRawDraws(this);return rawDraws;}
+    private BlazeTexelBuffers texelBuffers;
+    BlazeTexelBuffers texelBuffers(){requireOpen();if(texelBuffers==null)texelBuffers=new BlazeTexelBuffers(context,queue);return texelBuffers;}
     void enqueue(BlazeQueue.Operation operation){queue.add(operation,0);}
     /** Names the GPU work queued since the previous mark; only under -Doverhaul.blaze.gpuStats. */
     public void gpuMark(String label){if(gpuTimer==null)return;BlazeQueue.Operation mark=gpuTimer.mark(label);if(mark!=null)enqueue(mark);}
@@ -405,6 +407,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);
         if(rawDraws!=null)failure=release(rawDraws::close,failure);
+        if(texelBuffers!=null)failure=release(texelBuffers::close,failure);
         for(GpuBuffer buffer:new ArrayList<>(glDeviceBuffers))failure=release(buffer::close,failure);glDeviceBuffers.clear();
         for(BlazeBufferPool.Slice slice:new ArrayList<>(glSharedBuffers))failure=release(slice::close,failure);glSharedBuffers.clear();
         if(glStorage!=null)failure=release(glStorage::close,failure);

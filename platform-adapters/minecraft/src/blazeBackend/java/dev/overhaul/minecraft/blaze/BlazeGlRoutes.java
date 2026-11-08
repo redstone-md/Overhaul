@@ -124,12 +124,19 @@ final class BlazeGlRoutes {
 
     private static void textures(Map<String, Answer> table, BlazeGlBuffers buffers) {
         put(table, "glGenTextures", (renderer, a) -> each(a, address -> MemoryUtil.memPutInt(address, renderer.textures().generate())));
-        put(table, "glDeleteTextures", (renderer, a) -> each(a, address -> renderer.textures().delete(MemoryUtil.memGetInt(address))));
+        put(table, "glDeleteTextures", (renderer, a) -> each(a, address -> {
+            int name = MemoryUtil.memGetInt(address);
+            renderer.texelBuffers().delete(name);
+            renderer.textures().delete(name);
+        }));
         put(table, "glActiveTexture", (renderer, a) -> renderer.textures().active(a.integer(0)));
         put(table, "glBindTexture", (renderer, a) -> {
-            if (BlazeTextureTargets.supported(a.integer(0))) renderer.textures().bind(a.integer(0), a.integer(1));
+            if (a.integer(0) == BlazeTexelBuffers.TARGET) renderer.texelBuffers().bind(activeUnit(renderer), a.integer(1));
+            else if (BlazeTextureTargets.supported(a.integer(0))) renderer.textures().bind(a.integer(0), a.integer(1));
             else BlazeGlBoundary.reportOnce("texture target " + a.integer(0), "A mod bound a texture target with no owned storage: " + a.integer(0));
         });
+        put(table, "glTexBuffer", (renderer, a) -> renderer.texelBuffers().define(activeUnit(renderer), a.integer(1), a.integer(2), 0, -1));
+        put(table, "glTexBufferRange", (renderer, a) -> renderer.texelBuffers().define(activeUnit(renderer), a.integer(1), a.integer(2), a.pointer(3), a.pointer(4)));
         put(table, "glGenerateMipmap", (renderer, a) -> renderer.textures().generateMipmap(a.integer(0)));
         put(table, "glPixelStorei", (renderer, a) -> renderer.textures().pixelStore(a.integer(0), a.integer(1)));
         put(table, "glTexParameteri", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.integer(2)));
@@ -157,6 +164,8 @@ final class BlazeGlRoutes {
         put(table, "glGetTexLevelParameteriv", (renderer, a) -> MemoryUtil.memPutInt(a.pointer(3), renderer.textures().levelParameter(a.integer(0), a.integer(1), a.integer(2))));
         put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(6))));
     }
+
+    private static int activeUnit(BlazeRenderer renderer) { return renderer.textures().integer(0x84E0) - 0x84C0; }
 
     /** 3D image calls store 2D arrays and 3D textures; other targets have no owned storage for them. */
     private static boolean layered(int target) {
