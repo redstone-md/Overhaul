@@ -43,6 +43,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("WitherGlowScan121Mixin", BlazeOptimization.WITHER_GLOWS),
             Map.entry("WitherMusicScan121Mixin", BlazeOptimization.WITHER_GLOWS),
             Map.entry("LevelRendererVeilSkeletons121Mixin", BlazeOptimization.VEIL_SKELETONS),
+            Map.entry("HamsterFeverWalk121Mixin", BlazeOptimization.MOD_ENTITY_WALKS),
             Map.entry("AlexsMobsEffectPoses121Mixin", BlazeOptimization.EFFECT_POSES),
             Map.entry("VillagerLayerTextures121Mixin", BlazeOptimization.VILLAGER_TEXTURES),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
@@ -81,7 +82,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
     /** Mixins that serve several optimisations, applied while any of them is on. */
     private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
             "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS,
-                    BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS),
+                    BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS, BlazeOptimization.MOD_ENTITY_WALKS),
             "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS));
 
     @Override public void onLoad(String mixinPackage) {
