@@ -121,6 +121,7 @@ public enum BlazeOptimization {
     SPARK_BACKGROUND("sparkBackground", "spark's background profiler is stopped where it would sample with its Java engine, which halts every thread at a safepoint a hundred times a second"),
     NOISE_BIOMES("noiseBiomes", "World generation hands back the noise biome a thread last sampled at the same quart of the same level before it samples the climate noise again"),
     SECTION_SLOT_KEEP("sectionSlotKeep", "A section scan keeps each table slot that already holds the same section, reading its mesh again only after that mesh changed; needs sectionDraws"),
+    LAST_TARGET("lastTarget", "The last framebuffer looked up answered again without the boxed id map, since every draw asks for the bound one"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;

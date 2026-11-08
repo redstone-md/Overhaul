@@ -44,6 +44,10 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
     private final Map<Integer,BlazeTarget> targets=new HashMap<>();
+    /** The last registered target looked up: every draw asks for the bound one, and the boxed map shows in the frame. */
+    private static final boolean LAST_TARGET=BlazeOptimization.LAST_TARGET.on();
+    private int foundTargetId;
+    private BlazeTarget foundTarget;
     private final LinkedHashMap<PipelineKey,NativeGraphicsPipeline> pipelines=new LinkedHashMap<>(32,.75f,true);
     private BlazeProgramCompiler.Program lastProgram;
     private BlazeMeshState.Layout lastLayout;
@@ -210,13 +214,23 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeMesh newMesh(boolean stream){requireOpen();BlazeMesh mesh=new BlazeMesh(queue,transfers,sequenceIndices,stream,meshes::remove);meshes.add(mesh);return mesh;}
     public int registerTarget(BlazeTarget target){int id=nextHandle();target.attach(queue);targets.put(id,target);return id;}
     BlazeRawFramebuffers rawFramebuffers(){requireOpen();return rawFramebuffers;}
-    public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS){rawFramebuffers.delete(id);foreignClearDepths.remove(id);}else targets.remove(id);if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
+    public void unregisterTarget(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS){rawFramebuffers.delete(id);foreignClearDepths.remove(id);}else targets.remove(id);if(foundTargetId==id){foundTargetId=0;foundTarget=null;}if(drawTarget==id)drawTarget=0;if(readTarget==id)readTarget=0;state.framebufferBindings(drawTarget,readTarget);}
     private long frames;
     public BlazeTarget currentTarget(){return target(drawTarget);}
     public BlazeTarget readTarget(){return target(readTarget);}
     public BlazeTarget defaultTarget(){requireOpen();return backBuffer;}
     /** Null only for a raw framebuffer with nothing renderable attached. */
-    public BlazeTarget target(int id){requireOpen();if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);BlazeTarget target=id==0?backBuffer:targets.get(id);if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);return target;}
+    public BlazeTarget target(int id){
+        requireOpen();
+        if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);
+        if(id==0)return backBuffer;
+        if(LAST_TARGET&&id==foundTargetId)return foundTarget;
+        BlazeTarget target=targets.get(id);
+        if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);
+        foundTargetId=id;
+        foundTarget=target;
+        return target;
+    }
     public void bindFramebuffer(int kind,int id){
         if(id<FOREIGN_FRAMEBUFFERS)target(id);
         switch(kind){
@@ -390,7 +404,7 @@ public final class BlazeRenderer implements AutoCloseable {
         for(BlazeBufferPool.Slice slice:new ArrayList<>(glSharedBuffers))failure=release(slice::close,failure);glSharedBuffers.clear();
         if(glStorage!=null)failure=release(glStorage::close,failure);
         for(NativeGraphicsPipeline pipeline:pipelines.values())failure=release(pipeline::close,failure);pipelines.clear();lastPipeline=null;
-        for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();
+        for(BlazeTarget target:new ArrayList<>(targets.values()))failure=release(target::close,failure);targets.clear();foundTargetId=0;foundTarget=null;
         if(rawFramebuffers!=null)failure=release(rawFramebuffers::close,failure);
         if(textures!=null)failure=release(textures::close,failure);if(programs!=null)failure=release(programs::close,failure);
         if(backBuffer!=null)failure=release(backBuffer::close,failure);if(presenter!=null)failure=release(presenter::close,failure);
