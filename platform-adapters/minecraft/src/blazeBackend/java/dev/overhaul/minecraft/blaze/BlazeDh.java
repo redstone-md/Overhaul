@@ -21,6 +21,7 @@ import static org.lwjgl.vulkan.VK10.*;
 /** Draws Distant Horizons' LOD buffers on Vulkan and puts the result on the frame; the mod keeps its section lists, uploads and targets. */
 public final class BlazeDh implements AutoCloseable {
     private static final int TERRAIN_BYTES = 96, COMPOSITE_BYTES = 224, BOX_BYTES = 64, PUSH_BYTES = 16, BOX_PUSH_BYTES = 56, VERTEX_BYTES = 16, BOX_INDICES = 36;
+    private static final int WIRE_PUSH_BYTES = 48, WIRE_VERTICES = 24;
     private static final int WRITE_RGBA = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     private static final List<NativeGraphicsPipeline.Attribute> ATTRIBUTES = List.of(
             new NativeGraphicsPipeline.Attribute(0, 0, VK_FORMAT_R16G16B16A16_UINT, 0),
@@ -78,12 +79,24 @@ public final class BlazeDh implements AutoCloseable {
         }
     }
 
+    /** One debug outline, as offset from the camera, size and colour. */
+    private record WireBox(float[] values) implements BlazeTerrainPass.Draw {
+        @Override public void record(VkCommandBuffer command, long pipelineLayout, boolean multiDraw) {
+            try (MemoryStack stack = VulkanStack.push()) {
+                vkCmdPushConstants(command, pipelineLayout, BlazeTerrainPass.PUSH_STAGES, 0, stack.floats(values));
+                vkCmdDraw(command, WIRE_VERTICES, 1, 0, 0);
+            }
+        }
+    }
+
     private final BlazeRenderer owner;
-    private final BlazeProgramCompiler.Program terrain, boxes, composite, vanillaFade;
+    private final BlazeProgramCompiler.Program terrain, boxes, wireframe, composite, vanillaFade;
     private final BlazeDhSsao ssao;
     private final BlazeDhTaa taa;
     private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
-    private BlazeTerrainPass pending;
+    private BlazeTerrainPass pending, wires;
+    private float wireX, wireY, wireZ;
+    private boolean wiresDrawn;
     private TerrainSettings settings;
     private FogSettings fog, frameFog;
     private int frameColor, frameDepth;
@@ -102,6 +115,8 @@ public final class BlazeDh implements AutoCloseable {
             boxes = new BlazeProgramCompiler.Program(compiler.compile("dh_boxes.vsh", BlazeDhShaders.BOX_VERTEX, ShaderStage.VERTEX),
                     compiler.compile("dh_boxes.fsh", BlazeDhShaders.BOX_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), BOX_BYTES, Map.of("uLightMap", 1), Map.of(), Map.of(), Map.of()));
+            wireframe = new BlazeProgramCompiler.Program(compiler.compile("dh_wireframe.vsh", BlazeDhShaders.WIREFRAME_VERTEX, ShaderStage.VERTEX), boxes.fragment(),
+                    new ProgramBindings(Map.of(), BOX_BYTES, Map.of(), Map.of(), Map.of(), Map.of()));
             composite = new BlazeProgramCompiler.Program(compiler.compile("dh_composite.vsh", BlazeDhShaders.COMPOSITE_VERTEX, ShaderStage.VERTEX),
                     compiler.compile("dh_composite.fsh", BlazeDhShaders.COMPOSITE_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2), Map.of(), Map.of(), Map.of()));
@@ -155,6 +170,38 @@ public final class BlazeDh implements AutoCloseable {
             pass.add(new BoxDraw(vertexBuffer, indexBuffer, colors, scales, chunks, subChunks, group));
         }
         if (pass != null) owner.enqueue(pass);
+    }
+
+    /**
+     * Starts DH's debug wireframe in the bound framebuffer, with the depth test its own setup left on.
+     * @param x the camera DH measures its boxes from, in its float precision, as are {@code y} and {@code z}
+     */
+    public void beginWireframe(float[] combined, float x, float y, float z) {
+        endWireframe();
+        BlazeTarget target = owner.currentTarget();
+        if (target == null || owner.drawingNowhere()) return;
+        wireX = x;
+        wireY = y;
+        wireZ = z;
+        wires = new BlazeTerrainPass(owner, target, owner.drawState().snapshot(), (bytes, width, height) -> { for (float value : combined) bytes.putFloat(value); },
+                wireframe, this::pipeline, name -> null, null);
+    }
+
+    /** One box outline, its colour as packed ARGB. */
+    public void wireframeBox(float minX, float minY, float minZ, float maxX, float maxY, float maxZ, int argb) {
+        if (wires == null) return;
+        wires.add(new WireBox(new float[]{minX - wireX, minY - wireY, minZ - wireZ, 0, maxX - minX, maxY - minY, maxZ - minZ, 0,
+                (argb >> 16 & 0xFF) / 255F, (argb >> 8 & 0xFF) / 255F, (argb & 0xFF) / 255F, (argb >>> 24) / 255F}));
+        wiresDrawn = true;
+    }
+
+    public void endWireframe() {
+        BlazeTerrainPass pass = wires;
+        wires = null;
+        if (pass == null) return;
+        if (wiresDrawn) owner.enqueue(pass);
+        else pass.close();
+        wiresDrawn = false;
     }
 
     /** DH's ambient occlusion over the LODs drawn into its targets so far. */
@@ -274,8 +321,9 @@ public final class BlazeDh implements AutoCloseable {
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT, "main", program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT, "main", program.fragment().directBuffer())),
                 program == terrain ? List.of(new NativeGraphicsPipeline.Binding(0, VERTEX_BYTES, 0)) : program == boxes ? BOX_BINDINGS : List.of(),
-                program == terrain ? ATTRIBUTES : program == boxes ? BOX_ATTRIBUTES : List.of(), new long[]{descriptorLayout}, program == boxes ? BOX_PUSH_BYTES : PUSH_BYTES,
-                VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE, draw.depth(),
+                program == terrain ? ATTRIBUTES : program == boxes ? BOX_ATTRIBUTES : List.of(), new long[]{descriptorLayout},
+                program == boxes ? BOX_PUSH_BYTES : program == wireframe ? WIRE_PUSH_BYTES : PUSH_BYTES,
+                program == wireframe ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE, draw.depth(),
                 List.of(draw.color()), true, 0, 0, draw.logic());
         var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description);
         pipelines.put(key, created);
@@ -284,6 +332,7 @@ public final class BlazeDh implements AutoCloseable {
 
     @Override public void close() {
         if (pending != null) { pending.close(); pending = null; }
+        if (wires != null) { wires.close(); wires = null; }
         if (fadeTarget != null) { fadeTarget.close(); fadeTarget = null; }
         ssao.close();
         taa.close();

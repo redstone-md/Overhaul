@@ -48,6 +48,23 @@ final class BlazeDhShaders {
             void main() { fragColor = fColor; }
             """;
 
+    /** DH's debug box outline: its unit cube's twelve edges come from the vertex index instead of a buffer. */
+    static final String WIREFRAME_VERTEX = """
+            #version 450
+            layout(set=0,binding=0,std140) uniform Wireframe { mat4 uProjectionMvm; };
+            layout(push_constant) uniform Box { vec4 uOffset; vec4 uSize; vec4 uColor; };
+            layout(location=0) out vec4 fColor;
+            // Each corner's bits are its x, y and z.
+            const int CORNERS[24] = int[](0,1, 2,3, 4,5, 6,7, 0,2, 1,3, 4,6, 5,7, 0,4, 1,5, 2,6, 3,7);
+            void main() {
+                int corner = CORNERS[gl_VertexIndex];
+                vec3 unit = vec3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+                gl_Position = uProjectionMvm * vec4(uOffset.xyz + unit * uSize.xyz, 1.0);
+                gl_Position.z = 0.5 * (gl_Position.w + gl_Position.z);
+                fColor = uColor;
+            }
+            """;
+
     static final String TERRAIN_VERTEX = "#version 450\n" + TERRAIN_BLOCK + """
             layout(location=0) in uvec4 vPosition;
             layout(location=1) in vec4 color;

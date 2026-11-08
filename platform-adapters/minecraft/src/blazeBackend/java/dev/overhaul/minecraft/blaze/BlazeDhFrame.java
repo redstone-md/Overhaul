@@ -250,6 +250,19 @@ public final class BlazeDhFrame {
         renderer.dh().antiAlias(activeColor, activeDepth, columns(params.dhProjectionMatrix), columns(params.dhModelViewMatrix), camera.x, camera.y, camera.z);
     }
 
+    /** DH's debug wireframe hands its boxes over one at a time; they gather into one native line pass. */
+    public static void beginWireframe(BlazeRenderer renderer, RenderParams params) {
+        var camera = params.exactCameraPosition;
+        if (camera == null || packDraws(renderer)) return;
+        renderer.dh().beginWireframe(columns(params.dhMvmProjMatrix), (float) camera.x, (float) camera.y, (float) camera.z);
+    }
+
+    public static void wireframeBox(BlazeRenderer renderer, float minX, float minY, float minZ, float maxX, float maxY, float maxZ, int argb) {
+        renderer.dh().wireframeBox(minX, minY, minZ, maxX, maxY, maxZ, argb);
+    }
+
+    public static void endWireframe(BlazeRenderer renderer) { renderer.dh().endWireframe(); }
+
     /** The original copy leaves the frame's framebuffer bound, and everything after it draws there. */
     public static void composite(BlazeRenderer renderer, RenderParams params, int colorTexture, int depthTexture) {
         GlStateManager._glBindFramebuffer(36160, Minecraft.getInstance().getMainRenderTarget().frameBufferId);
