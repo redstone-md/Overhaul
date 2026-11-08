@@ -24,8 +24,8 @@ final class BlazeRawDraws implements AutoCloseable {
     private static final int[] SHORT_BASES = {VK_FORMAT_R16_UNORM, VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16B16_UNORM, VK_FORMAT_R16G16B16A16_UNORM};
     private static final int[] INT_BASES = {VK_FORMAT_R32_UINT, VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32B32_UINT, VK_FORMAT_R32G32B32A32_UINT};
 
-    /** @param indexType zero for a non-indexed draw; @param elements the element buffer bound to the array */
-    record Request(List<BlazeGlVertexArrays.Pointer> pointers, int mode, int first, int count, int instances, int indexType, long indexOffset, int elements) {}
+    /** @param indexType zero for a non-indexed draw; @param elements the element buffer bound to the array; @param baseVertex added to each index */
+    record Request(List<BlazeGlVertexArrays.Pointer> pointers, int mode, int first, int count, int instances, int indexType, long indexOffset, int elements, int baseVertex) {}
 
     private record Inputs(List<NativeGraphicsPipeline.Binding> bindings, List<NativeGraphicsPipeline.Attribute> attributes) {}
 
@@ -94,7 +94,7 @@ final class BlazeRawDraws implements AutoCloseable {
                 if (handles.length > 0) vkCmdBindVertexBuffers(command, 0, stack.longs(handles), stack.longs(starts));
                 if (elements != null) {
                     vkCmdBindIndexBuffer(command, elements.handle(), 0, kind);
-                    vkCmdDrawIndexed(command, request.count(), request.instances(), firstIndex, 0, 0);
+                    vkCmdDrawIndexed(command, request.count(), request.instances(), firstIndex, request.baseVertex(), 0);
                 } else {
                     vkCmdDraw(command, request.count(), request.instances(), request.first(), 0);
                 }

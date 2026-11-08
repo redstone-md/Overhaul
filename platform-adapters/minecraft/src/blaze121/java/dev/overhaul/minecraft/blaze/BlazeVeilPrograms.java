@@ -178,7 +178,7 @@ public final class BlazeVeilPrograms {
             Object uniform = uniforms.get(reflectedName(name));
             ByteBuffer value = uniform == null ? null : ((VeilUniform121Access) uniform).overhaul$value();
             if (value != null) copy(values, entry.getValue(), value);
-            else raw(values, entry.getValue(), programs.rawUniform(id, programs.uniformLocation(id, name)));
+            else BlazeRawUniforms.write(values, entry.getValue(), programs.rawUniform(id, programs.uniformLocation(id, name)));
         }
         return new BlazeShaderSnapshot(program, values, textures(bindings, access));
     }
@@ -216,19 +216,6 @@ public final class BlazeVeilPrograms {
         }
         int count = Math.min(layout.byteSize(), value.capacity()) / 4;
         for (int index = 0; index < count; index++) target.putInt(offset + index * 4, value.getInt(index * 4));
-    }
-
-    /** A value the mod set with a raw glUniform call, as Veil's skinned meshes do for their bone count. */
-    private static void raw(ByteBuffer target, ProgramBindings.Uniform layout, int[] words) {
-        if (words == null) return;
-        int offset = layout.byteOffset();
-        String type = layout.type();
-        if (type.startsWith("mat")) {
-            int size = type.charAt(3) - '0';
-            for (int index = 0; index < Math.min(words.length, size * size); index++) target.putInt(offset + (index / size) * 16 + (index % size) * 4, words[index]);
-            return;
-        }
-        for (int index = 0; index < Math.min(words.length, layout.byteSize() / 4); index++) target.putInt(offset + index * 4, words[index]);
     }
 
     private static void camera(ByteBuffer target, String field, int offset) {

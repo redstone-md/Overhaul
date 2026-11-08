@@ -44,7 +44,13 @@ final class BlazeGlVertexArrays {
 
     /** Records which location each {@code layout(location = N) in} of a vertex source names. */
     static void declare(int program, String vertexSource) {
+        declare(program, vertexSource, Map.of());
+    }
+
+    /** @param bound the locations glBindAttribLocation gave inputs by name; a layout location in the source wins */
+    static void declare(int program, String vertexSource, Map<String, Integer> bound) {
         Map<Integer, Slot> slots = new HashMap<>();
+        for (var entry : bound.entrySet()) slots.put(entry.getValue(), new Slot(entry.getKey(), 0));
         var match = LOCATION.matcher(vertexSource);
         while (match.find()) {
             int location = Integer.parseInt(match.group(1)), columns = columns(match.group(2));
@@ -55,6 +61,8 @@ final class BlazeGlVertexArrays {
     }
 
     static Map<Integer, Slot> declared(int program) { return DECLARED.get(program); }
+
+    static void forget(int program) { DECLARED.remove(program); }
 
     static int columns(String type) {
         if (!type.startsWith("mat") && !type.startsWith("dmat")) return 1;
@@ -99,21 +107,25 @@ final class BlazeGlVertexArrays {
     private void draws(Map<String, Answer> table) {
         Answer arrays = BlazeGlBoundary.untranslated("glDrawArrays"), arraysInstanced = BlazeGlBoundary.untranslated("glDrawArraysInstanced");
         Answer elements = BlazeGlBoundary.untranslated("glDrawElements"), elementsInstanced = BlazeGlBoundary.untranslated("glDrawElementsInstanced");
-        table.put("glDrawArrays", arguments -> draw(arguments, arrays, arguments.integer(0), arguments.integer(1), arguments.integer(2), 1, 0, 0));
-        table.put("glDrawArraysInstanced", arguments -> draw(arguments, arraysInstanced, arguments.integer(0), arguments.integer(1), arguments.integer(2), arguments.integer(3), 0, 0));
-        table.put("glDrawElements", arguments -> draw(arguments, elements, arguments.integer(0), 0, arguments.integer(1), 1, arguments.integer(2), arguments.pointer(3)));
-        table.put("glDrawElementsInstanced", arguments -> draw(arguments, elementsInstanced, arguments.integer(0), 0, arguments.integer(1), arguments.integer(4), arguments.integer(2), arguments.pointer(3)));
+        Answer based = BlazeGlBoundary.untranslated("glDrawElementsBaseVertex"), basedInstanced = BlazeGlBoundary.untranslated("glDrawElementsInstancedBaseVertex");
+        table.put("glDrawArrays", arguments -> draw(arguments, arrays, arguments.integer(0), arguments.integer(1), arguments.integer(2), 1, 0, 0, 0));
+        table.put("glDrawArraysInstanced", arguments -> draw(arguments, arraysInstanced, arguments.integer(0), arguments.integer(1), arguments.integer(2), arguments.integer(3), 0, 0, 0));
+        table.put("glDrawElements", arguments -> draw(arguments, elements, arguments.integer(0), 0, arguments.integer(1), 1, arguments.integer(2), arguments.pointer(3), 0));
+        table.put("glDrawElementsInstanced", arguments -> draw(arguments, elementsInstanced, arguments.integer(0), 0, arguments.integer(1), arguments.integer(4), arguments.integer(2), arguments.pointer(3), 0));
+        // Flywheel draws each mesh of its shared pool from the pool's vertex buffer at the mesh's base vertex.
+        table.put("glDrawElementsBaseVertex", arguments -> draw(arguments, based, arguments.integer(0), 0, arguments.integer(1), 1, arguments.integer(2), arguments.pointer(3), arguments.integer(4)));
+        table.put("glDrawElementsInstancedBaseVertex", arguments -> draw(arguments, basedInstanced, arguments.integer(0), 0, arguments.integer(1), arguments.integer(4), arguments.integer(2), arguments.pointer(3), arguments.integer(5)));
     }
 
     /** @param indexType zero for a non-indexed draw */
-    private long draw(Arguments arguments, Answer dropped, int mode, int first, int count, int instances, int indexType, long indexOffset) {
+    private long draw(Arguments arguments, Answer dropped, int mode, int first, int count, int instances, int indexType, long indexOffset, int baseVertex) {
         if (count <= 0 || instances <= 0) return 0;
         BlazeRenderer renderer = RenderSystem.isOnRenderThread() ? BlazeFrontend.current() : null;
         BlazeRawDraws.Request request;
         synchronized (this) {
             if (renderer == null || bound == 0) return dropped.apply(arguments);
             Array array = array();
-            request = new BlazeRawDraws.Request(pointers(array), mode, first, count, instances, indexType, indexOffset, indexType == 0 ? 0 : array.elements);
+            request = new BlazeRawDraws.Request(pointers(array), mode, first, count, instances, indexType, indexOffset, indexType == 0 ? 0 : array.elements, baseVertex);
         }
         String failure = renderer.rawDraws().draw(request);
         if (failure != null) BlazeGlBoundary.reportOnce("raw draw " + failure, "A mod's raw OpenGL draw was dropped: " + failure);

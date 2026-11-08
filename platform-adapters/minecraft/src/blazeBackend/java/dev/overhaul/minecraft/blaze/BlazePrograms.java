@@ -56,6 +56,8 @@ public final class BlazePrograms implements AutoCloseable {
     public static BlazePrograms current(){var renderer=BlazeFrontend.current();return renderer==null?null:renderer.programs();}
     public BlazeProgramCompiler compiler(){requireOpen();return compiler;}
     public int create(){requireOpen();if(programs.size()>=MAX_PROGRAMS||next<=0)throw new IllegalStateException("Blaze program capacity exceeded");int id=next++;programs.put(id,new Entry());return id;}
+    /** An identity under a name a mod got from glCreateProgram, far above the ones {@link #create()} hands out. */
+    void createAt(int name){requireOpen();if(name<MAX_PROGRAMS||programs.containsKey(name))throw new IllegalArgumentException("Program name in use: "+name);if(programs.size()>=MAX_PROGRAMS)throw new IllegalStateException("Blaze program capacity exceeded");programs.put(name,new Entry());}
     public Program stage(Program.Type type,String name,InputStream stream,GlslPreprocessor preprocessor,boolean effect)throws IOException{
         requireOpen();byte[] bytes=stream.readNBytes(MAX_SOURCE+1);if(bytes.length>MAX_SOURCE)throw new IOException("Shader source exceeds budget: "+name);
         StringBuilder source=new StringBuilder();
@@ -103,7 +105,12 @@ public final class BlazePrograms implements AutoCloseable {
     public void registerSnapshot(int id,Supplier<BlazeShaderSnapshot> snapshot){requireOpen();entry(id).snapshot=java.util.Objects.requireNonNull(snapshot);}
     public void use(int id){requireOpen();if(id!=0)compiled(id);active=id;unknownActive=0;}
     /** Keeps a raw glUniform value for the program in use; a name without a compiled program keeps nothing. */
-    public void rawUniform(int location,int[] words){requireOpen();if(active!=0)entry(active).raw.put(location,words);}
+    public void rawUniform(int location,int[] words){
+        requireOpen();if(active==0)return;var entry=entry(active);entry.raw.put(location,words);
+        // A foreign renderer points its samplers at texture units with glUniform1i, as OpenGL has it.
+        String sampler=entry.foreign?entry.samplerLocations.get(location):null;
+        if(sampler!=null&&words.length>0)entry.samplerUnits.put(sampler,words[0]);
+    }
     /** The raw glUniform value a program holds at a location, or null. */
     public int[] rawUniform(int id,int location){requireOpen();var entry=programs.get(id);return entry==null?null:entry.raw.get(location);}
     public void samplerUnit(int location,int unit){
@@ -151,11 +158,14 @@ public final class BlazePrograms implements AutoCloseable {
         return null;
     }
     public BlazeShaderSnapshot sectionSnapshot(int id,Map<String,Uniform> uniforms){return BlazeShaderSnapshot.capture(entry(id).sections,uniforms,boundTextures(id));}
-    private Map<String,Object> boundTextures(int id){
+    Map<String,Object> boundTextures(int id){
         requireOpen();var renderer=BlazeFrontend.require();if(renderer.programs()!=this)throw new IllegalStateException("Foreign shader device");
         var entry=entry(id);var types=entry.program.bindings().samplerTypes();
         Map<String,Object> textures=new LinkedHashMap<>();
-        for(var sampler:entry.samplerUnits.entrySet())textures.put(sampler.getKey(),entry.program.bindings().texelBuffer(sampler.getKey())?texel(renderer,entry,sampler.getValue()):renderer.textures().boundId(sampler.getValue(),types.get(sampler.getKey())));
+        for(var sampler:entry.samplerUnits.entrySet()){
+            String name=sampler.getKey();Object storage=BlazeGlBlocks.storage(name);
+            textures.put(name,storage!=null?storage:entry.program.bindings().texelBuffer(name)?texel(renderer,entry,sampler.getValue()):renderer.textures().boundId(sampler.getValue(),types.get(name)));
+        }
         return textures;
     }
     /** A buffer texture has no blank to read: a unit with no buffer behind it cannot draw. */

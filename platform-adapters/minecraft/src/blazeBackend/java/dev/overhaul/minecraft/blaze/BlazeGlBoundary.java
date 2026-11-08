@@ -77,8 +77,9 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private static volatile BlazeGlBuffers active;
     private final AtomicInteger objectNames = new AtomicInteger(1);
-    /** Far above the ids {@link BlazePrograms} hands out, so a raw program name never selects one of its programs. */
-    private final AtomicInteger rawProgramNames = new AtomicInteger(0x40000000);
+    /** The first name glCreateProgram hands out, far above the ids {@link BlazePrograms} creates, so the two never meet. */
+    static final int RAW_PROGRAMS = 0x40000000;
+    private final AtomicInteger rawProgramNames = new AtomicInteger(RAW_PROGRAMS);
     private final AtomicInteger framebufferNames = new AtomicInteger(BlazeRenderer.FOREIGN_FRAMEBUFFERS);
     private final Map<Integer, Long> strings = new ConcurrentHashMap<>();
     private final Map<String, Answer> answers = new HashMap<>();
@@ -93,7 +94,10 @@ public final class BlazeGlBoundary implements FunctionProvider {
         buffers.install(answers);
         BlazeGlBlocks.install(answers, buffers);
         BlazeGlUniforms.install(answers);
-        if (BlazeOptimization.RAW_DRAWS.on()) new BlazeGlVertexArrays(buffers).install(answers);
+        if (BlazeOptimization.RAW_DRAWS.on()) {
+            new BlazeGlVertexArrays(buffers).install(answers);
+            if (BlazeOptimization.RAW_PROGRAMS.on()) BlazeGlPrograms.install(answers);
+        }
         active = buffers;
     }
 
@@ -138,7 +142,7 @@ public final class BlazeGlBoundary implements FunctionProvider {
         };
     }
 
-    private static String caller() {
+    static String caller() {
         return StackWalker.getInstance().walk(frames -> frames.map(StackWalker.StackFrame::getClassName)
                 .filter(type -> !type.startsWith("org.lwjgl") && !type.startsWith("dev.overhaul") && !type.startsWith("java.") && !type.startsWith("jdk."))
                 .findFirst().orElse("an unknown class"));
