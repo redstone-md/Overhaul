@@ -21,14 +21,25 @@ public final class BlazeModernSource {
     public static final String ELEMENT = "_ovElem";
     private static final Pattern PRIMITIVE = Pattern.compile("\\blayout\\s*\\([^)]*\\)\\s*(?:in|out)\\s*;");
     private static final Pattern VERSION =Pattern.compile("(?m)^\\s*#version[^\\r\\n]*");
+    /** A default value on a uniform, which Vulkan GLSL rejects; the value a program reads comes from the uniform buffer. */
+    private static final Pattern INITIALISER = Pattern.compile("(\\buniform\\s+\\w+\\s+\\w+)\\s*=\\s*[^;]+;");
+    /** A depth layout redeclaration names a built-in output, which needs no declaration to be written. */
+    private static final Pattern FRAG_DEPTH = Pattern.compile("(?:\\blayout\\s*\\([^)]*\\)\\s*)?\\bout\\s+float\\s+gl_FragDepth\\s*;");
 
     private BlazeModernSource() {}
 
     static String normalise(String source, boolean vertex) {
+        return normalise(source, vertex, false);
+    }
+
+    /** @param buffers every uniform block becomes a storage buffer, for a mod that fills its blocks from buffer objects */
+    static String normalise(String source, boolean vertex, boolean buffers) {
         String text = source.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("(?m)//.*$", "")
                 .replaceAll("(?m)^\\s*#extension[^\\r\\n]*", "")
                 .replaceAll("\\bprecision\\s+\\w+\\s+\\w+\\s*;", "");
-        text = blocks(text);
+        text = INITIALISER.matcher(text).replaceAll("$1;");
+        text = FRAG_DEPTH.matcher(text).replaceAll("");
+        text = blocks(text, buffers);
         text = LAYOUT.matcher(text).replaceAll("");
         text = INTERPOLATION.matcher(text).replaceAll("");
         text = separate(text);
@@ -49,7 +60,7 @@ public final class BlazeModernSource {
         return version.find() ? text.substring(0, version.end()) + layouts + text.substring(version.end()) : layouts + text;
     }
 
-    private static String blocks(String text) {
+    private static String blocks(String text, boolean buffers) {
         Matcher block = BLOCK.matcher(text);
         StringBuilder result = new StringBuilder();
         StringBuilder renamed = new StringBuilder();
@@ -57,7 +68,7 @@ public final class BlazeModernSource {
         while (block.find()) {
             String instance = block.group(3), body = block.group(2);
             renamed.setLength(0);
-            if (!flat(body)) {
+            if (buffers || !flat(body)) {
                 // Arrays and structs have no loose-uniform shape; the block keeps its std140 bytes as a read-only storage buffer.
                 renamed.append("layout(std140, binding = ").append(BlazeBlockBuffers.index(block.group(1))).append(") readonly buffer ")
                         .append(block.group(1)).append(" {").append(body).append('}').append(instance == null ? "" : " " + instance).append(';');

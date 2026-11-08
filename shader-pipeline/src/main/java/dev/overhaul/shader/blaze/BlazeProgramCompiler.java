@@ -94,9 +94,14 @@ public final class BlazeProgramCompiler implements AutoCloseable {
 
     /** A program written for current OpenGL, with its includes already expanded by its own loader. */
     public synchronized Program compileModern(String vertexName, String fragmentName, String vertex, String fragment) {
+        return compileModern(vertexName, fragmentName, vertex, fragment, false);
+    }
+
+    /** @param buffers every uniform block reads a storage buffer, for a renderer that fills its blocks from buffer objects */
+    public synchronized Program compileModern(String vertexName, String fragmentName, String vertex, String fragment, boolean buffers) {
         var none = unresolved();
-        String vs = BlazeModernSource.normalise(preprocess(vertexName, vertex, ShaderStage.VERTEX, none), true);
-        String fs = BlazeModernSource.normalise(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, none), false);
+        String vs = BlazeModernSource.normalise(preprocess(vertexName, vertex, ShaderStage.VERTEX, none), true, buffers);
+        String fs = BlazeModernSource.normalise(preprocess(fragmentName, fragment, ShaderStage.FRAGMENT, none), false, buffers);
         return lower(vertexName, fragmentName, vs, fs);
     }
 
