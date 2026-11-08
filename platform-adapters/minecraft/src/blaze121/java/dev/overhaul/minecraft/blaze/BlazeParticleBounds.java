@@ -9,6 +9,7 @@ import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.world.phys.Vec3;
+import org.joml.FrustumIntersection;
 
 /**
  * Culling a particle against the view reads the particle itself, and with thousands of them scattered over the heap
@@ -34,8 +35,14 @@ public final class BlazeParticleBounds {
         }
     };
 
+    /** Whether each draw first tests every packed box in one pass; flipped by a measurement like {@link #on}. */
+    public static boolean pass = BlazeOptimization.PARTICLE_CULL_PASS.on();
+    /** {@link #visibility} answers: hidden, shown, or not tested (no plain box, or no pass ran). */
+    public static final byte HIDDEN = 0, SHOWN = 1, UNTESTED = 2;
+
     private static Particle[] particles = new Particle[0];
     private static float[] boxes = new float[0];
+    private static byte[] visible = new byte[0];
     private static int[] starts = new int[0];
     private static int count, queues, cursor;
     private static double anchorX, anchorY, anchorZ;
@@ -78,6 +85,31 @@ public final class BlazeParticleBounds {
         if (total < count) Arrays.fill(particles, total, count, null);
         count = total;
         cursor = 0;
+        Arrays.fill(visible, 0, Math.min(visible.length, total), UNTESTED);
+    }
+
+    /** Tests every plain box against the view once, for the draw that is about to read {@link #visibility}. */
+    public static void cull(FrustumIntersection view, double camX, double camY, double camZ) {
+        if (!on || !pass) return;
+        if (visible.length < count) visible = new byte[particles.length];
+        float dx = (float) (camX - anchorX), dy = (float) (camY - anchorY), dz = (float) (camZ - anchorZ);
+        float[] boxes = BlazeParticleBounds.boxes;
+        byte[] visible = BlazeParticleBounds.visible;
+        for (int index = 0, at = 0; index < count; index++, at += 4) {
+            float half = boxes[at + 3];
+            if (half != half) {
+                visible[index] = UNTESTED;
+                continue;
+            }
+            float x = boxes[at] - dx, y = boxes[at + 1] - dy, z = boxes[at + 2] - dz;
+            visible[index] = view.testAab(x - half, y - half, z - half, x + half, y + half, z + half) ? SHOWN : HIDDEN;
+        }
+    }
+
+    /** The last {@link #cull} answer for the box at {@code at} from {@link #find}. */
+    public static byte visibility(int at) {
+        int index = at >> 2;
+        return index < visible.length ? visible[index] : UNTESTED;
     }
 
     /** Forgets every particle, so none outlives the level it came from. */
