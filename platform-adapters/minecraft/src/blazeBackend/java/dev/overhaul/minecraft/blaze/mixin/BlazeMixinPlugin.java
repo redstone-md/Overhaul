@@ -40,6 +40,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("YoukaiHeadCurios121Mixin", BlazeOptimization.HEAD_CURIOS),
             Map.entry("AlexsCavesScans121Mixin", BlazeOptimization.ENTITY_SCANS),
             Map.entry("WitherGlowScan121Mixin", BlazeOptimization.WITHER_GLOWS),
+            Map.entry("WitherMusicScan121Mixin", BlazeOptimization.WITHER_GLOWS),
             Map.entry("AlexsMobsEffectPoses121Mixin", BlazeOptimization.EFFECT_POSES),
             Map.entry("VillagerLayerTextures121Mixin", BlazeOptimization.VILLAGER_TEXTURES),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
