@@ -74,7 +74,7 @@ public enum BlazeOptimization {
     DH_DEVICE_CACHE("dhDeviceCache", "Each Distant Horizons vertex buffer keeps the device buffer it resolved to instead of looking it up by name every frame"),
     SHADOW_DRAWS("shadowDraws", "Shadow casters' draw fields copied into flat per-layer tables when they are gathered, so frames that keep them draw without reading each mesh; needs packShadowReuse"),
     RAW_DRAWS("rawDraws", "Mod draws from raw OpenGL vertex arrays, such as Veil's lights, particles and skins, drawn natively instead of dropped"),
-    RAW_PROGRAMS("rawPrograms", "Programs a mod compiles with raw OpenGL calls, such as Flywheel's instancing backend, compiled to SPIR-V so the mod's own renderer runs; needs rawDraws; off by default, Flywheel then stays off and Create draws through the vanilla renderers", false),
+    RAW_PROGRAMS("rawPrograms", "Programs a mod compiles with raw OpenGL calls, such as Flywheel's instancing backend, compiled to SPIR-V so the mod's own renderer runs; needs rawDraws; when off, Flywheel stays off and Create draws through the vanilla renderers"),
     MERGED_BARRIERS("mergedBarriers", "Image layout changes over several mips or layers recorded as one barrier instead of one per mip and layer"),
     SELECTOR_ORDER("selectorOrder", "Entity selectors such as @e[tag=x] in datapack tick functions test an entity's tags, type and scores before reading its health"),
     MOD_ENTITY_TICKS("modEntityTicks", "Born in Chaos animation sync skips entities of other mods instead of testing each against 83 of its classes every tick"),
