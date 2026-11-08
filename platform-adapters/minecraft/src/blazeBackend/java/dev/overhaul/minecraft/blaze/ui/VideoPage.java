@@ -34,7 +34,7 @@ final class VideoPage extends SettingsPage {
 
     @Override
     List<SettingsRow> rows() {
-        int distance = Runtime.getRuntime().maxMemory() >= 1_000_000_000L ? 32 : 16;
+        int distance = QualityPreset.maxDistance();
         List<SettingsRow> rows = new ArrayList<>();
         rows.add(new SettingsRow.Header("Display"));
         rows.add(slider(options.renderDistance(), "options.renderDistance", "How far terrain is drawn, in chunks. The largest cost on the GPU and on chunk building", 2, distance, 1, v -> v + " chunks"));
