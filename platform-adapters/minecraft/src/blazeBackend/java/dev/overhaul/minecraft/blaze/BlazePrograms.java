@@ -8,6 +8,7 @@ import com.mojang.blaze3d.shaders.Uniform;
 import dev.overhaul.minecraft.blaze.mixin.EffectProgramConstructorAccess;
 import dev.overhaul.minecraft.blaze.mixin.ProgramConstructorAccess;
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -44,7 +45,8 @@ public final class BlazePrograms implements AutoCloseable {
     private final Thread owner=Thread.currentThread();
     private final BlazeProgramCompiler compiler;
     private final Consumer<BlazeProgramCompiler.Program> released;
-    private final Map<Integer,Entry> programs=new HashMap<>();
+    private static final boolean UNBOXED=BlazeOptimization.UNBOXED_PROGRAMS.on();
+    private final Int2ObjectOpenHashMap<Entry> programs=new Int2ObjectOpenHashMap<>();
     private int next=1,active,unknownActive;
     private boolean closed;
 
@@ -168,7 +170,7 @@ public final class BlazePrograms implements AutoCloseable {
     public void release(int id){requireOwner();lastEntry=null;var entry=programs.remove(id);if(active==id)active=0;if(entry!=null)entry.releaseAll(released);}
     private Entry entry(int id){
         if(id==lastId&&lastEntry!=null)return lastEntry;
-        var entry=programs.get(id);if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);
+        var entry=UNBOXED?programs.get(id):programs.get((Object)Integer.valueOf(id));if(entry==null)throw new IllegalArgumentException("Unknown Blaze program: "+id);
         lastId=id;lastEntry=entry;return entry;
     }
     private void requireOwner(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Blaze programs belong to another thread");}
