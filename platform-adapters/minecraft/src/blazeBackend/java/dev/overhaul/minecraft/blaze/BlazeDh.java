@@ -80,6 +80,7 @@ public final class BlazeDh implements AutoCloseable {
 
     private final BlazeRenderer owner;
     private final BlazeProgramCompiler.Program terrain, boxes, composite, vanillaFade;
+    private final BlazeDhSsao ssao;
     private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
     private BlazeTerrainPass pending;
     private TerrainSettings settings;
@@ -106,6 +107,7 @@ public final class BlazeDh implements AutoCloseable {
             vanillaFade = new BlazeProgramCompiler.Program(composite.vertex(),
                     compiler.compile("dh_vanilla_fade.fsh", BlazeDhShaders.VANILLA_FADE_FRAGMENT, ShaderStage.FRAGMENT),
                     new ProgramBindings(Map.of(), COMPOSITE_BYTES, Map.of("uDhColor", 1, "uDhDepth", 2, "uMcDepth", 3), Map.of(), Map.of(), Map.of()));
+            ssao = new BlazeDhSsao(owner, compiler, composite, this::pipeline);
         }
     }
 
@@ -151,6 +153,11 @@ public final class BlazeDh implements AutoCloseable {
             pass.add(new BoxDraw(vertexBuffer, indexBuffer, colors, scales, chunks, subChunks, group));
         }
         if (pass != null) owner.enqueue(pass);
+    }
+
+    /** DH's ambient occlusion over the LODs drawn into its targets so far. */
+    public void ssao(int colorTexture, int depthTexture, float[] projection, float[] inverse, float near, float far) {
+        if (!owner.drawingNowhere()) ssao.render(colorTexture, depthTexture, projection, inverse, near, far);
     }
 
     /** Fog is optional per frame in DH, so its absence is what the composite reads when the fog pass never ran. */
@@ -271,6 +278,7 @@ public final class BlazeDh implements AutoCloseable {
     @Override public void close() {
         if (pending != null) { pending.close(); pending = null; }
         if (fadeTarget != null) { fadeTarget.close(); fadeTarget = null; }
+        ssao.close();
         for (NativeGraphicsPipeline pipeline : new ArrayList<>(pipelines.values())) pipeline.close();
         pipelines.clear();
     }

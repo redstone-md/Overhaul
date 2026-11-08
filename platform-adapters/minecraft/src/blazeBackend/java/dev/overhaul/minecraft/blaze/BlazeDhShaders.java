@@ -241,5 +241,80 @@ final class BlazeDhShaders {
             }
             """;
 
+    /** DH's ambient occlusion, with its fixed sample settings and GL's depth range folded in. */
+    static final String SSAO_FRAGMENT = """
+            #version 450
+            layout(set=0,binding=0,std140) uniform Occlusion { mat4 uProj; mat4 uInvProj; };
+            layout(set=0,binding=1) uniform sampler2D uDhDepthTexture;
+            layout(location=0) in vec2 texCoord;
+            layout(location=0) out vec4 fragColor;
+            const int SAMPLE_COUNT = 6;
+            const float RADIUS = 4.0, STRENGTH = 0.2, MIN_LIGHT = 0.25, BIAS = 0.02, FADE_DISTANCE = 1600.0;
+            const float EPSILON = 1.e-6, GOLDEN_ANGLE = 2.39996323, TAU = 6.2831853076;
+            const vec3 MAGIC = vec3(0.06711056, 0.00583715, 52.9829189);
+            vec3 unproject(vec4 position) { return position.xyz / position.w; }
+            float noise(vec2 pixel) { return fract(MAGIC.z * fract(dot(pixel, MAGIC.xy))); }
+            float spiralOcclusion(vec3 viewPos, vec3 viewNormal) {
+                float phase = noise(gl_FragCoord.xy) * TAU;
+                float stride = RADIUS / SAMPLE_COUNT, radius = stride, ao = 0.0;
+                int counted = 0;
+                for (int i = 0; i < SAMPLE_COUNT; i++) {
+                    vec2 offset = vec2(sin(phase), cos(phase)) * radius;
+                    radius += stride;
+                    phase += GOLDEN_ANGLE;
+                    vec3 clip = clamp(unproject(uProj * vec4(viewPos + vec3(offset, -0.1), 1.0)) * 0.5 + 0.5, 0.0, 1.0);
+                    float depth = textureLod(uDhDepthTexture, clip.xy, 0.0).r;
+                    if (depth >= 1.0 - EPSILON) continue;
+                    clip.z = depth;
+                    vec3 diff = unproject(uInvProj * vec4(clip * 2.0 - 1.0, 1.0)) - viewPos;
+                    float gap = length(diff);
+                    ao += max(dot(viewNormal, diff / gap) - BIAS, 0.0) * (1.0 - clamp(gap / RADIUS, 0.0, 1.0));
+                    counted++;
+                }
+                ao /= max(counted, 1);
+                return smoothstep(0.0, STRENGTH, ao) * (1.0 - MIN_LIGHT);
+            }
+            void main() {
+                float depth = textureLod(uDhDepthTexture, texCoord, 0.0).r;
+                vec3 viewPos = unproject(uInvProj * vec4(vec3(texCoord, depth) * 2.0 - 1.0, 1.0));
+                // Derivatives outside the branch, where every lane of the quad still runs.
+                vec3 viewNormal = normalize(cross(dFdxFine(viewPos), dFdyFine(viewPos)));
+                float occlusion = 0.0, reach = length(viewPos);
+                if (depth < 1.0 && reach < FADE_DISTANCE) occlusion = spiralOcclusion(viewPos, viewNormal) * (FADE_DISTANCE - reach) / FADE_DISTANCE;
+                fragColor = vec4(vec3(1.0 - occlusion), 1.0);
+            }
+            """;
+
+    /** DH's depth-aware blur of the occlusion; the blend multiplies the LOD colour by its alpha. */
+    static final String SSAO_APPLY_FRAGMENT = """
+            #version 450
+            layout(set=0,binding=0,std140) uniform Apply { vec2 uViewSize; float uNearClipPlane, uFarClipPlane; };
+            layout(set=0,binding=1) uniform sampler2D uSourceColorTexture;
+            layout(set=0,binding=2) uniform sampler2D uSourceDepthTexture;
+            layout(location=0) in vec2 texCoord;
+            layout(location=0) out vec4 fragColor;
+            const int BLUR_RADIUS = 2;
+            const float SIGMA = 1.6;
+            float linearizeDepth(float depth) { return (uNearClipPlane * uFarClipPlane) / (depth * (uNearClipPlane - uFarClipPlane) + uFarClipPlane); }
+            float gaussian(float x) { return exp(-(x * x) / (2.0 * SIGMA * SIGMA)); }
+            void main() {
+                fragColor = vec4(1.0);
+                float depth = textureLod(uSourceDepthTexture, texCoord, 0.0).r;
+                if (depth >= 1.0) return;
+                float linearDepth = linearizeDepth(depth), accum = 0.0, total = 0.0;
+                vec2 pixelSize = 1.0 / uViewSize;
+                for (int y = -BLUR_RADIUS; y <= BLUR_RADIUS; y++) {
+                    for (int x = -BLUR_RADIUS; x <= BLUR_RADIUS; x++) {
+                        vec2 coord = texCoord + vec2(x, y) * pixelSize;
+                        float sampleDepth = linearizeDepth(textureLod(uSourceDepthTexture, coord, 0.0).r);
+                        float weight = gaussian(float(x)) * gaussian(float(y)) * gaussian(abs(sampleDepth - linearDepth));
+                        accum += weight * textureLod(uSourceColorTexture, coord, 0.0).r;
+                        total += weight;
+                    }
+                }
+                fragColor.a = total <= 1.e-4 ? 1.0 : accum / total;
+            }
+            """;
+
     private BlazeDhShaders() {}
 }

@@ -227,6 +227,22 @@ public final class BlazeDhFrame {
                 new float[]{shading.north, shading.south, shading.east, shading.west, shading.top, shading.bottom});
     }
 
+    /** DH's targets as its setup left them this frame; its SSAO pass reads and darkens them. */
+    private static int activeColor, activeDepth;
+
+    public static void targets(int colorTexture, int depthTexture) {
+        activeColor = colorTexture;
+        activeDepth = depthTexture;
+    }
+
+    /** DH's SSAO between its two generic passes, on the LODs drawn so far. A pack's own gbuffers take no DH pass. */
+    public static void ssao(BlazeRenderer renderer, RenderParams params) {
+        if (activeColor <= 0 || activeDepth <= 0 || packDraws(renderer)) return;
+        float[] projection = columns(params.dhProjectionMatrix);
+        float[] inverse = new org.joml.Matrix4f().set(projection).invert().get(new float[16]);
+        renderer.dh().ssao(activeColor, activeDepth, projection, inverse, RenderUtil.getNearClipPlaneInBlocks(), RenderUtil.getFarClipPlaneDistanceInBlocks());
+    }
+
     /** The original copy leaves the frame's framebuffer bound, and everything after it draws there. */
     public static void composite(BlazeRenderer renderer, RenderParams params, int colorTexture, int depthTexture) {
         GlStateManager._glBindFramebuffer(36160, Minecraft.getInstance().getMainRenderTarget().frameBufferId);

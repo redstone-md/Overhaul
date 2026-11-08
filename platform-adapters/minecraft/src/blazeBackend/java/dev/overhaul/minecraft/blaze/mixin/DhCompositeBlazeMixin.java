@@ -19,6 +19,11 @@ abstract class DhCompositeBlazeMixin {
     @Shadow(remap = false) public abstract int getActiveColorTextureId();
     @Shadow(remap = false) public abstract int getActiveDepthTextureId();
 
+    @Inject(method = "runRenderPassSetup", at = @At("RETURN"), require = 0)
+    private void overhaul$targets(RenderParams params, CallbackInfo callback) {
+        if (BlazeFrontend.current() != null) BlazeDhFrame.targets(getActiveColorTextureId(), getActiveDepthTextureId());
+    }
+
     @Inject(method = "copyToMcTexture", at = @At("HEAD"), cancellable = true, require = 0)
     private void overhaul$composite(RenderParams params, CallbackInfo callback) {
         var renderer = BlazeFrontend.current();

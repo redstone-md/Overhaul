@@ -14,8 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Pseudo
 @Mixin(targets = {
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.ssao.GlDhSSAORenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.ssao.GlDhSSAORenderer_neoforge",
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer",
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer_neoforge",
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlDhFarFadeRenderer",

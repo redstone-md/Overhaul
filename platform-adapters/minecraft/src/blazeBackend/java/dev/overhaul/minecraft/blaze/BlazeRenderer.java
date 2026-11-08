@@ -277,6 +277,8 @@ public final class BlazeRenderer implements AutoCloseable {
         if(compact||ids)rebuildSections();
     }
     BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
+    /** Closes a resource once the work queued so far no longer reads it. */
+    void retire(AutoCloseable resource){requireOpen();queue.retire(resource);}
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
     public void clear(int mask){clear(mask,clearValues());}
     /**
