@@ -124,6 +124,7 @@ public enum BlazeOptimization {
     LAST_TARGET("lastTarget", "The last framebuffer looked up answered again without the boxed id map, since every draw asks for the bound one"),
     FLUID_SOURCE_EVENT("fluidSourceEvent", "A spreading fluid skips building the create-source event at each neighbour while nothing listens to it"),
     UNBOXED_PROGRAMS("unboxedPrograms", "Shader programs are looked up by unboxed id, since every terrain layer and draw asks for one and a boxed map showed in the frame"),
+    SINGLE_PACK("singlePack", "A chunk section of one block is saved as that block directly, since packing unpacked and remapped all its ids to store nothing"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
