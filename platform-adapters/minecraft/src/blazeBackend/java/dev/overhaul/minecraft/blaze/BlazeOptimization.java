@@ -108,6 +108,7 @@ public enum BlazeOptimization {
     MEKANISM_RADIATION_LOOKUP("mekanismRadiationLookup", "Mekanism's radiation tick skips the radiation capability lookup, a provider call and a new wrapper, for an entity without radiation data"),
     WITHER_POSSESSED_IDLE("witherPossessedIdle", "Wither Reincarnated's possession tick returns at once for a mob that was never possessed, instead of creating possession data on every mob"),
     PUZZLES_CONFIG_LOOKUP("puzzlesConfigLookup", "Puzzles Lib returns a mod's config found by class before building the not-found message its null check made on every lookup"),
+    FLUID_STATES("fluidStates", "A spreading fluid keeps the source and flowing states it already looked up, instead of walking its property table at every neighbour it checks"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
