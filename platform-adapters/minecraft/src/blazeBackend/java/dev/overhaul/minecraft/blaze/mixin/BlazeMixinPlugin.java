@@ -82,6 +82,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("AlexsMobsPupfishSave121Mixin", BlazeOptimization.PUPFISH_SAVE),
             Map.entry("ArchitecturyEventInvoke121Mixin", BlazeOptimization.ARCHITECTURY_EVENT_INVOKE),
             Map.entry("ZetaEventInvoke121Mixin", BlazeOptimization.ZETA_EVENT_INVOKE),
+            Map.entry("AlexsMobsPupfishColumn121Mixin", BlazeOptimization.PUPFISH_COLUMN),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
