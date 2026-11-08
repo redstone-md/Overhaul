@@ -118,6 +118,9 @@ final class BlazeTransfers {
     void clearColor(GpuImage image,int mip,int layer,float r,float g,float b,float a){image(ImageCommand.clearColor(context,image,mip,layer,r,g,b,a),image);}
     void copy(GpuImage source,ImageRegion from,GpuImage target,ImageRegion to){image(ImageCommand.copy(context,source,from,target,to),source,target);}
     void blit(GpuImage source,int[] from,GpuImage target,int[] to,int filter){image(ImageCommand.blit(context,source,from,target,to,filter),source,target);}
+    void blit(GpuImage source,ImageRegion sourceLevel,int[] from,GpuImage target,ImageRegion targetLevel,int[] to,int filter){
+        image(ImageCommand.blit(context,source,sourceLevel,from,target,targetLevel,to,filter),source,target);
+    }
     void mipmaps(GpuImage image,int base,int layer){image(ImageCommand.mipmaps(context,image,base,layer),image);}
     private void image(ImageCommand command,GpuImage... images){queue.add(new ImageOperation(command,null,images),0);}
 

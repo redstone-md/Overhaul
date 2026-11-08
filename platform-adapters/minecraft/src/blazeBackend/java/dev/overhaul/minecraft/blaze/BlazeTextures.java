@@ -15,6 +15,7 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.*;
 import static org.lwjgl.opengl.GL13.GL_ACTIVE_TEXTURE;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
+import static org.lwjgl.opengl.GL30.GL_RG;
 import static org.lwjgl.vulkan.VK10.*;
 
 /** Device-owned texture namespace, upload pixel-store state and deterministic resource closure. */
@@ -223,13 +224,29 @@ public final class BlazeTextures implements AutoCloseable {
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
         // Another colour format, such as a pack's R11F colortex0 standing in for the main target: the GPU converts it
         // as GL does, where reading it back as RGBA8 bytes would scramble its packed floats.
-        if(transfers!=null&&source.level()==0&&destination.mipLevel()==0&&destination.arrayLayer()==0&&from.format()!=to.format()&&blits(from.format(),to.format())){
-            transfers.blit(from,new int[]{x,y,x+width,y+height},to,new int[]{destination.x(),destination.y(),destination.x()+width,destination.y()+height},VK_FILTER_NEAREST);return;
+        if(transfers!=null&&from.format()!=to.format()&&blits(from.format(),to.format())){
+            transfers.blit(from,ImageRegion.whole(from,source.level(),0),new int[]{x,y,x+width,y+height},to,ImageRegion.whole(to,destination.mipLevel(),destination.arrayLayer()),
+                    new int[]{destination.x(),destination.y(),destination.x()+width,destination.y()+height},VK_FILTER_NEAREST);return;
         }
-        var bytes=immediate().readback(from,area,0);int stride=Math.multiplyExact(width,4),size=Math.multiplyExact(stride,height);
+        // The CPU path converts through 8-bit channels, so it reads and writes only byte-per-channel storage.
+        int sourceFormat=byteLayout(from.format());
+        if(sourceFormat==0||byteLayout(to.format())==0||to.format().name().startsWith("BGRA")){
+            BlazeGlBoundary.reportOnce("raw copy "+from.format()+" to "+to.format(),"A mod copied a "+from.format()+" framebuffer into a "+to.format()+" texture, which this device cannot convert; the texture keeps its old contents");
+            return;
+        }
+        int storage=from.format().bytesPerPixel();
+        var bytes=immediate().readback(from,area,0);int stride=Math.multiplyExact(width,storage),size=Math.multiplyExact(stride,height);
         var layout=new BlazePixelStore.Layout(stride,0,size);
-        var converted=BlazePixels.unpack(bytes,layout,width,height,GL_RGBA,GL_UNSIGNED_BYTE,texture.channels,to.format().bytesPerPixel());
+        var converted=BlazePixels.unpack(bytes,layout,width,height,sourceFormat,GL_UNSIGNED_BYTE,texture.channels,to.format().bytesPerPixel());
         try{uploadImage(to,destination,converted,0);}finally{MemoryUtil.memFree(converted);}
+    }
+    /** The GL pixel format that reads one 8-bit-per-channel storage format byte for byte, or 0 for any other storage. */
+    private static int byteLayout(ImageFormat format){
+        return switch(format){
+            case R8_UNORM->GL_RED;case RG8_UNORM->GL_RG;case RGB8_UNORM->GL_RGB;
+            case RGBA8_UNORM,RGBA8_SRGB->GL_RGBA;case BGRA8_UNORM,BGRA8_SRGB->GL_BGRA;
+            default->0;
+        };
     }
     /** Blits convert between float and normalised colour formats only, and only where the device can blit them. */
     private boolean blits(ImageFormat from,ImageFormat to){
