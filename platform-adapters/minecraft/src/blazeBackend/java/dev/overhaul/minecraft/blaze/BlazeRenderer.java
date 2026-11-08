@@ -4,6 +4,7 @@ import dev.overhaul.vulkan.VulkanStack;
 
 import dev.overhaul.shader.blaze.BlazeProgramCompiler;
 import dev.overhaul.vulkan.*;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,8 +44,8 @@ public final class BlazeRenderer implements AutoCloseable {
     private BlazeGpuTimer gpuTimer;
     private BlazeRawFramebuffers rawFramebuffers;
     private final Map<Integer,Float> foreignClearDepths=new HashMap<>();
-    private final Map<Integer,BlazeTarget> targets=new HashMap<>();
-    /** The last registered target looked up: every draw asks for the bound one, and the boxed map shows in the frame. */
+    private final Int2ObjectOpenHashMap<BlazeTarget> targets=new Int2ObjectOpenHashMap<>();
+    /** The last registered target looked up, and the others by unboxed id: every draw asks for the bound one, and a boxed map showed in the frame. */
     private static final boolean LAST_TARGET=BlazeOptimization.LAST_TARGET.on();
     private int foundTargetId;
     private BlazeTarget foundTarget;
@@ -225,7 +226,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(id>=FOREIGN_FRAMEBUFFERS)return rawFramebuffers.target(id);
         if(id==0)return backBuffer;
         if(LAST_TARGET&&id==foundTargetId)return foundTarget;
-        BlazeTarget target=targets.get(id);
+        BlazeTarget target=LAST_TARGET?targets.get(id):targets.get((Object)Integer.valueOf(id));
         if(target==null)throw new IllegalArgumentException("Unknown framebuffer "+id);
         foundTargetId=id;
         foundTarget=target;
