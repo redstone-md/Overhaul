@@ -4,6 +4,7 @@ import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.ParticleMoveCheck;
 import dev.overhaul.minecraft.blaze.RainHeightCheck;
 import dev.overhaul.minecraft.blaze.SableCullPatch;
+import dev.overhaul.minecraft.blaze.TaczUnarmedPatch;
 import dev.overhaul.minecraft.blaze.VeilSkeletonPatch;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +92,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("PuzzlesConfigHolder121Mixin", BlazeOptimization.PUZZLES_CONFIG_LOOKUP),
             Map.entry("FlowingFluidStates121Mixin", BlazeOptimization.FLUID_STATES),
             Map.entry("ScoreboardHolders121Mixin", BlazeOptimization.SELECTOR_SCORES),
+            Map.entry("TaczUnarmedTick121Mixin", BlazeOptimization.TACZ_UNARMED),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
@@ -133,5 +135,6 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         else if (mixinClassName.endsWith(".LevelRendererSableRain121Mixin")) RainHeightCheck.inspect(targetClass, "overhaul$skipEmptySable");
         else if (mixinClassName.endsWith(".EntityRendererSableCull121Mixin")) SableCullPatch.apply(targetClass);
         else if (mixinClassName.endsWith(".LevelRendererVeilSkeletons121Mixin")) VeilSkeletonPatch.apply(targetClass);
+        else if (mixinClassName.endsWith(".TaczUnarmedTick121Mixin")) TaczUnarmedPatch.apply(targetClass);
     }
 }
