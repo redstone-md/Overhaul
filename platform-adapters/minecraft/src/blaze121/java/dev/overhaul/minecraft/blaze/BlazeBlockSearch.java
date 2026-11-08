@@ -76,9 +76,18 @@ public final class BlazeBlockSearch {
      */
     public static boolean mayHold(Level level, BlockPos center, int reach, int below, int above, Predicate<BlockState> wanted,
             boolean missingMayHold) {
-        int minSectionX = SectionPos.blockToSectionCoord(center.getX() - reach), maxSectionX = SectionPos.blockToSectionCoord(center.getX() + reach);
-        int minSectionZ = SectionPos.blockToSectionCoord(center.getZ() - reach), maxSectionZ = SectionPos.blockToSectionCoord(center.getZ() + reach);
-        int minY = center.getY() - below, maxY = center.getY() + above;
+        return mayHold(level, center.getX() - reach, center.getY() - below, center.getZ() - reach,
+                center.getX() + reach, center.getY() + above, center.getZ() + reach, wanted, missingMayHold);
+    }
+
+    /**
+     * Whether any section holding blocks from {@code minX, minY, minZ} to {@code maxX, maxY, maxZ}, all inclusive, may
+     * hold a state {@code wanted} accepts. A chunk that is not a loaded full chunk answers {@code missingMayHold}.
+     */
+    public static boolean mayHold(Level level, int minX, int minY, int minZ, int maxX, int maxY, int maxZ,
+            Predicate<BlockState> wanted, boolean missingMayHold) {
+        int minSectionX = SectionPos.blockToSectionCoord(minX), maxSectionX = SectionPos.blockToSectionCoord(maxX);
+        int minSectionZ = SectionPos.blockToSectionCoord(minZ), maxSectionZ = SectionPos.blockToSectionCoord(maxZ);
         for (int sectionZ = minSectionZ; sectionZ <= maxSectionZ; sectionZ++) {
             for (int sectionX = minSectionX; sectionX <= maxSectionX; sectionX++) {
                 ChunkAccess chunk = level.getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
