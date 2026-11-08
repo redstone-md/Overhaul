@@ -12,6 +12,7 @@ final class BlazeGlRoutes {
     private static final int TEXTURE_2D = 0x0DE1;
     private static final int PIXEL_PACK_BUFFER = 0x88EB;
     private static final int PIXEL_UNPACK_BUFFER = 0x88EC;
+    private static final int DRAW_FRAMEBUFFER = 0x8CA9;
 
     private BlazeGlRoutes() {}
 
@@ -47,6 +48,21 @@ final class BlazeGlRoutes {
         put(table, "glClearColor", (renderer, a) -> renderer.drawState().clearColor(a.real(0), a.real(1), a.real(2), a.real(3)));
         put(table, "glClearDepth", (renderer, a) -> renderer.clearDepth(a.wide(0)));
         put(table, "glClearBufferfv", BlazeGlRoutes::clearBuffer);
+        put(table, "glDrawBuffer", (renderer, a) -> drawBuffers(renderer, renderer.boundFramebuffer(DRAW_FRAMEBUFFER), new int[]{a.integer(0)}));
+        put(table, "glDrawBuffers", (renderer, a) -> drawBuffers(renderer, renderer.boundFramebuffer(DRAW_FRAMEBUFFER), ints(a.pointer(1), a.integer(0))));
+        put(table, "glNamedFramebufferDrawBuffer", (renderer, a) -> drawBuffers(renderer, a.integer(0), new int[]{a.integer(1)}));
+        put(table, "glNamedFramebufferDrawBuffers", (renderer, a) -> drawBuffers(renderer, a.integer(0), ints(a.pointer(2), a.integer(1))));
+    }
+
+    /** Game framebuffers keep their own outputs; only a mod's framebuffer chooses which attachments its outputs write. */
+    private static void drawBuffers(BlazeRenderer renderer, int framebuffer, int[] buffers) {
+        if (framebuffer >= BlazeRenderer.FOREIGN_FRAMEBUFFERS) renderer.rawFramebuffers().drawBuffers(framebuffer, buffers);
+    }
+
+    private static int[] ints(long address, int count) {
+        int[] values = new int[Math.max(count, 0)];
+        for (int index = 0; index < values.length; index++) values[index] = MemoryUtil.memGetInt(address + index * (long) Integer.BYTES);
+        return values;
     }
 
     private static void attach(BlazeRenderer renderer, int framebuffer, int attachment, int texture, int level) {
@@ -63,12 +79,12 @@ final class BlazeGlRoutes {
         BlazeGlBoundary.reportOnce("raw attachment on real target", "A mod changed the attachments of a game framebuffer; game framebuffers keep their own images");
     }
 
-    /** glClearBufferfv ignores the clear values in state, and only the first colour attachment exists here. */
+    /** glClearBufferfv ignores the clear values in state and clears one draw buffer. */
     private static void clearBuffer(BlazeRenderer renderer, Arguments a) {
         var kept = renderer.clearValues();
         long value = a.pointer(2);
-        if (a.integer(0) == 0x1800 && a.integer(1) == 0) {
-            renderer.clear(0x4000, new BlazeDrawState.Clear(MemoryUtil.memGetFloat(value), MemoryUtil.memGetFloat(value + 4), MemoryUtil.memGetFloat(value + 8), MemoryUtil.memGetFloat(value + 12), kept.depth()));
+        if (a.integer(0) == 0x1800) {
+            renderer.clear(0x4000, new BlazeDrawState.Clear(MemoryUtil.memGetFloat(value), MemoryUtil.memGetFloat(value + 4), MemoryUtil.memGetFloat(value + 8), MemoryUtil.memGetFloat(value + 12), kept.depth()), a.integer(1));
         } else if (a.integer(0) == 0x1801) {
             renderer.clear(0x100, new BlazeDrawState.Clear(kept.r(), kept.g(), kept.b(), kept.a(), MemoryUtil.memGetFloat(value)));
         }

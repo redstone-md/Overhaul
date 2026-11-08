@@ -292,7 +292,9 @@ public final class BlazeRenderer implements AutoCloseable {
         Float own=drawTarget>=FOREIGN_FRAMEBUFFERS?foreignClearDepths.get(drawTarget):null;
         return own!=null?new BlazeDrawState.Clear(values.r(),values.g(),values.b(),values.a(),own):values;
     }
-    void clear(int mask,BlazeDrawState.Clear values){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values);}
+    void clear(int mask,BlazeDrawState.Clear values){clear(mask,values,-1);}
+    /** @param location the one colour location to clear, or -1 for all of them */
+    void clear(int mask,BlazeDrawState.Clear values,int location){requireOpen();BlazeTarget target=currentTarget();if(target!=null)target.clear(commands,mask,state.snapshot(),values,location);}
     public void copyImage(GpuImage source,ImageRegion from,GpuImage destination,ImageRegion to){requireOpen();transfers.copy(source,from,destination,to);}
     void draw(BlazeMesh mesh,BlazeTarget target,BlazeShaderSnapshot shader){draw(mesh,target,shader,state.snapshot());}
     /** Captures a draw now, in the game's current state, for {@link #queue} to place later in the frame; null draws nothing. */
@@ -332,7 +334,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 shape!=null?shape.bindings(mesh.layout()):List.of(new NativeGraphicsPipeline.Binding(0,mesh.layout().stride(),0)),
                 shape!=null?shape.attributes(mesh.layout()):new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
-                shape!=null?shape.colors(draw.color()):List.of(draw.color()),true,0,0,draw.logic());
+                shape!=null?shape.colors(draw.color()):Collections.nCopies(target.colorFormats().size(),draw.color()),true,0,0,draw.logic());
         NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description);
         try{pipelines.put(key,pipeline);}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
         return remember(program,mesh,topology,draw,target,pipeline);

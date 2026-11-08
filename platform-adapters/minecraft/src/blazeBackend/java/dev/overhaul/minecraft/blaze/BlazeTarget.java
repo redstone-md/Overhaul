@@ -45,20 +45,29 @@ public final class BlazeTarget implements AutoCloseable {
     }
 
     /**
-     * A target over images a mod attached; they stay owned by their textures. Vulkan needs a colour attachment for
-     * pipelines to stay compatible, so a depth-only framebuffer gets a private colour image nothing reads.
+     * A target over images a mod attached, one entry per colour location and null where a location writes nothing;
+     * the images stay owned by their textures. Vulkan needs a colour attachment for pipelines to stay compatible, so a
+     * framebuffer without colours gets a private colour image nothing reads.
      */
-    BlazeTarget(VulkanContext context, GpuAllocator allocator, BlazeTextures.Attachment colorAttachment, BlazeTextures.Attachment depthAttachment) {
-        if (colorAttachment == null && depthAttachment == null) throw new IllegalArgumentException("Framebuffer without attachments");
-        this.context=context;ownsColor=colorAttachment==null;ownsDepth=false;borrowsViews=false;
-        BlazeTextures.Attachment sized=colorAttachment!=null?colorAttachment:depthAttachment;
+    BlazeTarget(VulkanContext context, GpuAllocator allocator, List<BlazeTextures.Attachment> colorAttachments, BlazeTextures.Attachment depthAttachment) {
+        BlazeTextures.Attachment first=null;
+        for(BlazeTextures.Attachment attachment:colorAttachments)if(attachment!=null){first=attachment;break;}
+        if (first == null && depthAttachment == null) throw new IllegalArgumentException("Framebuffer without attachments");
+        this.context=context;ownsColor=first==null;ownsDepth=false;borrowsViews=false;
+        BlazeTextures.Attachment sized=first!=null?first:depthAttachment;
         level=sized.mip();
-        int fitWidth=sized.image().width(sized.mip()),fitHeight=sized.image().height(sized.mip());
+        int fitWidth=Integer.MAX_VALUE,fitHeight=Integer.MAX_VALUE;
+        for(BlazeTextures.Attachment attachment:colorAttachments)if(attachment!=null){fitWidth=Math.min(fitWidth,attachment.image().width(attachment.mip()));fitHeight=Math.min(fitHeight,attachment.image().height(attachment.mip()));}
         if(depthAttachment!=null){fitWidth=Math.min(fitWidth,depthAttachment.image().width(depthAttachment.mip()));fitHeight=Math.min(fitHeight,depthAttachment.image().height(depthAttachment.mip()));}
         width=fitWidth;height=fitHeight;
+        List<GpuImageView> views=new ArrayList<>();attachments=views;
         try {
-            color=ownsColor?allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT):colorAttachment.image();
-            colorView=ownsColor?color.view(0,1,0,1):color.view(colorAttachment.mip(),1,colorAttachment.layer(),1);
+            if(ownsColor){color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);colorView=color.view(0,1,0,1);views.add(colorView);}
+            else for(BlazeTextures.Attachment attachment:colorAttachments){
+                GpuImageView view=attachment==null?null:attachment.image().view(attachment.mip(),1,attachment.layer(),1);views.add(view);
+                if(colorView==null&&view!=null){colorView=view;color=attachment.image();}
+            }
+            attachments=Collections.unmodifiableList(views);
             if(depthAttachment!=null){depth=depthAttachment.image();depthView=depth.view(depthAttachment.mip(),1,depthAttachment.layer(),1);}
             createPass();
         } catch(RuntimeException|Error failure){close();throw failure;}
@@ -127,21 +136,26 @@ public final class BlazeTarget implements AutoCloseable {
         var begin=VkRenderPassBeginInfo.calloc(stack).sType$Default().renderPass(renderPass).framebuffer(framebuffer);
         begin.renderArea().extent().set(width,height);vkCmdBeginRenderPass(command,begin,VK_SUBPASS_CONTENTS_INLINE);
     }
-    void clear(ImmediateCommands commands,int mask,BlazeDrawState.Snapshot raster,BlazeDrawState.Clear values){
+    void clear(ImmediateCommands commands,int mask,BlazeDrawState.Snapshot raster,BlazeDrawState.Clear values){clear(commands,mask,raster,values,-1);}
+    /** Clears like glClear, every colour location; {@code location} at zero or above clears only that one, like glClearBuffer. */
+    void clear(ImmediateCommands commands,int mask,BlazeDrawState.Snapshot raster,BlazeDrawState.Clear values,int location){
         if(closing)throw new IllegalStateException("Framebuffer is closed");
         if((mask&~(0x4000|0x100|0x400))!=0)throw new UnsupportedOperationException("Unknown framebuffer clear mask");
         boolean maskedColor=(mask&0x4000)!=0&&raster.color().writeMask()!=0;
         boolean depthClear=(mask&0x100)!=0&&depth!=null&&raster.depth().write();
         if(maskedColor&&raster.color().writeMask()!=15)BlazeGlBoundary.reportOnce("masked clear","A colour clear used a partial write mask, which is not lowered; the colour was not cleared");
-        boolean colorClear=maskedColor&&raster.color().writeMask()==15;
+        int colors=0;
+        if(maskedColor&&raster.color().writeMask()==15)for(int index=0;index<attachments.size();index++)if(attachments.get(index)!=null&&(location<0||location==index))colors|=1<<index;
+        int colorLocations=colors;boolean colorClear=colorLocations!=0;
         int x=raster.scissor()?Math.max(0,raster.sx()):0,y=raster.scissor()?Math.max(0,raster.sy()):0;
         long right=raster.scissor()?Math.min(width,(long)raster.sx()+raster.sw()):width,top=raster.scissor()?Math.min(height,(long)raster.sy()+raster.sh()):height;
         if((!colorClear&&!depthClear)||right<=x||top<=y)return;
         BlazeImageUse images=new BlazeImageUse();
         BlazeQueue.Operation operation=new BlazeQueue.Operation(){
             @Override public void record(VkCommandBuffer command){prepare(command,images);try(MemoryStack stack=VulkanStack.push()){
-            begin(command,stack);var clears=VkClearAttachment.calloc((colorClear?1:0)+(depthClear?1:0),stack);int index=0;
-            if(colorClear)clears.get(index++).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(0).clearValue().color().float32(0,values.r()).float32(1,values.g()).float32(2,values.b()).float32(3,values.a());
+            begin(command,stack);var clears=VkClearAttachment.calloc(Integer.bitCount(colorLocations)+(depthClear?1:0),stack);int index=0;
+            for(int remaining=colorLocations;remaining!=0;remaining&=remaining-1)
+                clears.get(index++).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(Integer.numberOfTrailingZeros(remaining)).clearValue().color().float32(0,values.r()).float32(1,values.g()).float32(2,values.b()).float32(3,values.a());
             if(depthClear)clears.get(index).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).clearValue().depthStencil().depth(values.depth());
             var rect=VkClearRect.calloc(1,stack).baseArrayLayer(0).layerCount(1);rect.rect().offset().set(x,y);rect.rect().extent().set((int)(right-x),(int)(top-y));
             vkCmdClearAttachments(command,clears,rect);vkCmdEndRenderPass(command);
@@ -173,7 +187,7 @@ public final class BlazeTarget implements AutoCloseable {
     private void destroy(){
         if(framebuffer!=0){vkDestroyFramebuffer(context.device(),framebuffer,null);framebuffer=0;}
         if(renderPass!=0){vkDestroyRenderPass(context.device(),renderPass,null);renderPass=0;}
-        if(!borrowsViews){if(depthView!=null)depthView.close();if(colorView!=null)colorView.close();}
+        if(!borrowsViews){if(depthView!=null)depthView.close();for(GpuImageView view:attachments!=null?attachments:Collections.singletonList(colorView))if(view!=null)view.close();}
         depthView=null;colorView=null;
         if(depth!=null){if(ownsDepth)depth.close();depth=null;}if(color!=null){if(ownsColor)color.close();color=null;}
     }
