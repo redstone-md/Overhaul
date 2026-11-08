@@ -26,11 +26,12 @@ public final class BlazeRainColumns {
         int x = pos.getX(), y = pos.getY(), z = pos.getZ();
         slot = (x & 31) << 5 | z & 31;
         int key = slot * 3;
-        if (stamps[slot] == level.getGameTime() && keys[key] == x && keys[key + 1] == y && keys[key + 2] == z) return true;
+        long time = level.getGameTime();
+        if (stamps[slot] == time && keys[key] == x && keys[key + 1] == y && keys[key + 2] == z) return true;
         keys[key] = x;
         keys[key + 1] = y;
         keys[key + 2] = z;
-        stamps[slot] = level.getGameTime();
+        stamps[slot] = time;
         return false;
     }
 
