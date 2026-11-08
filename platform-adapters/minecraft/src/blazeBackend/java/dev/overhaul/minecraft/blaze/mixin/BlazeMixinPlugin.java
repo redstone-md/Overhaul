@@ -101,6 +101,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("DhStoredBytes121Mixin", BlazeOptimization.DH_STORED_BYTES),
             Map.entry("DhBlobCopy121Mixin", BlazeOptimization.DH_STORED_BYTES),
             Map.entry("DhStringPool121Mixin", BlazeOptimization.DH_STRING_POOL),
+            Map.entry("SparkBackgroundSampler121Mixin", BlazeOptimization.SPARK_BACKGROUND),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),
