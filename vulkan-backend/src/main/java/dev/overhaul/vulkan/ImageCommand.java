@@ -138,22 +138,26 @@ public final class ImageCommand implements AutoCloseable {
 
     /** Scales or flips between two base levels; each rectangle is {x0,y0,x1,y1} and must lie inside its image. */
     public static ImageCommand blit(VulkanContext context,GpuImage source,int[] from,GpuImage target,int[] to,int filter) {
-        ImageRegion sourceLevel=ImageRegion.whole(source,0,0),targetLevel=ImageRegion.whole(target,0,0);
+        return blit(context,source,ImageRegion.whole(source,0,0),from,target,ImageRegion.whole(target,0,0),to,filter);
+    }
+    /** As above between any mip level and array layer; each rectangle must lie inside its level. */
+    public static ImageCommand blit(VulkanContext context,GpuImage source,ImageRegion sourceLevel,int[] from,GpuImage target,ImageRegion targetLevel,int[] to,int filter) {
         validateImage(context,source,sourceLevel,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         validateImage(context,target,targetLevel,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         if (source==target) throw new IllegalArgumentException("Image blit requires two images");
         if (source.format().aspectMask()!=target.format().aspectMask()) throw new IllegalArgumentException("Image blit aspects differ");
         if (source.format().isDepth()&&(source.format()!=target.format()||filter!=VK_FILTER_NEAREST)) throw new IllegalArgumentException("Depth blits require one format and nearest filtering");
-        requireRectangle(from,source.width(0),source.height(0)); requireRectangle(to,target.width(0),target.height(0));
+        int sourceMip=sourceLevel.mipLevel(),sourceLayer=sourceLevel.arrayLayer(),targetMip=targetLevel.mipLevel(),targetLayer=targetLevel.arrayLayer();
+        requireRectangle(from,source.width(sourceMip),source.height(sourceMip)); requireRectangle(to,target.width(targetMip),target.height(targetMip));
         return new ImageCommand(context,(operation,command)-> {
             requireDefined(source,sourceLevel);
-            int sourceBefore=source.layout(0,0),targetBefore=target.layout(0,0);
+            int sourceBefore=source.layout(sourceMip,sourceLayer),targetBefore=target.layout(targetMip,targetLayer);
             operation.transition(source,sourceLevel,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
             operation.transition(target,targetLevel,command,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             try (MemoryStack stack=VulkanStack.push()) {
                 VkImageBlit.Buffer blit=VkImageBlit.calloc(1,stack);
-                blit.srcSubresource().aspectMask(source.format().aspectMask()).layerCount(1);
-                blit.dstSubresource().aspectMask(target.format().aspectMask()).layerCount(1);
+                blit.srcSubresource().aspectMask(source.format().aspectMask()).mipLevel(sourceMip).baseArrayLayer(sourceLayer).layerCount(1);
+                blit.dstSubresource().aspectMask(target.format().aspectMask()).mipLevel(targetMip).baseArrayLayer(targetLayer).layerCount(1);
                 blit.srcOffsets(0).set(from[0],from[1],0); blit.srcOffsets(1).set(from[2],from[3],1);
                 blit.dstOffsets(0).set(to[0],to[1],0); blit.dstOffsets(1).set(to[2],to[3],1);
                 vkCmdBlitImage(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,blit,filter);
