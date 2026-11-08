@@ -94,6 +94,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ScoreboardHolders121Mixin", BlazeOptimization.SELECTOR_SCORES),
             Map.entry("TaczUnarmedTick121Mixin", BlazeOptimization.TACZ_UNARMED),
             Map.entry("HashMapPaletteEntries121Mixin", BlazeOptimization.PALETTE_ENTRIES),
+            Map.entry("BiomeManagerFiddle121Mixin", BlazeOptimization.BIOME_FIDDLE),
             Map.entry("MoveToBlockSearch121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("RemoveBlockGoalAccess121Mixin", BlazeOptimization.BLOCK_SEARCH),
             Map.entry("BufferBuilderBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS),

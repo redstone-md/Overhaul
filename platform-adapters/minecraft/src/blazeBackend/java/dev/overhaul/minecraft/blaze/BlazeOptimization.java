@@ -112,6 +112,7 @@ public enum BlazeOptimization {
     SELECTOR_SCORES("selectorScores", "Entity selectors that require a score walk only the holders of that objective instead of every entity of the level; needs selectorIndex"),
     TACZ_UNARMED("taczUnarmed", "TACZ skips its gun state tick on mobs that have never held a gun, where that state never leaves its start"),
     PALETTE_ENTRIES("paletteEntries", "Chunk saves list a section palette's entries straight from its ids in order, instead of walking its whole id array through a filter"),
+    BIOME_FIDDLE("biomeFiddle", "Each thread keeps the seeded jitter of the quart corners a block's biome lookup measures against, which depends only on the seed and the corner, so biome tinting stops working it out again for every neighbour"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
