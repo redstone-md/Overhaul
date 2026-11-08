@@ -72,7 +72,26 @@ public final class BlazeTextures implements AutoCloseable {
         texture.attach();return new Attachment(texture.image(),texture.mip(level),texture.layer());
     }
     void renderbufferStorage(int id,int internal,int width,int height){
-        requireOpen();var texture=texture(id);texture.attach();texture.allocate(internal,width,height,1,commands);
+        renderbufferStorage(id,internal,width,height,0);
+    }
+    /**
+     * glRenderbufferStorageMultisample. As in GL the storage gets at least the samples asked for where the device has
+     * them, otherwise the most it has; zero or one sample, or a device without multisampling, gives ordinary storage.
+     */
+    void renderbufferStorage(int id,int internal,int width,int height,int samples){
+        requireOpen();var texture=texture(id);
+        int count=samples>1?sampleCount(internal,samples):VK_SAMPLE_COUNT_1_BIT;
+        if(count==VK_SAMPLE_COUNT_1_BIT){texture.attach();texture.allocate(internal,width,height,1,commands);return;}
+        texture.allocateMultisampled(internal,width,height,count);
+    }
+    private int sampleCount(int internal,int samples){
+        ImageFormat format=BlazeTextureFormats.storage(internal).format();
+        int supported=allocator.multisampleCounts(format,BlazeTexture.multisampledUsage(format))&~VK_SAMPLE_COUNT_1_BIT;
+        int wanted=Integer.highestOneBit(samples);if(wanted<samples)wanted<<=1;
+        int atLeast=supported&-wanted;
+        int chosen=atLeast!=0?Integer.lowestOneBit(atLeast):Integer.highestOneBit(supported);
+        if(chosen==0){BlazeGlBoundary.reportOnce("renderbuffer samples "+format,"A mod asked for a "+samples+"-sample "+format+" renderbuffer, which this device cannot store; it gets one sample");return VK_SAMPLE_COUNT_1_BIT;}
+        return chosen;
     }
     /** Immutable storage: the same image as a full mip chain defined level by level. */
     void storage(int target,int levels,int internal,int width,int height){
@@ -196,15 +215,18 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void read(BlazeTarget target,int x,int y,int width,int height,int format,int type,long address){
         requireOpen();if(width==0||height==0||target==null)return;
-        var image=readImage(target,format);transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,address);
+        var image=readImage(target,format);if(image==null)return;transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,address);
     }
     public void read(BlazeTarget target,int x,int y,int width,int height,int format,int type,ByteBuffer destination){
         requireOpen();if(width==0||height==0||target==null)return;
-        var image=readImage(target,format);transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,destination);
+        var image=readImage(target,format);if(image==null)return;transfer(image,new ImageRegion(target.level(),0,x,y,width,height),format,type,destination);
     }
     private GpuImage readImage(BlazeTarget target,int format){
         if(target==null)throw new IllegalStateException("No read framebuffer is bound");
-        GpuImage image=format==GL_DEPTH_COMPONENT?target.depth():target.color();if(image==null)throw new IllegalStateException("Read framebuffer has no depth attachment");return image;
+        GpuImage image=format==GL_DEPTH_COMPONENT?target.depth():target.color();if(image==null)throw new IllegalStateException("Read framebuffer has no depth attachment");
+        // GL refuses reads and copies from a multisampled framebuffer too; it must be blitted to a single-sampled one first.
+        if(image.samples()!=VK_SAMPLE_COUNT_1_BIT){BlazeGlBoundary.reportOnce("multisampled read","A mod read pixels straight from a multisampled framebuffer, which GL refuses; nothing was read");return null;}
+        return image;
     }
     private void transfer(GpuImage image,ImageRegion region,int format,int type,long address){
         if(address==0)throw new IllegalArgumentException("Null pixel destination");
@@ -218,7 +240,7 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
         kind(target);if(width==0||height==0||source==null)return;var texture=current(target);
-        var from=readImage(source,GL_RGBA);var to=texture.image();var destination=region(texture,level,BlazeTextureTargets.layer(target),xOffset,yOffset,width,height);
+        var from=readImage(source,GL_RGBA);if(from==null)return;var to=texture.image();var destination=region(texture,level,BlazeTextureTargets.layer(target),xOffset,yOffset,width,height);
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
         var area=new ImageRegion(source.level(),0,x,y,width,height);
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}

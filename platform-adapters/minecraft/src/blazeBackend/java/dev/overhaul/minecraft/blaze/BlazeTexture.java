@@ -68,6 +68,22 @@ final class BlazeTexture implements AutoCloseable {
         image=next;this.internal=internal;channels=count;defined=new boolean[levels];this.viewType=viewType;
         if(defineAll)java.util.Arrays.fill(defined,true);else defined[0]=true;
     }
+    /**
+     * Renderbuffer storage holding several samples per pixel. Nothing samples a renderbuffer, so the image is only an
+     * attachment and a transfer endpoint; {@code samples} is a {@code VK_SAMPLE_COUNT_*_BIT} the device supports.
+     */
+    void allocateMultisampled(int internal,int width,int height,int samples){
+        if(borrowed())throw new UnsupportedOperationException("Cannot redefine a render-target texture alias");
+        var storage=BlazeTextureFormats.storage(internal);ImageFormat format=storage.format();attached=true;
+        GpuImage next=allocator.createMultisampled(format,width,height,samples,multisampledUsage(format));
+        try{releaseSampling();if(image!=null)retire(image);}
+        catch(RuntimeException|Error failure){try{retire(next);}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
+        image=next;this.internal=internal;channels=storage.channels();defined=new boolean[]{true};viewType=VK_IMAGE_VIEW_TYPE_2D;
+    }
+    static int multisampledUsage(ImageFormat format){
+        return VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                |(format.isDepth()?VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT:VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    }
     /** The view dimension this texture samples as; a render-target alias is always 2D. */
     int viewType(){return borrowed!=null?VK_IMAGE_VIEW_TYPE_2D:viewType;}
     /** Layers of a cube or array, slices of a 3D texture. */

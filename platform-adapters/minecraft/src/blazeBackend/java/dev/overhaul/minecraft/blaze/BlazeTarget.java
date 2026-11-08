@@ -23,6 +23,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class BlazeTarget implements AutoCloseable {
     private final VulkanContext context;
     private final int width, height, level;
+    private int samples = VK_SAMPLE_COUNT_1_BIT;
     private final boolean ownsColor, ownsDepth, borrowsViews;
     private GpuImage color, depth;
     private GpuImageView colorView, depthView;
@@ -62,7 +63,10 @@ public final class BlazeTarget implements AutoCloseable {
         width=fitWidth;height=fitHeight;
         List<GpuImageView> views=new ArrayList<>();attachments=views;
         try {
-            if(ownsColor){color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT);colorView=color.view(0,1,0,1);views.add(colorView);}
+            // The private colour image must hold as many samples as the depth beside it.
+            if(ownsColor){int usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,depthSamples=depthAttachment.image().samples();
+                color=depthSamples==VK_SAMPLE_COUNT_1_BIT?allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,usage):allocator.createMultisampled(ImageFormat.RGBA8_UNORM,width,height,depthSamples,usage);
+                colorView=color.view(0,1,0,1);views.add(colorView);}
             else for(BlazeTextures.Attachment attachment:colorAttachments){
                 GpuImageView view=attachment==null?null:attachment.image().view(attachment.mip(),1,attachment.layer(),1);views.add(view);
                 if(colorView==null&&view!=null){colorView=view;color=attachment.image();}
@@ -99,19 +103,20 @@ public final class BlazeTarget implements AutoCloseable {
         ImageFormat[] formats=new ImageFormat[attachments.size()];int written=0;
         for(int index=0;index<formats.length;index++)if(attachments.get(index)!=null){formats[index]=attachments.get(index).image().format();written++;}
         colorFormats=Collections.unmodifiableList(Arrays.asList(formats));
+        samples=colorView!=null?colorView.image().samples():depth.samples();
         try(MemoryStack stack=VulkanStack.push()){
             var descriptions=VkAttachmentDescription.calloc(written+(depth==null?0:1),stack);
             var colorReference=VkAttachmentReference.calloc(formats.length,stack);
             LongBuffer views=stack.mallocLong(descriptions.capacity());int next=0;
             for(int index=0;index<formats.length;index++){
                 if(formats[index]==null){colorReference.get(index).attachment(VK_ATTACHMENT_UNUSED).layout(VK_IMAGE_LAYOUT_UNDEFINED);continue;}
-                descriptions.get(next).format(formats[index].vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                descriptions.get(next).format(formats[index].vkFormat()).samples(samples).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
                         .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
                         .initialLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 colorReference.get(index).attachment(next).layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 views.put(next++,attachments.get(index).handle());
             }
-            if(depth!=null)descriptions.get(next).format(depth.format().vkFormat()).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+            if(depth!=null)descriptions.get(next).format(depth.format().vkFormat()).samples(samples).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
                     .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
                     .initialLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             var subpass=VkSubpassDescription.calloc(1,stack).pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(formats.length).pColorAttachments(colorReference);
@@ -173,6 +178,8 @@ public final class BlazeTarget implements AutoCloseable {
     public GpuImageView depthView(){return depthView;}
     /** One entry per colour location; null where the location writes nothing. */
     List<ImageFormat> colorFormats(){return colorFormats;}
+    /** The {@code VK_SAMPLE_COUNT_*_BIT} every attachment holds; pipelines drawing here rasterize with it. */
+    int samples(){return samples;}
     /** True when drawing here writes this image, which a draw must then not also sample. */
     boolean writes(GpuImage image){
         if(image==depth)return true;

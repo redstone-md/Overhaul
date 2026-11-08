@@ -25,6 +25,10 @@ public final class BlazeFramebufferBlit {
         }
         BlazeTarget source=owner.readTarget(),target=owner.currentTarget();
         if(source.level()!=0||target.level()!=0){BlazeGlBoundary.reportOnce("mip blit","A framebuffer blit touched a mip level above 0 and was skipped");return;}
+        if(target.samples()!=1&&target.samples()!=source.samples()){
+            BlazeGlBoundary.reportOnce("multisampled blit target","A framebuffer blit wrote a multisampled framebuffer from one with another sample count, which GL refuses; it was skipped");
+            return;
+        }
         var raster=owner.drawState().snapshot();
         long left=Math.max(Math.max((long)dx0,0),(long)dx0-sx0),bottom=Math.max(Math.max((long)dy0,0),(long)dy0-sy0);
         long right=Math.min(Math.min((long)dx1,target.width()),(long)dx0+source.width()-sx0);
@@ -46,6 +50,7 @@ public final class BlazeFramebufferBlit {
     private static void scaled(BlazeRenderer owner,int[] from,int[] to,int mask,int filter){
         BlazeTarget source=owner.readTarget(),target=owner.currentTarget();
         if(source.level()!=0||target.level()!=0){BlazeGlBoundary.reportOnce("mip blit","A framebuffer blit touched a mip level above 0 and was skipped");return;}
+        if(target.samples()!=1){BlazeGlBoundary.reportOnce("scaled multisampled blit","A scaled framebuffer blit wrote a multisampled framebuffer, which GL refuses; it was skipped");return;}
         if(owner.drawState().snapshot().scissor())BlazeGlBoundary.reportOnce("scaled blit scissor","A scaled framebuffer blit ran under a scissor; the scissor was not applied");
         // Vulkan rejects corners outside the image, where OpenGL clips and keeps the scale.
         if(!clip(from,to,source.width(),source.height())||!clip(to,from,target.width(),target.height()))return;
@@ -54,8 +59,9 @@ public final class BlazeFramebufferBlit {
     }
     private static int[] corners(ImageRegion region){return new int[]{region.x(),region.y(),region.x()+region.width(),region.y()+region.height()};}
     private static boolean depthCopies(BlazeTarget source,BlazeTarget target){
-        boolean copies=source.depth()!=null&&target.depth()!=null&&source.depth().format()==target.depth().format();
-        if(!copies)BlazeGlBoundary.reportOnce("depth blit","A depth blit lacked a depth attachment or matching formats and was skipped");
+        // Depth has no resolve, so a multisampled depth copies only into depth with the same samples.
+        boolean copies=source.depth()!=null&&target.depth()!=null&&source.depth().format()==target.depth().format()&&source.depth().samples()==target.depth().samples();
+        if(!copies)BlazeGlBoundary.reportOnce("depth blit","A depth blit lacked a depth attachment or matching formats and sample counts and was skipped");
         return copies;
     }
     /** Pulls the corners of {@code rectangle} inside its image and moves {@code other} by the same fraction. */

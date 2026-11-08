@@ -325,7 +325,7 @@ public final class BlazeDh implements AutoCloseable {
                 program == boxes ? BOX_PUSH_BYTES : program == wireframe ? WIRE_PUSH_BYTES : PUSH_BYTES,
                 program == wireframe ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE, draw.depth(),
                 List.of(draw.color()), true, 0, 0, draw.logic());
-        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description);
+        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description, target.samples());
         pipelines.put(key, created);
         return created;
     }

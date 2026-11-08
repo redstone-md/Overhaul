@@ -224,8 +224,8 @@ final class BlazeRawDraws implements AutoCloseable {
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT, "main", program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT, "main", program.fragment().directBuffer())),
                 inputs.bindings(), inputs.attributes(), new long[]{descriptorLayout}, 0, topology, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE,
-                draw.depth(), List.of(draw.color()), true, 0, 0, draw.logic());
-        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description);
+                draw.depth(), java.util.Collections.nCopies(target.colorFormats().size(), draw.color()), true, 0, 0, draw.logic());
+        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description, target.samples());
         pipelines.put(key, created);
         return created;
     }

@@ -40,10 +40,10 @@ final class BlazeGlRoutes {
         put(table, "glNamedFramebufferRenderbuffer", (renderer, a) -> attachStorage(renderer, a.integer(0), a.integer(1), a.integer(3)));
         put(table, "glBindRenderbuffer", (renderer, a) -> renderer.rawFramebuffers().bindRenderbuffer(a.integer(1)));
         put(table, "glDeleteRenderbuffers", (renderer, a) -> each(a, address -> renderer.rawFramebuffers().deleteRenderbuffer(MemoryUtil.memGetInt(address))));
-        put(table, "glRenderbufferStorage", (renderer, a) -> renderer.rawFramebuffers().storage(0, a.integer(1), a.integer(2), a.integer(3)));
-        put(table, "glNamedRenderbufferStorage", (renderer, a) -> renderer.rawFramebuffers().storage(a.integer(0), a.integer(1), a.integer(2), a.integer(3)));
-        // There is no multisampled path: a single sample renders the same content without its edge smoothing.
-        put(table, "glRenderbufferStorageMultisample", (renderer, a) -> renderer.rawFramebuffers().storage(0, a.integer(2), a.integer(3), a.integer(4)));
+        put(table, "glRenderbufferStorage", (renderer, a) -> renderer.rawFramebuffers().storage(0, a.integer(1), a.integer(2), a.integer(3), 0));
+        put(table, "glNamedRenderbufferStorage", (renderer, a) -> renderer.rawFramebuffers().storage(a.integer(0), a.integer(1), a.integer(2), a.integer(3), 0));
+        put(table, "glRenderbufferStorageMultisample", (renderer, a) -> renderer.rawFramebuffers().storage(0, a.integer(2), a.integer(3), a.integer(4), a.integer(1)));
+        put(table, "glNamedRenderbufferStorageMultisample", (renderer, a) -> renderer.rawFramebuffers().storage(a.integer(0), a.integer(2), a.integer(3), a.integer(4), a.integer(1)));
         put(table, "glClear", (renderer, a) -> renderer.clear(a.integer(0)));
         put(table, "glClearColor", (renderer, a) -> renderer.drawState().clearColor(a.real(0), a.real(1), a.real(2), a.real(3)));
         put(table, "glClearDepth", (renderer, a) -> renderer.clearDepth(a.wide(0)));

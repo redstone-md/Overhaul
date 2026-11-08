@@ -75,9 +75,9 @@ final class BlazeRawFramebuffers implements AutoCloseable {
 
     void bindRenderbuffer(int name) { boundRenderbuffer = name; }
 
-    /** A renderbuffer is a one-level texture nobody samples. */
-    void storage(int name, int internal, int width, int height) {
-        textures.renderbufferStorage(renderbufferTexture(name == 0 ? boundRenderbuffer : name), internal, width, height);
+    /** A renderbuffer is a one-level texture nobody samples; {@code samples} above one makes it multisampled. */
+    void storage(int name, int internal, int width, int height, int samples) {
+        textures.renderbufferStorage(renderbufferTexture(name == 0 ? boundRenderbuffer : name), internal, width, height, samples);
     }
 
     void deleteRenderbuffer(int name) {
@@ -119,6 +119,10 @@ final class BlazeRawFramebuffers implements AutoCloseable {
             BlazeGlBoundary.reportOnce("raw framebuffer without attachments", "A mod used a raw framebuffer with nothing renderable attached; what it renders there is dropped");
             return null;
         }
+        if (!sameSamples(written, drawnDepth)) {
+            BlazeGlBoundary.reportOnce("raw framebuffer samples", "A mod attached images with different sample counts to one framebuffer, which GL calls incomplete; what it renders there is dropped");
+            return null;
+        }
         assembly.target = new BlazeTarget(context, allocator, anyColor ? written : List.of(), drawnDepth);
         assembly.target.attach(queue);
         assembly.builtColors = colors;
@@ -132,6 +136,16 @@ final class BlazeRawFramebuffers implements AutoCloseable {
         for (int buffer : assembly.drawBuffers) colors.add(buffer == NONE ? null : resolve(assembly.colors[buffer - COLOR_0]));
         while (!colors.isEmpty() && colors.get(colors.size() - 1) == null) colors.remove(colors.size() - 1);
         return colors;
+    }
+
+    private static boolean sameSamples(List<BlazeTextures.Attachment> colors, BlazeTextures.Attachment depth) {
+        int samples = depth == null ? 0 : depth.image().samples();
+        for (BlazeTextures.Attachment color : colors) {
+            if (color == null) continue;
+            if (samples == 0) samples = color.image().samples();
+            else if (color.image().samples() != samples) return false;
+        }
+        return true;
     }
 
     private BlazeTextures.Attachment resolve(Slot slot) { return slot == null ? null : textures.attachment(slot.texture(), slot.level()); }

@@ -325,7 +325,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if((topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST||topology==VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)&&draw.lineWidth()!=1)throw new UnsupportedOperationException("Wide native lines are not enabled");
         // Consecutive draws mostly repeat the same inputs; the same objects give the same key, so skip building and hashing it.
         if(lastPipeline!=null&&program==lastProgram&&mesh.layout()==lastLayout&&topology==lastTopology&&draw==lastDraw&&target==lastTarget)return lastPipeline;
-        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.colorFormats(),target.depth()==null?null:target.depth().format());
+        PipelineKey key=new PipelineKey(program,mesh.layout(),topology,draw.depth(),draw.color(),draw.logic(),draw.cull(),draw.polygonMode(),target.colorFormats(),target.depth()==null?null:target.depth().format(),target.samples());
         NativeGraphicsPipeline existing=pipelines.get(key);if(existing!=null)return remember(program,mesh,topology,draw,target,existing);
         lastPipeline=null;
         if(pipelines.size()==256){var oldest=pipelines.entrySet().iterator();var entry=oldest.next();oldest.remove();queue.retire(entry.getValue());}
@@ -335,7 +335,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 shape!=null?shape.attributes(mesh.layout()):new BlazeVertexLayout(mesh.layout()).attributes(program.bindings()),
                 new long[]{descriptorLayout},0,topology,draw.polygonMode(),draw.cull(),VK_FRONT_FACE_CLOCKWISE,draw.depth(),
                 shape!=null?shape.colors(draw.color()):Collections.nCopies(target.colorFormats().size(),draw.color()),true,0,0,draw.logic());
-        NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description);
+        NativeGraphicsPipeline pipeline=new NativeGraphicsPipeline(context,target.renderPass(),description,target.samples());
         try{pipelines.put(key,pipeline);}catch(RuntimeException|Error failure){pipeline.close();throw failure;}
         return remember(program,mesh,topology,draw,target,pipeline);
     }
@@ -375,7 +375,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(descriptors!=null)descriptors.forget(program);
     }
     private record PipelineKey(BlazeProgramCompiler.Program program,BlazeMeshState.Layout layout,int topology,
-            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,List<ImageFormat> colorFormats,ImageFormat depthFormat){}
+            NativeGraphicsPipeline.Depth depth,NativeGraphicsPipeline.Color color,NativeGraphicsPipeline.ColorLogic logic,int cull,int polygonMode,List<ImageFormat> colorFormats,ImageFormat depthFormat,int samples){}
 
     public void resize(int width,int height){
         requireOpen();if(width<0||height<0)throw new IllegalArgumentException("Negative window size");

@@ -182,7 +182,7 @@ public final class BlazeTerrain implements AutoCloseable {
                 List.of(new NativeGraphicsPipeline.Binding(0, stride, 0)), ATTRIBUTES, new long[]{descriptorLayout}, PUSH_BYTES,
                 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE, draw.depth(),
                 List.of(draw.color()), true, 0, 0, draw.logic());
-        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description);
+        var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description, target.samples());
         pipelines.put(key, created);
         return created;
     }
