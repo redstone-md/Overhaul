@@ -5,6 +5,8 @@ import com.seibel.distanthorizons.api.objects.math.DhApiVec3f;
 
 public abstract class DhApiBeforeBufferRenderEvent {
     public static class EventParam extends DhApiRenderParam {
+        public DhApiVec3f modelPos;
+
         public native void update(DhApiRenderParam params, DhApiVec3f modelPos);
     }
 }

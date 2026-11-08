@@ -59,13 +59,14 @@ public final class BlazeDhFrame {
         }
         BlazeDh dh = renderer.dh();
         dh.begin(terrainSettings(params));
+        boolean heard = bufferListened(params);
         for (int index = 0; index < containers.size(); index++) {
             LodBufferContainer container = containers.get(index);
             if (!container.buffersUploaded) continue;
             float x = (float) (container.minCornerBlockPos.getX() - params.exactCameraPosition.x);
             float y = (float) (container.minCornerBlockPos.getY() - params.exactCameraPosition.y);
             float z = (float) (container.minCornerBlockPos.getZ() - params.exactCameraPosition.z);
-            beforeBuffer(params, x, y, z);
+            if (heard) beforeBuffer(params, x, y, z);
             for (IVertexBufferWrapper wrapper : opaque ? container.vboOpaqueWrappers : container.vboTransparentWrappers) {
                 if (wrapper != null) draw(dh, (GLVertexBuffer) wrapper, x, y, z);
             }
@@ -89,6 +90,7 @@ public final class BlazeDhFrame {
         var buffers = BlazeGlBoundary.buffers();
         lastIndexName = 0;
         lastIndexBuffer = null;
+        boolean heard = bufferListened(params);
         try {
             for (int index = 0; index < containers.size(); index++) {
                 LodBufferContainer container = containers.get(index);
@@ -96,7 +98,7 @@ public final class BlazeDhFrame {
                 float x = (float) (container.minCornerBlockPos.getX() - params.exactCameraPosition.x);
                 float y = (float) (container.minCornerBlockPos.getY() - params.exactCameraPosition.y);
                 float z = (float) (container.minCornerBlockPos.getZ() - params.exactCameraPosition.z);
-                beforeBuffer(params, x, y, z);
+                if (heard) beforeBuffer(params, x, y, z);
                 for (IVertexBufferWrapper wrapper : opaque ? container.vboOpaqueWrappers : container.vboTransparentWrappers) {
                     if (wrapper != null) add(renderer, buffers, batch, (GLVertexBuffer) wrapper, x, y, z);
                 }
@@ -147,11 +149,25 @@ public final class BlazeDhFrame {
     private static final DhApiBeforeBufferRenderEvent.EventParam BUFFER_EVENT = new DhApiBeforeBufferRenderEvent.EventParam();
     private static final DhApiBeforeGenericObjectRenderEvent.EventParam OBJECT_EVENT = new DhApiBeforeGenericObjectRenderEvent.EventParam();
 
+    private static final boolean QUIET_BUFFERS = BlazeOptimization.DH_QUIET_BUFFERS.on();
+
+    /**
+     * The frame's matrices are the same for every buffer of a pass, so they are copied into the event once and each
+     * buffer only moves its position; with no listener bound the event is not raised at all.
+     */
+    private static boolean bufferListened(RenderParams params) {
+        if (!QUIET_BUFFERS) return true;
+        if (ApiEventInjector.INSTANCE.getAll(DhApiBeforeBufferRenderEvent.class).isEmpty()) return false;
+        BUFFER_EVENT.update(params, MODEL_POS);
+        return true;
+    }
+
     private static void beforeBuffer(RenderParams params, float x, float y, float z) {
         MODEL_POS.x = x;
         MODEL_POS.y = y;
         MODEL_POS.z = z;
-        BUFFER_EVENT.update(params, MODEL_POS);
+        if (QUIET_BUFFERS) BUFFER_EVENT.modelPos = MODEL_POS;
+        else BUFFER_EVENT.update(params, MODEL_POS);
         ApiEventInjector.INSTANCE.fireAllEvents(DhApiBeforeBufferRenderEvent.class, BUFFER_EVENT);
     }
 

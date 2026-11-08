@@ -134,7 +134,8 @@ public enum BlazeOptimization {
     PUPFISH_SEARCH("pupfishSearch", "Alex's Mobs samples world generator noise for the pupfish chunk on a background thread, one try at a time, instead of on the server thread"),
     CAMPFIRE_SCAN("campfireScan", "Comfortable Campfires skips streaming the blocks around a player when no section there holds a block it gives an effect for"),
     PARTICLE_ATLAS_WRITE("particleAtlasWrite", "Inventory Particles copies its atlas cache rows at once and encodes and writes the PNG off the render thread"),
-    GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
+    GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false),
+    DH_QUIET_BUFFERS("dhQuietBuffers", "Distant Horizons' per-buffer render event copies the frame's matrices once per pass instead of for every LOD drawn, and is skipped while no API listener is bound to it");
 
     private final String key, description;
     private final boolean fallback, enabled;
