@@ -51,6 +51,7 @@ public enum BlazeOptimization {
     DH_RENDER_LIST("dhRenderList", "Distant Horizons visible buffer list built without hashing each buffer"),
     SECTION_GRID("sectionGrid", "Section grid moves only the columns that wrapped around the camera"),
     PARTICLE_QUADS("particleQuads", "Particle quads written in one go instead of vertex by vertex"),
+    PARTICLE_RESERVE("particleReserve", "Particle quads take buffer room in blocks of 64, the unused tail handed back before the buffer does anything else; needs particleQuads"),
     PARTICLE_CULLING("particleCulling", "Particles keeping the plain quad box test it against the view in place instead of building an AABB per particle per frame"),
     PARTICLE_BOUNDS("particleBounds", "Plain particle boxes copied into one packed array after each particle tick, so frames cull from the array and read only the particles they draw; needs particleCulling"),
     ENTITY_CLASS_SCANS("entityClassScans", "Client entity scans skipped for classes no loaded entity belongs to"),

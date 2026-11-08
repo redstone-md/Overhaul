@@ -53,6 +53,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ViewAreaColumns121Mixin", BlazeOptimization.SECTION_GRID),
             Map.entry("BufferBuilderParticles121Mixin", BlazeOptimization.PARTICLE_QUADS),
             Map.entry("ParticleQuads121Mixin", BlazeOptimization.PARTICLE_QUADS),
+            Map.entry("ByteBufferSlack121Mixin", BlazeOptimization.PARTICLE_RESERVE),
             Map.entry("ParticleBox121Mixin", BlazeOptimization.PARTICLE_CULLING),
             Map.entry("ParticleCulling121Mixin", BlazeOptimization.PARTICLE_CULLING),
             Map.entry("ParticleBounds121Mixin", BlazeOptimization.PARTICLE_BOUNDS),
