@@ -119,6 +119,7 @@ public enum BlazeOptimization {
     DH_STORED_BYTES("dhStoredBytes", "Distant Horizons copies and decodes stored LODs in blocks and through byte streams that skip a lock no other thread takes, instead of one locked read per byte"),
     DH_STRING_POOL("dhStringPool", "Distant Horizons hands back the pooled block or biome name a thread was last given for the same characters before it walks its pool's trie one character at a time"),
     SPARK_BACKGROUND("sparkBackground", "spark's background profiler is stopped where it would sample with its Java engine, which halts every thread at a safepoint a hundred times a second"),
+    DH_TINT_COLORS("dhTintColors", "Distant Horizons hands back the biome colour a thread last got for the same block and biome wrappers before it asks its shared colour cache through three concurrent maps"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false);
 
     private final String key, description;
