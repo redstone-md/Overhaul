@@ -4,17 +4,22 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Explicit sampler state; enum values map only to supported Vulkan sampler modes. */
 public record SamplerSettings(Filter minFilter,Filter magFilter,Mipmap mipmap,Address u,Address v,Address w,
-        float minLod,float maxLod,float anisotropy,Compare comparison,float lodBias) {
+        float minLod,float maxLod,float anisotropy,Compare comparison,float lodBias,Border border) {
     public enum Filter { NEAREST(VK_FILTER_NEAREST),LINEAR(VK_FILTER_LINEAR);final int vk;Filter(int vk){this.vk=vk;} }
     public enum Mipmap { NEAREST(VK_SAMPLER_MIPMAP_MODE_NEAREST),LINEAR(VK_SAMPLER_MIPMAP_MODE_LINEAR);final int vk;Mipmap(int vk){this.vk=vk;} }
     public enum Address { REPEAT(VK_SAMPLER_ADDRESS_MODE_REPEAT),MIRROR(VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT),CLAMP(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE),BORDER(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);final int vk;Address(int vk){this.vk=vk;} }
+    /** The colours a clamp-to-border address reads without the custom border colour extension. */
+    public enum Border { TRANSPARENT_BLACK(VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK),OPAQUE_BLACK(VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK),OPAQUE_WHITE(VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);final int vk;Border(int vk){this.vk=vk;} }
     public enum Compare { NONE(VK_COMPARE_OP_ALWAYS),NEVER(VK_COMPARE_OP_NEVER),LESS(VK_COMPARE_OP_LESS),EQUAL(VK_COMPARE_OP_EQUAL),LESS_OR_EQUAL(VK_COMPARE_OP_LESS_OR_EQUAL),GREATER(VK_COMPARE_OP_GREATER),NOT_EQUAL(VK_COMPARE_OP_NOT_EQUAL),GREATER_OR_EQUAL(VK_COMPARE_OP_GREATER_OR_EQUAL),ALWAYS(VK_COMPARE_OP_ALWAYS);final int vk;Compare(int vk){this.vk=vk;} }
     public SamplerSettings(Filter minFilter,Filter magFilter,Mipmap mipmap,Address u,Address v,Address w,float minLod,float maxLod,float anisotropy,Compare comparison){
         this(minFilter,magFilter,mipmap,u,v,w,minLod,maxLod,anisotropy,comparison,0);
     }
+    public SamplerSettings(Filter minFilter,Filter magFilter,Mipmap mipmap,Address u,Address v,Address w,float minLod,float maxLod,float anisotropy,Compare comparison,float lodBias){
+        this(minFilter,magFilter,mipmap,u,v,w,minLod,maxLod,anisotropy,comparison,lodBias,Border.TRANSPARENT_BLACK);
+    }
     public SamplerSettings {
         java.util.Objects.requireNonNull(minFilter);java.util.Objects.requireNonNull(magFilter);java.util.Objects.requireNonNull(mipmap);
-        java.util.Objects.requireNonNull(u);java.util.Objects.requireNonNull(v);java.util.Objects.requireNonNull(w);java.util.Objects.requireNonNull(comparison);
+        java.util.Objects.requireNonNull(u);java.util.Objects.requireNonNull(v);java.util.Objects.requireNonNull(w);java.util.Objects.requireNonNull(comparison);java.util.Objects.requireNonNull(border);
         if(!Float.isFinite(minLod)||!Float.isFinite(maxLod)||minLod<0||maxLod<minLod||!Float.isFinite(anisotropy)||anisotropy<1||!Float.isFinite(lodBias))
             throw new IllegalArgumentException("invalid sampler LOD/anisotropy");
     }
