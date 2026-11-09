@@ -118,7 +118,7 @@ final class BlazeTexture implements AutoCloseable {
             GpuImage source=image();int available=borrowed==null?source.mipLevels():borrowed.mipCount();
             if(base>=available||max<base)throw new IllegalStateException("Incomplete texture mip range");
             int count=Math.min(available-1,max)-base+1;
-            view=borrowed!=null?source.view(mip(base),count,layer(),1):source.view(mip(base),count,0,source.layers(),viewType,source.format().aspectMask());
+            view=borrowed!=null?source.view(mip(base),count,layer(),1,VK_IMAGE_VIEW_TYPE_2D,source.format().sampledAspect()):source.view(mip(base),count,0,source.layers(),viewType,source.format().sampledAspect());
             BlazeStats.viewCreated();
         }
         return view;

@@ -30,7 +30,7 @@ public abstract class RenderTargetBlazeMixin {
         BlazeRenderer owner=BlazeFrontend.current();if(owner==null)return;
         if(!overhaul$owned)throw new IllegalStateException("OpenGL framebuffer cannot migrate between devices");
         if(overhaul$target!=null)throw new IllegalStateException("Framebuffer already owns native storage");
-        BlazeTarget next=new BlazeTarget(owner.context(),owner.allocator(),owner.commands(),width,height,useDepth);
+        BlazeTarget next=new BlazeTarget(owner.context(),owner.allocator(),owner.commands(),width,height,useDepth,((RenderTarget)(Object)this).isStencilEnabled());
         int color=-1,depth=-1,id=-1;
         try{
             color=owner.textures().borrow(next.colorView());

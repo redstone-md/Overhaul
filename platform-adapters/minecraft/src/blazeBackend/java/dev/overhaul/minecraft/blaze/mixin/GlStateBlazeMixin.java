@@ -3,7 +3,6 @@ package dev.overhaul.minecraft.blaze.mixin;
 import com.mojang.blaze3d.platform.GlStateManager;
 import dev.overhaul.minecraft.blaze.BlazeDrawState;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
-import dev.overhaul.minecraft.blaze.BlazeGlBoundary;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -69,8 +68,13 @@ public abstract class GlStateBlazeMixin {
     private static void overhaul$clearDepth(double value,CallbackInfo c){var s=overhaul$state();if(s!=null){s.clearDepth(value);}}
     @Inject(method="_clear",at=@At("HEAD"),cancellable=true,require=1)
     private static void overhaul$clear(int mask,boolean checkError,CallbackInfo c){var owner=BlazeFrontend.current();if(owner!=null){owner.clear(mask);c.cancel();}}
-    // TACZ scopes mask their lens with the stencil every frame in first person; a throw here ends the game. The owned
-    // targets have no stencil aspect yet, so the mask is dropped and the masked parts draw unclipped.
-    @Inject(method={"_stencilFunc","_stencilMask","_stencilOp","_clearStencil"},at=@At("HEAD"),require=1)
-    private static void overhaul$stencil(CallbackInfo c){if(BlazeFrontend.current()!=null)BlazeGlBoundary.reportOnce("stencil","Stencil state is not lowered; stencil-masked draws render unmasked");}
+    // TACZ scopes mask their lens with the stencil every frame in first person.
+    @Inject(method="_stencilFunc",at=@At("HEAD"),require=1)
+    private static void overhaul$stencilFunc(int func,int ref,int mask,CallbackInfo c){var s=overhaul$state();if(s!=null){s.stencil().function(func,ref,mask);}}
+    @Inject(method="_stencilMask",at=@At("HEAD"),require=1)
+    private static void overhaul$stencilMask(int mask,CallbackInfo c){var s=overhaul$state();if(s!=null){s.stencil().mask(mask);}}
+    @Inject(method="_stencilOp",at=@At("HEAD"),require=1)
+    private static void overhaul$stencilOp(int fail,int depthFail,int pass,CallbackInfo c){var s=overhaul$state();if(s!=null){s.stencil().operation(fail,depthFail,pass);}}
+    @Inject(method="_clearStencil",at=@At("HEAD"),require=1)
+    private static void overhaul$clearStencil(int value,CallbackInfo c){var s=overhaul$state();if(s!=null){s.stencil().clear(value);}}
 }

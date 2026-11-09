@@ -26,7 +26,7 @@ public final class BlazeTarget implements AutoCloseable {
     private int samples = VK_SAMPLE_COUNT_1_BIT;
     private final boolean ownsColor, ownsDepth, borrowsViews;
     private GpuImage color, depth;
-    private GpuImageView colorView, depthView;
+    private GpuImageView colorView, depthView, sampledDepth;
     private List<GpuImageView> attachments;
     private List<ImageFormat> colorFormats;
     private long renderPass, framebuffer;
@@ -34,13 +34,19 @@ public final class BlazeTarget implements AutoCloseable {
     private boolean closing;
 
     public BlazeTarget(VulkanContext context, GpuAllocator allocator, ImmediateCommands commands, int width, int height, boolean useDepth) {
+        this(context,allocator,commands,width,height,useDepth,false);
+    }
+
+    /** A game target; {@code stencil} is RenderTarget#isStencilEnabled, which gives the depth image a stencil aspect. */
+    public BlazeTarget(VulkanContext context, GpuAllocator allocator, ImmediateCommands commands, int width, int height, boolean useDepth, boolean stencil) {
         if (width < 1 || height < 1) throw new IllegalArgumentException("Empty framebuffer");
         this.context=context;this.width=width;this.height=height;level=0;ownsColor=true;ownsDepth=true;borrowsViews=false;
         try {
             color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             colorView=color.view(0,1,0,1);commands.clearColor(color,0,0,0,0,0,0);
-            if(useDepth){depth=allocator.createImage(ImageFormat.D32_SFLOAT,width,height,1,1,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-                depthView=depth.view(0,1,0,1);commands.clearDepth(depth,0,0,1);}
+            if(useDepth){depth=allocator.createImage(stencil?depthStencilFormat(context):ImageFormat.D32_SFLOAT,width,height,1,1,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+                depthView=depth.view(0,1,0,1);commands.clearDepthStencil(depth,0,0,1,0);
+                if(stencil)sampledDepth=depth.view(0,1,0,1,VK_IMAGE_VIEW_TYPE_2D,VK_IMAGE_ASPECT_DEPTH_BIT);}
             createPass();
         } catch(RuntimeException|Error failure){close();throw failure;}
     }
@@ -98,6 +104,19 @@ public final class BlazeTarget implements AutoCloseable {
         try{createPass();}catch(RuntimeException|Error failure){close();throw failure;}
     }
 
+    /** D32_SFLOAT_S8_UINT keeps the float depth of the other targets; a device without it gets D24_UNORM_S8_UINT. */
+    static ImageFormat depthStencilFormat(VulkanContext context){
+        try(MemoryStack stack=VulkanStack.push()){
+            var properties=VkFormatProperties.malloc(stack);
+            vkGetPhysicalDeviceFormatProperties(context.physicalDevice(),VK_FORMAT_D32_SFLOAT_S8_UINT,properties);
+            int needed=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+            return (properties.optimalTilingFeatures()&needed)==needed?ImageFormat.D32_SFLOAT_S8_UINT:ImageFormat.D24_UNORM_S8_UINT;
+        }
+    }
+
+    /** True when this target's depth holds a stencil the stencil test reads and writes. */
+    boolean stencil(){return depth!=null&&depth.format().hasStencil();}
+
     private void createPass() {
         if(attachments==null)attachments=Collections.singletonList(colorView);
         ImageFormat[] formats=new ImageFormat[attachments.size()];int written=0;
@@ -116,8 +135,9 @@ public final class BlazeTarget implements AutoCloseable {
                 colorReference.get(index).attachment(next).layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 views.put(next++,attachments.get(index).handle());
             }
+            boolean stencil=stencil();
             if(depth!=null)descriptions.get(next).format(depth.format().vkFormat()).samples(samples).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
-                    .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                    .stencilLoadOp(stencil?VK_ATTACHMENT_LOAD_OP_LOAD:VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(stencil?VK_ATTACHMENT_STORE_OP_STORE:VK_ATTACHMENT_STORE_OP_DONT_CARE)
                     .initialLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL).finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
             var subpass=VkSubpassDescription.calloc(1,stack).pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(formats.length).pColorAttachments(colorReference);
             if(depth!=null){subpass.pDepthStencilAttachment(VkAttachmentReference.calloc(stack).attachment(next).layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));views.put(next,depthView.handle());}
@@ -148,20 +168,24 @@ public final class BlazeTarget implements AutoCloseable {
         if((mask&~(0x4000|0x100|0x400))!=0)throw new UnsupportedOperationException("Unknown framebuffer clear mask");
         boolean maskedColor=(mask&0x4000)!=0&&raster.color().writeMask()!=0;
         boolean depthClear=(mask&0x100)!=0&&depth!=null&&raster.depth().write();
+        // glStencilMask gates a stencil clear bit by bit; Vulkan clears every bit, so only a full mask is lowered.
+        boolean stencilClear=(mask&0x400)!=0&&stencil()&&(values.stencilMask()&0xFF)!=0;
+        if(stencilClear&&(values.stencilMask()&0xFF)!=0xFF){stencilClear=false;BlazeGlBoundary.reportOnce("masked stencil clear","A stencil clear used a partial stencil write mask, which is not lowered; the stencil was not cleared");}
+        int depthAspects=(depthClear?VK_IMAGE_ASPECT_DEPTH_BIT:0)|(stencilClear?VK_IMAGE_ASPECT_STENCIL_BIT:0);
         if(maskedColor&&raster.color().writeMask()!=15)BlazeGlBoundary.reportOnce("masked clear","A colour clear used a partial write mask, which is not lowered; the colour was not cleared");
         int colors=0;
         if(maskedColor&&raster.color().writeMask()==15)for(int index=0;index<attachments.size();index++)if(attachments.get(index)!=null&&(location<0||location==index))colors|=1<<index;
         int colorLocations=colors;boolean colorClear=colorLocations!=0;
         int x=raster.scissor()?Math.max(0,raster.sx()):0,y=raster.scissor()?Math.max(0,raster.sy()):0;
         long right=raster.scissor()?Math.min(width,(long)raster.sx()+raster.sw()):width,top=raster.scissor()?Math.min(height,(long)raster.sy()+raster.sh()):height;
-        if((!colorClear&&!depthClear)||right<=x||top<=y)return;
+        if((!colorClear&&depthAspects==0)||right<=x||top<=y)return;
         BlazeImageUse images=new BlazeImageUse();
         BlazeQueue.Operation operation=new BlazeQueue.Operation(){
             @Override public void record(VkCommandBuffer command){prepare(command,images);try(MemoryStack stack=VulkanStack.push()){
-            begin(command,stack);var clears=VkClearAttachment.calloc(Integer.bitCount(colorLocations)+(depthClear?1:0),stack);int index=0;
+            begin(command,stack);var clears=VkClearAttachment.calloc(Integer.bitCount(colorLocations)+(depthAspects!=0?1:0),stack);int index=0;
             for(int remaining=colorLocations;remaining!=0;remaining&=remaining-1)
                 clears.get(index++).aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(Integer.numberOfTrailingZeros(remaining)).clearValue().color().float32(0,values.r()).float32(1,values.g()).float32(2,values.b()).float32(3,values.a());
-            if(depthClear)clears.get(index).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).clearValue().depthStencil().depth(values.depth());
+            if(depthAspects!=0)clears.get(index).aspectMask(depthAspects).clearValue().depthStencil().depth(values.depth()).stencil(values.stencil()&0xFF);
             var rect=VkClearRect.calloc(1,stack).baseArrayLayer(0).layerCount(1);rect.rect().offset().set(x,y);rect.rect().extent().set((int)(right-x),(int)(top-y));
             vkCmdClearAttachments(command,clears,rect);vkCmdEndRenderPass(command);
             }}
@@ -176,6 +200,8 @@ public final class BlazeTarget implements AutoCloseable {
     }
     public GpuImage color(){return color;}public GpuImage depth(){return depth;}public GpuImageView colorView(){return colorView;}
     public GpuImageView depthView(){return depthView;}
+    /** The depth a shader reads; a view of a combined depth/stencil image may name only one aspect when sampled. */
+    public GpuImageView sampledDepthView(){return sampledDepth!=null?sampledDepth:depthView;}
     /** One entry per colour location; null where the location writes nothing. */
     List<ImageFormat> colorFormats(){return colorFormats;}
     /** The {@code VK_SAMPLE_COUNT_*_BIT} every attachment holds; pipelines drawing here rasterize with it. */
@@ -194,6 +220,7 @@ public final class BlazeTarget implements AutoCloseable {
     private void destroy(){
         if(framebuffer!=0){vkDestroyFramebuffer(context.device(),framebuffer,null);framebuffer=0;}
         if(renderPass!=0){vkDestroyRenderPass(context.device(),renderPass,null);renderPass=0;}
+        if(sampledDepth!=null){sampledDepth.close();sampledDepth=null;}
         if(!borrowsViews){if(depthView!=null)depthView.close();for(GpuImageView view:attachments!=null?attachments:Collections.singletonList(colorView))if(view!=null)view.close();}
         depthView=null;colorView=null;
         if(depth!=null){if(ownsDepth)depth.close();depth=null;}if(color!=null){if(ownsColor)color.close();color=null;}

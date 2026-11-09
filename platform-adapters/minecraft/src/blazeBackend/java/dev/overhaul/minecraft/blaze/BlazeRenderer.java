@@ -292,7 +292,7 @@ public final class BlazeRenderer implements AutoCloseable {
     BlazeDrawState.Clear clearValues(){
         var values=state.clear();
         Float own=drawTarget>=FOREIGN_FRAMEBUFFERS?foreignClearDepths.get(drawTarget):null;
-        return own!=null?new BlazeDrawState.Clear(values.r(),values.g(),values.b(),values.a(),own):values;
+        return own!=null?values.withDepth(own):values;
     }
     void clear(int mask,BlazeDrawState.Clear values){clear(mask,values,-1);}
     /** @param location the one colour location to clear, or -1 for all of them */

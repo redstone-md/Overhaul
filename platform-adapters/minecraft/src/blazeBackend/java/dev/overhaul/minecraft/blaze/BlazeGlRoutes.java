@@ -115,6 +115,10 @@ final class BlazeGlRoutes {
         put(table, "glBlendEquation", (renderer, a) -> renderer.drawState().blendEquation(a.integer(0)));
         put(table, "glPolygonOffset", (renderer, a) -> renderer.drawState().polygonOffset(a.real(0), a.real(1)));
         put(table, "glPolygonMode", (renderer, a) -> renderer.drawState().polygonMode(a.integer(0), a.integer(1)));
+        put(table, "glStencilFunc", (renderer, a) -> renderer.drawState().stencil().function(a.integer(0), a.integer(1), a.integer(2)));
+        put(table, "glStencilMask", (renderer, a) -> renderer.drawState().stencil().mask(a.integer(0)));
+        put(table, "glStencilOp", (renderer, a) -> renderer.drawState().stencil().operation(a.integer(0), a.integer(1), a.integer(2)));
+        put(table, "glClearStencil", (renderer, a) -> renderer.drawState().stencil().clear(a.integer(0)));
     }
 
     private static void capability(BlazeRenderer renderer, int capability, boolean enabled) {
@@ -126,6 +130,7 @@ final class BlazeGlRoutes {
             case 0x0B44 -> state.cull(enabled);
             case 0x0BF2 -> state.logic(enabled);
             case 0x8037 -> state.polygonOffset(enabled);
+            case 0x0B90 -> state.stencil().enable(enabled);
             default -> { }
         }
     }

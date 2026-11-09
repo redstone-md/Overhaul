@@ -5,7 +5,7 @@ import dev.overhaul.vulkan.ImageRegion;
 
 /** Framebuffer copies: exact ones honour destination scissor and source clipping, scaled or flipped ones use an image blit. */
 public final class BlazeFramebufferBlit {
-    private static final int NEAREST=9728,LINEAR=9729,COLOR=0x4000,DEPTH=0x100;
+    private static final int NEAREST=9728,LINEAR=9729,COLOR=0x4000,DEPTH=0x100,STENCIL=0x400;
     private BlazeFramebufferBlit(){}
     public static void copy(BlazeRenderer owner,int sx0,int sy0,int sx1,int sy1,int dx0,int dy0,int dx1,int dy1,int mask,int filter){
         // A raw framebuffer with nothing attached has no image to copy to or from.
@@ -15,7 +15,8 @@ public final class BlazeFramebufferBlit {
             return;
         }
         if(filter!=NEAREST&&filter!=LINEAR)throw new IllegalArgumentException("Unknown framebuffer filter");
-        if((mask&~(COLOR|DEPTH))!=0)throw new UnsupportedOperationException("Stencil/unknown framebuffer blit mask");
+        if((mask&~(COLOR|DEPTH|STENCIL))!=0)throw new UnsupportedOperationException("Unknown framebuffer blit mask");
+        if((mask&STENCIL)!=0){BlazeGlBoundary.reportOnce("stencil blit","A framebuffer blit copied the stencil, which is not lowered; colour and depth were still copied");mask&=~STENCIL;}
         if((mask&DEPTH)!=0&&filter!=NEAREST)throw new IllegalArgumentException("Depth blits require nearest filtering");
         // OpenGL treats an empty rectangle as nothing to do.
         if(sx1==sx0||sy1==sy0||dx1==dx0||dy1==dy0)return;

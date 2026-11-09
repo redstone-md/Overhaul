@@ -346,7 +346,7 @@ public final class BlazeTextures implements AutoCloseable {
         try{
             for(int layer=0;layer<image.layers();layer++)clearColor(image,0,layer,0,0,0,1);
             blankImages[slot]=image;
-            return blanks[slot]=image.view(0,1,0,image.layers(),viewType,image.format().aspectMask());
+            return blanks[slot]=image.view(0,1,0,image.layers(),viewType,image.format().sampledAspect());
         }catch(RuntimeException|Error failure){blankImages[slot]=null;image.close();throw failure;}
     }
     private Sampled sampled(int id,int viewType){return sampled(id,viewType,null);}

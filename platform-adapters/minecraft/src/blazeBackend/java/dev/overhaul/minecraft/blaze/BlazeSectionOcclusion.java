@@ -168,7 +168,7 @@ public final class BlazeSectionOcclusion implements AutoCloseable {
 
     /** Reads the target's depth as it stands now, which must hold terrain and nothing that moves. */
     public void capture(BlazeTarget target, Matrix4f modelView, Matrix4f projection, double x, double y, double z) {
-        GpuImageView view = target.depthView();
+        GpuImageView view = target.sampledDepthView();
         if (view == null) return;
         long now = System.nanoTime();
         if (now - requestedAt < MIN_CAPTURE_NANOS) return;

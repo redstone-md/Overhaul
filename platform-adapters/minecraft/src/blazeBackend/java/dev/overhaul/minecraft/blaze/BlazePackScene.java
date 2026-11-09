@@ -182,7 +182,7 @@ public final class BlazePackScene implements AutoCloseable {
 
     /** The depth a scene program tests against: LOD programs have their own. */
     GpuImageView depthFor(CompiledShaderPack.Program program) {
-        return distant != null && PackDhPrograms.drawn(baseName(program)) ? distant.view(0) : main.depthView();
+        return distant != null && PackDhPrograms.drawn(baseName(program)) ? distant.view(0) : main.sampledDepthView();
     }
 
     /** The deferred passes ran and may have swapped targets, so everything cached against the old ones is stale. */

@@ -16,14 +16,19 @@ public final class BlazeDrawState {
     private float offsetFactor,offsetUnits,lineWidth=1,clearDepth=1;
     private float clearR,clearG,clearB,clearA;
     private int polygonMode=VK_POLYGON_MODE_FILL,cullFace=VK_CULL_MODE_BACK_BIT;
+    private final BlazeStencilState stencil=new BlazeStencilState();
 
     public record Snapshot(NativeGraphicsPipeline.Depth depth, NativeGraphicsPipeline.Color color,
             NativeGraphicsPipeline.ColorLogic logic, int cull, int polygonMode,float lineWidth,int x, int y, int width, int height,
             boolean scissor, int sx, int sy, int sw, int sh) {}
-    public record Clear(float r,float g,float b,float a,float depth){}
+    /** Clear values; {@code stencilMask} is glStencilMask, which a stencil clear honours like a draw does. */
+    public record Clear(float r,float g,float b,float a,float depth,int stencil,int stencilMask){
+        public Clear(float r,float g,float b,float a,float depth){this(r,g,b,a,depth,0,0xFF);}
+        Clear withDepth(float value){return new Clear(r,g,b,a,value,stencil,stencilMask);}
+    }
 
     public Snapshot snapshot() {
-        return new Snapshot(new NativeGraphicsPipeline.Depth(depth, depthWrite, compare, polygonOffset?offsetUnits:0, polygonOffset?offsetFactor:0),
+        return new Snapshot(new NativeGraphicsPipeline.Depth(depth, depthWrite, compare, polygonOffset?offsetUnits:0, polygonOffset?offsetFactor:0, stencil.pipeline()),
                 HudCacheTarget.isActive(drawFramebuffer) ? cachedHudColor() : new NativeGraphicsPipeline.Color(blend, sourceRgb, destinationRgb, equation, sourceAlpha, destinationAlpha, equation, colorMask),
                 new NativeGraphicsPipeline.ColorLogic(logic, logicOp), cull ? cullFace : VK_CULL_MODE_NONE,
                 polygonMode,lineWidth,x, y, width, height, scissor, sx, sy, sw, sh);
@@ -51,7 +56,9 @@ public final class BlazeDrawState {
     public void lineWidth(float width){if(!Float.isFinite(width)||width<=0)throw new IllegalArgumentException("Invalid line width");lineWidth=width;}
     public void clearColor(float r,float g,float b,float a){clearR=r;clearG=g;clearB=b;clearA=a;}
     public void clearDepth(double depth){if(!Double.isFinite(depth))throw new IllegalArgumentException("Nonfinite clear depth");clearDepth=(float)Math.max(0,Math.min(1,depth));}
-    public Clear clear(){return new Clear(clearR,clearG,clearB,clearA,clearDepth);}
+    public Clear clear(){return new Clear(clearR,clearG,clearB,clearA,clearDepth,stencil.clearValue(),stencil.writeMask());}
+    /** glEnable(GL_STENCIL_TEST), glStencilFunc, glStencilOp, glStencilMask and glClearStencil land here. */
+    public BlazeStencilState stencil(){return stencil;}
     public void logicOperation(int gl) { if (gl < 0x1500 || gl > 0x150F) throw unsupported("logic operation", gl); logicOp = gl - 0x1500; }
     public void viewport(int x, int y, int width, int height) { dimensions(width, height); this.x=x; this.y=y; this.width=width; this.height=height; }
     public void scissorBox(int x, int y, int width, int height) { dimensions(width, height); sx=x; sy=y; sw=width; sh=height; }
@@ -73,7 +80,7 @@ public final class BlazeDrawState {
         return switch(name){case 0x0B71->depth?1:0;case 0x0B72->depthWrite?1:0;case 0x0B74->compare+0x200;
             case 0x0BE2->blend?1:0;case 0x0B44->cull?1:0;case 0x0B45->cullFace==VK_CULL_MODE_FRONT_BIT?0x404:cullFace==VK_CULL_MODE_BACK_BIT?0x405:0x408;case 0x0C11->scissor?1:0;
             case 0x0BF2->logic?1:0;case 0x0BF0->logicOp+0x1500;case 0x8CA6->drawFramebuffer;case 0x8CAA->readFramebuffer;
-            default->null;};
+            default->stencil.integer(name);};
     }
 
     private static int factor(int gl) {

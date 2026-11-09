@@ -167,7 +167,7 @@ final class BlazeRawFramebuffers implements AutoCloseable {
         try (MemoryStack stack = VulkanStack.push()) {
             var properties = VkFormatProperties.malloc(stack);
             vkGetPhysicalDeviceFormatProperties(context.physicalDevice(), format.vkFormat(), properties);
-            supported = (properties.optimalTilingFeatures() & feature) != 0 && !format.name().endsWith("INT");
+            supported = (properties.optimalTilingFeatures() & feature) != 0 && (format.isDepth() || !format.name().endsWith("INT"));
         }
         if (!supported) BlazeGlBoundary.reportOnce("raw target format " + format, "A mod attached a texture of format " + format + ", which cannot be a render target here; its output is dropped");
         return supported;
