@@ -209,7 +209,7 @@ public final class BlazeRenderer implements AutoCloseable {
         glSharedBuffers.add(slice);return slice;
     }
     void retireGlSharedBuffer(BlazeBufferPool.Slice slice){requireOpen();flushCapturedDraws();glSharedBuffers.remove(slice);queue.retire(slice);}
-    private void flushCapturedDraws(){if(terrain!=null)terrain.flush();if(dh!=null)dh.flush();}
+    void flushCapturedDraws(){if(terrain!=null)terrain.flush();if(dh!=null)dh.flush();}
     void writeGlDeviceBuffer(GpuBuffer target,long offset,long source,long bytes){requireOpen();transfers.write(target,offset,source,bytes);}
     void copyGlDeviceBuffer(GpuBuffer source,long sourceOffset,GpuBuffer target,long targetOffset,long bytes){requireOpen();transfers.copy(source,sourceOffset,target,targetOffset,bytes);}
     public int nextHandle(){requireOpen();if(nextHandle==Integer.MAX_VALUE)throw new IllegalStateException("Blaze3D handles exhausted");return nextHandle++;}
@@ -282,6 +282,10 @@ public final class BlazeRenderer implements AutoCloseable {
     /** Closes a resource once the work queued so far no longer reads it. */
     void retire(AutoCloseable resource){requireOpen();queue.retire(resource);}
     public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
+    /** Queues an upload in frame order, without the flush {@link #commands()} makes. */
+    void uploadImage(GpuImage image,ImageRegion region,java.nio.ByteBuffer pixels,int pitch){requireOpen();transfers.upload(image,region,pixels,pitch);}
+    /** Queues a colour clear in frame order, without the flush {@link #commands()} makes. */
+    void clearImage(GpuImage image,int mip,int layer,float r,float g,float b,float a){requireOpen();transfers.clearColor(image,mip,layer,r,g,b,a);}
     public void clear(int mask){clear(mask,clearValues());}
     /**
      * Distant Horizons sets a reverse-Z clear depth for its own framebuffer and never restores it, so a depth set
