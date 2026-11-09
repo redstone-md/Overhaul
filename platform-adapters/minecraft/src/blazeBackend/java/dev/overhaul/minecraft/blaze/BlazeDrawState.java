@@ -15,7 +15,7 @@ public final class BlazeDrawState {
     private boolean polygonOffset;
     private float offsetFactor,offsetUnits,lineWidth=1,clearDepth=1;
     private float clearR,clearG,clearB,clearA;
-    private int polygonMode=VK_POLYGON_MODE_FILL;
+    private int polygonMode=VK_POLYGON_MODE_FILL,cullFace=VK_CULL_MODE_BACK_BIT;
 
     public record Snapshot(NativeGraphicsPipeline.Depth depth, NativeGraphicsPipeline.Color color,
             NativeGraphicsPipeline.ColorLogic logic, int cull, int polygonMode,float lineWidth,int x, int y, int width, int height,
@@ -25,7 +25,7 @@ public final class BlazeDrawState {
     public Snapshot snapshot() {
         return new Snapshot(new NativeGraphicsPipeline.Depth(depth, depthWrite, compare, polygonOffset?offsetUnits:0, polygonOffset?offsetFactor:0),
                 HudCacheTarget.isActive(drawFramebuffer) ? cachedHudColor() : new NativeGraphicsPipeline.Color(blend, sourceRgb, destinationRgb, equation, sourceAlpha, destinationAlpha, equation, colorMask),
-                new NativeGraphicsPipeline.ColorLogic(logic, logicOp), cull ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE,
+                new NativeGraphicsPipeline.ColorLogic(logic, logicOp), cull ? cullFace : VK_CULL_MODE_NONE,
                 polygonMode,lineWidth,x, y, width, height, scissor, sx, sy, sw, sh);
     }
 
@@ -42,6 +42,7 @@ public final class BlazeDrawState {
     public void depthFunction(int gl) { if (gl < 0x200 || gl > 0x207) throw unsupported("depth function", gl); compare = gl - 0x200; }
     public void blend(boolean value) { blend = value; }
     public void cull(boolean value) { cull = value; }
+    public void cullFace(int gl) { cullFace = switch (gl) { case 0x404 -> VK_CULL_MODE_FRONT_BIT; case 0x405 -> VK_CULL_MODE_BACK_BIT; case 0x408 -> VK_CULL_MODE_FRONT_AND_BACK; default -> throw unsupported("cull face", gl); }; }
     public void scissor(boolean value) { scissor = value; }
     public void logic(boolean value) { logic = value; }
     public void polygonOffset(boolean value){polygonOffset=value;}
@@ -70,7 +71,7 @@ public final class BlazeDrawState {
     }
     public Integer integer(int name){
         return switch(name){case 0x0B71->depth?1:0;case 0x0B72->depthWrite?1:0;case 0x0B74->compare+0x200;
-            case 0x0BE2->blend?1:0;case 0x0B44->cull?1:0;case 0x0C11->scissor?1:0;
+            case 0x0BE2->blend?1:0;case 0x0B44->cull?1:0;case 0x0B45->cullFace==VK_CULL_MODE_FRONT_BIT?0x404:cullFace==VK_CULL_MODE_BACK_BIT?0x405:0x408;case 0x0C11->scissor?1:0;
             case 0x0BF2->logic?1:0;case 0x0BF0->logicOp+0x1500;case 0x8CA6->drawFramebuffer;case 0x8CAA->readFramebuffer;
             default->null;};
     }

@@ -164,7 +164,7 @@ public final class BlazePrograms implements AutoCloseable {
         Map<String,Object> textures=new LinkedHashMap<>();
         for(var sampler:entry.samplerUnits.entrySet()){
             String name=sampler.getKey();Object storage=BlazeGlBlocks.storage(name);
-            textures.put(name,storage!=null?storage:entry.program.bindings().texelBuffer(name)?texel(renderer,entry,sampler.getValue()):renderer.textures().boundId(sampler.getValue(),types.get(name)));
+            textures.put(name,storage!=null?storage:entry.program.bindings().texelBuffer(name)?texel(renderer,entry,sampler.getValue()):renderer.textures().bound(sampler.getValue(),types.get(name)));
         }
         return textures;
     }

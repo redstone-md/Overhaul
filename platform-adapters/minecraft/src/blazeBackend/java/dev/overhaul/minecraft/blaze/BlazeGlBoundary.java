@@ -33,13 +33,19 @@ public final class BlazeGlBoundary implements FunctionProvider {
     private static final Map<String, FFICIF> REAL_SIGNATURES = Map.of(
             "glClearColor", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float, LibFFI.ffi_type_float),
             "glClearDepth", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_double),
-            "glUniform1f", floats(1), "glUniform2f", floats(2), "glUniform3f", floats(3), "glUniform4f", floats(4));
+            "glUniform1f", floats(1), "glUniform2f", floats(2), "glUniform3f", floats(3), "glUniform4f", floats(4),
+            "glTexParameterf", parameterFloat(), "glSamplerParameterf", parameterFloat(),
+            "glPolygonOffset", APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_float, LibFFI.ffi_type_float));
     /** A location followed by {@code count} floats. */
     private static FFICIF floats(int count) {
         var types = new org.lwjgl.system.libffi.FFIType[count + 1];
         types[0] = LibFFI.ffi_type_sint32;
         java.util.Arrays.fill(types, 1, types.length, LibFFI.ffi_type_float);
         return APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, types);
+    }
+    /** An object or target, a parameter name, then one float value. */
+    private static FFICIF parameterFloat() {
+        return APIUtil.apiCreateCIF(LibFFI.FFI_DEFAULT_ABI, LibFFI.ffi_type_pointer, LibFFI.ffi_type_sint32, LibFFI.ffi_type_sint32, LibFFI.ffi_type_float);
     }
     private static final int GL_TRUE = 1, GL_DEPTH_CLEAR_VALUE = 0x0B73, GL_COLOR_CLEAR_VALUE = 0x0C22;
     private static final int GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
@@ -140,7 +146,6 @@ public final class BlazeGlBoundary implements FunctionProvider {
         };
     }
 
-
     /** Draws nothing and names the calling renderer once, so a mod renderer without a native path is visible in the log. */
     static Answer untranslated(String name) {
         AtomicInteger calls = new AtomicInteger();
@@ -225,6 +230,32 @@ public final class BlazeGlBoundary implements FunctionProvider {
             MemoryUtil.memPutInt(arguments.pointer(3), 0);
             return 0;
         });
+        answers.put("glGetError", arguments -> 0);
+        // Compiling waits for glLinkProgram and Vulkan submits in order, so these have nothing left to do.
+        Answer done = arguments -> 0;
+        for (String name : new String[]{"glCompileShader", "glValidateProgram", "glFinish", "glFlush", "glHint"}) answers.put(name, done);
+        // Every program and shader reports success, so its info log is empty.
+        Answer emptyLog = arguments -> {
+            if (arguments.pointer(2) != 0) MemoryUtil.memPutInt(arguments.pointer(2), 0);
+            if (arguments.integer(1) > 0 && arguments.pointer(3) != 0) MemoryUtil.memPutByte(arguments.pointer(3), (byte) 0);
+            return 0;
+        };
+        answers.put("glGetShaderInfoLog", emptyLog);
+        answers.put("glGetProgramInfoLog", emptyLog);
+        answers.put("glGetIntegeri_v", arguments -> {
+            MemoryUtil.memPutInt(arguments.pointer(2), indexed(arguments.integer(0), arguments.integer(1)));
+            return 0;
+        });
+    }
+
+    /** Compute limits at the minimum every Vulkan device guarantees; other indexed queries answer 0. */
+    private static int indexed(int name, int index) {
+        if (index < 0 || index > 2) return 0;
+        return switch (name) {
+            case 0x91BE -> 65_535;
+            case 0x91BF -> index == 2 ? 64 : 128;
+            default -> 0;
+        };
     }
 
     private void names() {

@@ -13,6 +13,7 @@ final class BlazeGlRoutes {
     private static final int PIXEL_PACK_BUFFER = 0x88EB;
     private static final int PIXEL_UNPACK_BUFFER = 0x88EC;
     private static final int DRAW_FRAMEBUFFER = 0x8CA9;
+    private static final int BORDER_COLOR = 0x1004;
 
     private BlazeGlRoutes() {}
 
@@ -107,6 +108,13 @@ final class BlazeGlRoutes {
         put(table, "glDepthMask", (renderer, a) -> renderer.drawState().depthWrite(a.flag(0)));
         put(table, "glLogicOp", (renderer, a) -> renderer.drawState().logicOperation(a.integer(0)));
         put(table, "glColorMask", (renderer, a) -> renderer.drawState().colorMask(a.flag(0), a.flag(1), a.flag(2), a.flag(3)));
+        put(table, "glCullFace", (renderer, a) -> renderer.drawState().cullFace(a.integer(0)));
+        // GlStateManager's own calls are captured by its mixin; these reach the state when a mod calls OpenGL directly.
+        put(table, "glBlendFunc", (renderer, a) -> renderer.drawState().blendFunctions(a.integer(0), a.integer(1), a.integer(0), a.integer(1)));
+        put(table, "glBlendFuncSeparate", (renderer, a) -> renderer.drawState().blendFunctions(a.integer(0), a.integer(1), a.integer(2), a.integer(3)));
+        put(table, "glBlendEquation", (renderer, a) -> renderer.drawState().blendEquation(a.integer(0)));
+        put(table, "glPolygonOffset", (renderer, a) -> renderer.drawState().polygonOffset(a.real(0), a.real(1)));
+        put(table, "glPolygonMode", (renderer, a) -> renderer.drawState().polygonMode(a.integer(0), a.integer(1)));
     }
 
     private static void capability(BlazeRenderer renderer, int capability, boolean enabled) {
@@ -140,6 +148,10 @@ final class BlazeGlRoutes {
         put(table, "glGenerateMipmap", (renderer, a) -> renderer.textures().generateMipmap(a.integer(0)));
         put(table, "glPixelStorei", (renderer, a) -> renderer.textures().pixelStore(a.integer(0), a.integer(1)));
         put(table, "glTexParameteri", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.integer(2)));
+        put(table, "glTexParameterf", (renderer, a) -> renderer.textures().parameter(a.integer(0), a.integer(1), a.real(2)));
+        put(table, "glTexParameteriv", (renderer, a) -> texParameter(renderer, a, true));
+        put(table, "glTexParameterfv", (renderer, a) -> texParameter(renderer, a, false));
+        samplers(table);
         put(table, "glTexImage2D", (renderer, a) -> {
             renderer.textures().image(a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), a.integer(6), a.integer(7), null);
             long source = buffers.pixels(PIXEL_UNPACK_BUFFER, a.pointer(8));
@@ -163,6 +175,46 @@ final class BlazeGlRoutes {
         put(table, "glGetTexImage", (renderer, a) -> renderer.textures().download(a.integer(0), a.integer(1), a.integer(2), a.integer(3), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(4))));
         put(table, "glGetTexLevelParameteriv", (renderer, a) -> MemoryUtil.memPutInt(a.pointer(3), renderer.textures().levelParameter(a.integer(0), a.integer(1), a.integer(2))));
         put(table, "glReadPixels", (renderer, a) -> renderer.textures().read(renderer.readTarget(), a.integer(0), a.integer(1), a.integer(2), a.integer(3), a.integer(4), a.integer(5), buffers.pixels(PIXEL_PACK_BUFFER, a.pointer(6))));
+    }
+
+    /** Every vector parameter but the border colour holds one value; integer border colours are normalized as GL does. */
+    private static void texParameter(BlazeRenderer renderer, Arguments a, boolean integers) {
+        long values = a.pointer(2);
+        if (a.integer(1) == BORDER_COLOR) {
+            renderer.textures().border(a.integer(0), component(values, 0, integers), component(values, 1, integers), component(values, 2, integers), component(values, 3, integers));
+        } else {
+            renderer.textures().parameter(a.integer(0), a.integer(1), integers ? MemoryUtil.memGetInt(values) : MemoryUtil.memGetFloat(values));
+        }
+    }
+
+    private static float component(long values, int index, boolean integers) {
+        long address = values + index * 4L;
+        return integers ? Math.max(-1f, MemoryUtil.memGetInt(address) / (float) Integer.MAX_VALUE) : MemoryUtil.memGetFloat(address);
+    }
+
+    /** Sampler objects override the sampling state of the texture bound on the same unit. */
+    private static void samplers(Map<String, Answer> table) {
+        put(table, "glBindSampler", (renderer, a) -> renderer.textures().samplerObjects().bind(a.integer(0), a.integer(1)));
+        put(table, "glBindSamplers", (renderer, a) -> {
+            long names = a.pointer(2);
+            for (int index = 0; index < a.integer(1); index++)
+                renderer.textures().samplerObjects().bind(a.integer(0) + index, names == 0 ? 0 : MemoryUtil.memGetInt(names + index * (long) Integer.BYTES));
+        });
+        put(table, "glDeleteSamplers", (renderer, a) -> each(a, address -> renderer.textures().samplerObjects().delete(MemoryUtil.memGetInt(address))));
+        put(table, "glSamplerParameteri", (renderer, a) -> renderer.textures().samplerObjects().parameter(a.integer(0), a.integer(1), a.integer(2)));
+        put(table, "glSamplerParameterf", (renderer, a) -> renderer.textures().samplerObjects().parameter(a.integer(0), a.integer(1), a.real(2)));
+        put(table, "glSamplerParameteriv", (renderer, a) -> samplerParameter(renderer, a, true));
+        put(table, "glSamplerParameterfv", (renderer, a) -> samplerParameter(renderer, a, false));
+    }
+
+    private static void samplerParameter(BlazeRenderer renderer, Arguments a, boolean integers) {
+        long values = a.pointer(2);
+        var samplers = renderer.textures().samplerObjects();
+        if (a.integer(1) == BORDER_COLOR) {
+            samplers.border(a.integer(0), component(values, 0, integers), component(values, 1, integers), component(values, 2, integers), component(values, 3, integers));
+        } else {
+            samplers.parameter(a.integer(0), a.integer(1), integers ? MemoryUtil.memGetInt(values) : MemoryUtil.memGetFloat(values));
+        }
     }
 
     private static int activeUnit(BlazeRenderer renderer) { return renderer.textures().integer(0x84E0) - 0x84C0; }

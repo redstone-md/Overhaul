@@ -48,6 +48,7 @@ public final class BlazeTextures implements AutoCloseable {
     /** The 2D bindings; {@link #layered} holds the cube and 2D array bindings of the same units. */
     private final int[] bindings=new int[32];
     private final int[][] layered={bindings,new int[32],new int[32],new int[32]};
+    private final BlazeSamplerObjects samplerObjects=new BlazeSamplerObjects(bindings.length);
     private BlazeTexture incomplete;
     /** Cleared cube, array and 3D views, made the first time a sampler of that dimension asks. */
     private final GpuImageView[] blanks=new GpuImageView[3];
@@ -125,6 +126,12 @@ public final class BlazeTextures implements AutoCloseable {
     public int boundId(int unit,String samplerType){
         int kind=BlazeTextureTargets.kindOf(viewType(samplerType));if(kind<0)return 0;boundId(unit);return layered[kind][unit];
     }
+    BlazeSamplerObjects samplerObjects(){requireOpen();return samplerObjects;}
+    /** What a sampler of the given GLSL type reads from a unit: the bound name, or a ready view when a sampler object overrides its sampling. */
+    public Object bound(int unit,String samplerType){
+        int id=boundId(unit,samplerType);var override=samplerObjects.override(unit);
+        return id==0||override==null?(Object)id:sampled(id,viewType(samplerType),override);
+    }
     public Integer integer(int name){
         requireOpen();if(name==GL_ACTIVE_TEXTURE)return GL_TEXTURE0+active;if(name==GL_TEXTURE_BINDING_2D)return bindings[active];
         if(name==BlazeTextureTargets.BINDING_CUBE)return layered[BlazeTextureTargets.KIND_CUBE][active];
@@ -133,6 +140,7 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void pixelStore(int name,int value){requireOpen();pixels.set(name,value);}
     public void parameter(int target,int name,float value){current(target).parameter(name,value);}
+    void border(int target,float r,float g,float b,float alpha){current(target).border(r,g,b,alpha);}
     public void prepare(int internal,int id,int maximumMip,int width,int height){
         requireOpen();if(maximumMip<0)throw new IllegalArgumentException("Negative texture mip count");bind(id);
         var texture=current(GL_TEXTURE_2D);texture.parameter(GL_TEXTURE_MAX_LEVEL,maximumMip);texture.parameter(GL_TEXTURE_MIN_LOD,0);texture.parameter(GL_TEXTURE_MAX_LOD,maximumMip);
@@ -310,7 +318,7 @@ public final class BlazeTextures implements AutoCloseable {
         for(int layer=0;layer<texture.layers();layer++)transfers.mipmaps(texture.image(),texture.baseLevel(),layer);
         texture.defineMipmaps(texture.baseLevel()+1);
     }
-    public Sampled resolveBound(int unit){return sampled(boundId(unit),VK_IMAGE_VIEW_TYPE_2D);}
+    public Sampled resolveBound(int unit){return sampled(boundId(unit),VK_IMAGE_VIEW_TYPE_2D,samplerObjects.override(unit));}
     /**
      * As {@link #resolve(Object)} for a sampler of the given GLSL type. A name whose storage has another dimension, and
      * every 3D sampler, reads a cleared view of the sampler's own dimension, as an incomplete texture reads in OpenGL.
@@ -341,13 +349,14 @@ public final class BlazeTextures implements AutoCloseable {
             return blanks[slot]=image.view(0,1,0,image.layers(),viewType,image.format().aspectMask());
         }catch(RuntimeException|Error failure){blankImages[slot]=null;image.close();throw failure;}
     }
-    private Sampled sampled(int id,int viewType){
+    private Sampled sampled(int id,int viewType){return sampled(id,viewType,null);}
+    private Sampled sampled(int id,int viewType,BlazeSamplerState override){
         var texture=texture(id);
-        if(texture.viewType()!=viewType||!texture.complete()){if(viewType!=VK_IMAGE_VIEW_TYPE_2D)return blankSampled(viewType);texture=incomplete();}
+        if(texture.viewType()!=viewType||!texture.complete()){if(viewType!=VK_IMAGE_VIEW_TYPE_2D)return blankSampled(viewType);texture=incomplete();override=null;}
         var view=texture.view();
         if(queue==null)for(int layer=view.baseLayer();layer<view.baseLayer()+view.layerCount();layer++)for(int mip=view.baseMip();mip<view.baseMip()+view.mipCount();mip++)
             if(view.image().layout(mip,layer)!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)commands.transition(view.image(),mip,layer,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        return new Sampled(view,texture.sampler().handle());
+        return new Sampled(view,(override==null?texture.sampler():texture.sampler(override)).handle());
     }
     private BlazeTexture current(int target){requireOpen();return texture(layered[kind(target)][active]);}
     private int kind(int target){requireOpen();return BlazeTextureTargets.kind(target);}
