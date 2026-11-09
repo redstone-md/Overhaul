@@ -22,7 +22,7 @@ def tiers = [
                                 'EntityTypeRenderer121Mixin', 'EntityRendererLookup121Mixin',
                                 'ModelCube121Mixin', 'BufferBuilderBulk121Mixin', 'ItemQuads121Mixin',
                                 'XaeroMapWriter121Mixin', 'XaeroMapProcessor121Mixin', 'ShoulderCrosshair121Mixin', 'SectionOcclusionFrustum121Mixin', 'RenderSectionOrigin121Mixin', 'Frustum121Accessor', 'CataclysmScans121Mixin', 'AlexsCavesScans121Mixin', 'YoukaiHeadCurios121Mixin', 'DhClouds121Mixin', 'XaeroRadar121Mixin', 'RendererRegistration121Mixin', 'BlockEntityRendererRegistration121Mixin', 'RenderSectionBuffers121Mixin',
-                                'LevelRendererShaderPack121Mixin','GameRendererHand121Access', 'GameRendererPackHand121Mixin', 'GameRendererPackBobbing121Mixin',
+                                'LevelRendererShaderPack121Mixin','GameRendererHand121Access', 'GameRendererPackHand121Mixin', 'GameRendererPackBobbing121Mixin', 'GameRendererUpscale121Mixin', 'MinecraftMainTarget121Access',
                                 'OptionsSubScreen121Access',
                                 'LevelRendererSectionBatch121Mixin',
                                 'LevelRendererEntityOcclusion121Mixin',
