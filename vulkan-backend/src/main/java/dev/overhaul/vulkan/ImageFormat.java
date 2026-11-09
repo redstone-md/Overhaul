@@ -35,6 +35,9 @@ public enum ImageFormat {
     public int bytesPerPixel(){return bytes;}
     public boolean isDepth(){return (aspects&VK_IMAGE_ASPECT_DEPTH_BIT)!=0;}
     public int aspectMask(){return aspects;}
+    public boolean hasStencil(){return (aspects&VK_IMAGE_ASPECT_STENCIL_BIT)!=0;}
+    /** The one aspect a sampled view reads: shaders sample the depth of a combined depth/stencil image. */
+    public int sampledAspect(){return isDepth()?VK_IMAGE_ASPECT_DEPTH_BIT:aspects;}
     public static ImageFormat fromVk(int format){
         for(ImageFormat value:values())if(value.format==format)return value;
         throw new IllegalArgumentException("Unsupported uncompressed Vulkan image format: "+format);

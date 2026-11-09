@@ -103,8 +103,8 @@ public final class ImageCommand implements AutoCloseable {
     }
 
     public static ImageCommand copy(VulkanContext context,GpuImage source,ImageRegion from,GpuImage target,ImageRegion to) {
-        validateImage(context,source,from,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        validateImage(context,target,to,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        validateWhole(context,source,from,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        validateWhole(context,target,to,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         if (source.format()!=target.format() || from.width()!=to.width() || from.height()!=to.height()) throw new IllegalArgumentException("Image copy formats/extents differ");
         if (source.samples()!=target.samples()) {
             requireResolve(source,target);
@@ -167,8 +167,8 @@ public final class ImageCommand implements AutoCloseable {
     }
     /** As above between any mip level and array layer; each rectangle must lie inside its level. */
     public static ImageCommand blit(VulkanContext context,GpuImage source,ImageRegion sourceLevel,int[] from,GpuImage target,ImageRegion targetLevel,int[] to,int filter) {
-        validateImage(context,source,sourceLevel,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        validateImage(context,target,targetLevel,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        validateWhole(context,source,sourceLevel,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+        validateWhole(context,target,targetLevel,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         if (source==target) throw new IllegalArgumentException("Image blit requires two images");
         if (source.format().aspectMask()!=target.format().aspectMask()) throw new IllegalArgumentException("Image blit aspects differ");
         if (source.format().isDepth()&&(source.format()!=target.format()||filter!=VK_FILTER_NEAREST)) throw new IllegalArgumentException("Depth blits require one format and nearest filtering");
@@ -319,9 +319,14 @@ public final class ImageCommand implements AutoCloseable {
         if ((image.usage()&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)!=0) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         return VK_IMAGE_LAYOUT_GENERAL;
     }
+    /** Checks an image a buffer transfer touches; a buffer holds one aspect, so a combined depth/stencil image is refused. */
     static void validateImage(VulkanContext context,GpuImage image,ImageRegion region,int usage) {
-        requireContext(context,image); region.validate(image); image.requireUsage(usage);
+        validateWhole(context,image,region,usage);
         if (Integer.bitCount(image.format().aspectMask())!=1) throw new IllegalArgumentException("Combined depth/stencil transfers require an explicit single aspect");
+    }
+    /** Checks an image an image-to-image copy or blit touches; those move every aspect at once. */
+    private static void validateWhole(VulkanContext context,GpuImage image,ImageRegion region,int usage) {
+        requireContext(context,image); region.validate(image); image.requireUsage(usage);
     }
     private static void requireSingleSampled(GpuImage image) {
         if (image.samples()!=VK_SAMPLE_COUNT_1_BIT) throw new IllegalArgumentException("Buffer transfers and mipmaps need a single-sampled image; resolve it first");

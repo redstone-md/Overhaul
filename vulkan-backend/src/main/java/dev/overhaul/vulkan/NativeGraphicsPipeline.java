@@ -21,7 +21,14 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
     }
     public record Binding(int slot,int stride,int stepRate) {}
     public record Attribute(int location,int slot,int format,int offset) {}
-    public record Depth(boolean test,boolean write,int compare,float constantBias,float slopeBias) {}
+    /** One stencil state for both faces; {@code reference} and both masks hold the low eight bits that reach an 8-bit stencil. */
+    public record Stencil(boolean test,int compare,int reference,int compareMask,int writeMask,int fail,int depthFail,int pass) {
+        public static final Stencil DISABLED=new Stencil(false,VK_COMPARE_OP_ALWAYS,0,0xFF,0xFF,VK_STENCIL_OP_KEEP,VK_STENCIL_OP_KEEP,VK_STENCIL_OP_KEEP);
+    }
+    public record Depth(boolean test,boolean write,int compare,float constantBias,float slopeBias,Stencil stencil) {
+        public Depth(boolean test,boolean write,int compare,float constantBias,float slopeBias){this(test,write,compare,constantBias,slopeBias,Stencil.DISABLED);}
+        public Depth{java.util.Objects.requireNonNull(stencil);}
+    }
     public record Color(boolean blend,int sourceRgb,int destinationRgb,int operationRgb,int sourceAlpha,int destinationAlpha,int operationAlpha,int writeMask) {}
     public record ColorLogic(boolean enabled,int operation){
         public ColorLogic{if(operation<VK_LOGIC_OP_CLEAR||operation>VK_LOGIC_OP_SET)throw new IllegalArgumentException("Invalid color logic operation");}
@@ -91,7 +98,8 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
                     .depthBiasEnable(value.constantBias()!=0||value.slopeBias()!=0).depthBiasConstantFactor(value.constantBias()).depthBiasSlopeFactor(value.slopeBias());
             VkPipelineMultisampleStateCreateInfo multisample=VkPipelineMultisampleStateCreateInfo.calloc(stack).sType$Default().rasterizationSamples(samples);
             VkPipelineDepthStencilStateCreateInfo depth=VkPipelineDepthStencilStateCreateInfo.calloc(stack).sType$Default()
-                    .depthTestEnable(value.test()).depthWriteEnable(value.write()).depthCompareOp(value.compare()).stencilTestEnable(false);
+                    .depthTestEnable(value.test()).depthWriteEnable(value.write()).depthCompareOp(value.compare()).stencilTestEnable(value.stencil().test());
+            if(value.stencil().test()){stencil(depth.front(),value.stencil());stencil(depth.back(),value.stencil());}
             VkPipelineColorBlendAttachmentState.Buffer colors=VkPipelineColorBlendAttachmentState.calloc(description.colors().size(),stack);
             for(int index=0;index<description.colors().size();index++){
                 Color color=description.colors().get(index);colors.get(index).blendEnable(color.blend()).srcColorBlendFactor(color.sourceRgb())
@@ -127,6 +135,10 @@ public final class NativeGraphicsPipeline implements AutoCloseable {
         if(description.polygonMode()!=VK_POLYGON_MODE_FILL&&!context.fillModeNonSolid())throw new UnsupportedOperationException("Non-solid fill mode is unavailable");
         if(description.bindings().stream().anyMatch(binding->binding.stepRate()>1)&&!context.vertexAttributeDivisor())throw new UnsupportedOperationException("Vertex instance divisors are unavailable");
         if(!context.independentBlend()&&description.colors().stream().distinct().count()>1)throw new UnsupportedOperationException("Independent MRT blend state is unavailable");
+    }
+    private static void stencil(VkStencilOpState face,Stencil value){
+        face.failOp(value.fail()).passOp(value.pass()).depthFailOp(value.depthFail()).compareOp(value.compare())
+                .compareMask(value.compareMask()).writeMask(value.writeMask()).reference(value.reference());
     }
     private static boolean constantAlpha(int factor){return factor==VK_BLEND_FACTOR_CONSTANT_ALPHA||factor==VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;}
     public long handle(){context.device();if(pipeline==0)throw new IllegalStateException("Pipeline closed");return pipeline;}
