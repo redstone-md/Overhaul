@@ -71,11 +71,12 @@ final class BlazeGlPrograms {
         }));
         table.put("glLinkProgram", raw(arguments -> link(arguments.integer(0))));
         table.put("glDeleteProgram", raw(arguments -> delete(arguments.integer(0))));
-        table.put("glUseProgram", raw(arguments -> {
+        // Veil selects its own programs with glUseProgram too; a raw program left in use would take their glUniform values.
+        table.put("glUseProgram", arguments -> {
             BlazePrograms programs = programs();
             if (programs != null) programs.useForeign(arguments.integer(0));
             return 0;
-        }));
+        });
         table.put("glGetUniformLocation", raw(arguments -> {
             BlazePrograms programs = programs();
             int program = arguments.integer(0);
