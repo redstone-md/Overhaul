@@ -126,8 +126,20 @@ public final class BlazeGlBoundary implements FunctionProvider {
         Answer answer = answers.get(name);
         if (answer != null) return new Entry(name, answer).address();
         if (UNTRANSLATED_PREFIXES.stream().anyMatch(name::startsWith)) return new Entry(name, untranslated(name)).address();
-        return inert;
+        return TRACE_INERT ? new Entry(name, unanswered(name)).address() : inert;
     }
+
+    /** Off by default: one closure per GL entry point costs memory, and only an audit for missing answers needs it. */
+    private static final boolean TRACE_INERT = Boolean.getBoolean("overhaul.blaze.traceInert");
+
+    /** Names an entry point that reached the table with no answer, so an audit can tell silence from coverage. */
+    private static Answer unanswered(String name) {
+        return arguments -> {
+            if (REPORTED.add("inert " + name)) LOGGER.warn("OpenGL entry {} from {} has no answer and does nothing", name, caller());
+            return 0;
+        };
+    }
+
 
     /** Draws nothing and names the calling renderer once, so a mod renderer without a native path is visible in the log. */
     static Answer untranslated(String name) {
