@@ -6,6 +6,7 @@ import dev.overhaul.minecraft.blaze.BlazeGlBoundary.Arguments;
 import dev.overhaul.shader.blaze.BlazeBlockBuffers;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.lwjgl.system.MemoryUtil;
@@ -27,6 +28,7 @@ final class BlazeGlPrograms {
 
     private final Map<Integer, Shader> shaders = new ConcurrentHashMap<>();
     private final Map<Integer, Linkage> linkages = new ConcurrentHashMap<>();
+    private final Set<Integer> deleted = ConcurrentHashMap.newKeySet();
 
     private BlazeGlPrograms() {}
 
@@ -46,8 +48,12 @@ final class BlazeGlPrograms {
             if (shader != null) shaders.put(arguments.integer(0), new Shader(shader.type(), source(arguments)));
             return 0;
         });
+        // As in OpenGL, a deleted shader that is still attached lives on until detached: Distant Horizons deletes
+        // its stages between glAttachShader and glLinkProgram.
         table.put("glDeleteShader", arguments -> {
-            shaders.remove(arguments.integer(0));
+            int shader = arguments.integer(0);
+            if (attached(shader)) deleted.add(shader);
+            else shaders.remove(shader);
             return 0;
         });
         table.put("glAttachShader", raw(arguments -> {
@@ -56,6 +62,7 @@ final class BlazeGlPrograms {
         }));
         table.put("glDetachShader", raw(arguments -> {
             linkage(arguments.integer(0)).shaders.remove((Integer) arguments.integer(1));
+            releaseDeleted();
             return 0;
         }));
         table.put("glBindAttribLocation", raw(arguments -> {
@@ -144,8 +151,23 @@ final class BlazeGlPrograms {
         return 0;
     }
 
+    private boolean attached(int shader) {
+        for (Linkage linkage : linkages.values()) if (linkage.shaders.contains(shader)) return true;
+        return false;
+    }
+
+    /** Frees the sources of deleted shaders that no program holds any more. */
+    private void releaseDeleted() {
+        deleted.removeIf(shader -> {
+            if (attached(shader)) return false;
+            shaders.remove(shader);
+            return true;
+        });
+    }
+
     private long delete(int program) {
         linkages.remove(program);
+        releaseDeleted();
         BlazeGlVertexArrays.forget(program);
         BlazePrograms programs = programs();
         if (programs != null && programs.known(program)) programs.release(program);
