@@ -58,6 +58,7 @@ abstract class ParticleCulling121Mixin {
 
     @WrapOperation(method = RENDER, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"), require = 0)
     private boolean overhaul$visible(Frustum frustum, AABB box, Operation<Boolean> original) {
-        return box != HIDDEN && original.call(frustum, box);
+        if (box == HIDDEN) return false;
+        return BlazeParticleBounds.shown && box == AABB.INFINITE || original.call(frustum, box);
     }
 }

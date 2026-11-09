@@ -37,6 +37,8 @@ public final class BlazeParticleBounds {
 
     /** Whether each draw first tests every packed box in one pass; flipped by a measurement like {@link #on}. */
     public static boolean pass = BlazeOptimization.PARTICLE_CULL_PASS.on();
+    /** Whether a box already answered as in view (or infinite) skips the frustum; flipped by a measurement like {@link #on}. */
+    public static boolean shown = BlazeOptimization.PARTICLE_SHOWN.on();
     /** {@link #visibility} answers: hidden, shown, or not tested (no plain box, or no pass ran). */
     public static final byte HIDDEN = 0, SHOWN = 1, UNTESTED = 2;
 
