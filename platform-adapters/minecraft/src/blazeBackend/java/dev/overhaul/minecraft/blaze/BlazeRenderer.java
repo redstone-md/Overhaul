@@ -190,6 +190,8 @@ public final class BlazeRenderer implements AutoCloseable {
     /** Null when switched off or when this device cannot build it; terrain then simply draws everything. */
     public BlazeSectionOcclusion occlusion(){
         requireOpen();
+        // A pack's vertex stage moves geometry (lens distortion, waving, jitter), so its depth no longer matches this projection.
+        if(packScene!=null)return null;
         if(occlusion!=null||occlusionFailed||!BlazeOptimization.SECTION_OCCLUSION.on())return occlusion;
         try{occlusion=new BlazeSectionOcclusion(context,allocator,queue);closeWith(occlusion);}
         catch(RuntimeException failure){occlusionFailed=true;BlazeGlBoundary.reportOnce("section occlusion","Terrain occlusion is off: "+failure.getMessage());}
