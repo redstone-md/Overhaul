@@ -19,6 +19,10 @@ import static dev.overhaul.vulkan.VulkanException.check;
 
 /** VMA allocator with deterministic child ownership; no native pointer escapes allocations. */
 public final class GpuAllocator implements AutoCloseable {
+    /** With ray queries on, geometry and storage buffers get device addresses and may feed acceleration structure builds. */
+    private static final int TRACEABLE = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    private static final int ADDRESSABLE = org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+            | org.lwjgl.vulkan.KHRAccelerationStructure.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     private final VulkanContext context;
     private final Set<GpuBuffer> buffers = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GpuImage> images = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -31,7 +35,8 @@ public final class GpuAllocator implements AutoCloseable {
             VmaVulkanFunctions functions = VmaVulkanFunctions.calloc(stack).set(context.instance(), context.device());
             VmaAllocatorCreateInfo info = VmaAllocatorCreateInfo.calloc(stack)
                 .instance(context.instance()).physicalDevice(context.physicalDevice()).device(context.device())
-                .vulkanApiVersion(VK_API_VERSION_1_1).pVulkanFunctions(functions);
+                .vulkanApiVersion(context.rayQuery() ? org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2 : VK_API_VERSION_1_1).pVulkanFunctions(functions);
+            if (context.rayQuery()) info.flags(VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT);
             PointerBuffer pointer = stack.mallocPointer(1);
             check(vmaCreateAllocator(info, pointer), "vmaCreateAllocator");
             handle = pointer.get(0);
@@ -107,6 +112,7 @@ public final class GpuAllocator implements AutoCloseable {
     private GpuBuffer createBuffer(long size, int usage, boolean host) {
         requireOpen();
         if (size < 1 || size > Integer.MAX_VALUE) throw new IllegalArgumentException("buffer size out of range");
+        if (context.rayQuery() && (usage & TRACEABLE) != 0) usage |= ADDRESSABLE;
         try (MemoryStack stack = VulkanStack.push()) {
             VkBufferCreateInfo info = VkBufferCreateInfo.calloc(stack).sType$Default()
                 .size(size).usage(usage).sharingMode(VK_SHARING_MODE_EXCLUSIVE);

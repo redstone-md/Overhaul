@@ -22,6 +22,7 @@ import static dev.overhaul.vulkan.VulkanException.check;
 /** One graphics queue, optionally paired with a presentation surface. Thread confined. */
 public final class VulkanContext implements AutoCloseable {
     private static volatile int requestedApiVersion = VK_API_VERSION_1_1;
+    private static volatile boolean rayQueryRequested;
     private final Thread owner = Thread.currentThread();
     private VkInstance instance;
     private VkPhysicalDevice physicalDevice;
@@ -38,7 +39,7 @@ public final class VulkanContext implements AutoCloseable {
     private String deviceName;
     private boolean multiDrawIndirect;
     private boolean indirectFirstInstance;
-    private boolean vertexStores,fragmentStores,storageFormats,geometryShaders;
+    private boolean vertexStores,fragmentStores,storageFormats,geometryShaders,rayQuery;
     private int maxIndirectDrawCount;
     private long maxStorageBufferRange;
     private DeviceCapabilities capabilities;
@@ -81,6 +82,15 @@ public final class VulkanContext implements AutoCloseable {
      */
     public static void requestApiVersion(int version) {
         if (Integer.compareUnsigned(version, VK_API_VERSION_1_1) > 0) requestedApiVersion = version;
+    }
+
+    /**
+     * Asks contexts opened from now on to enable hardware ray queries where the device offers them; see
+     * {@link #rayQuery()}. Raises the requested API version to 1.2, which they need.
+     */
+    public static void requestRayQuery() {
+        requestApiVersion(org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2);
+        rayQueryRequested = true;
     }
 
     private static int instanceApiVersion(MemoryStack stack) {
@@ -162,9 +172,13 @@ public final class VulkanContext implements AutoCloseable {
                 .vertexPipelineStoresAndAtomics(vertexStores).fragmentStoresAndAtomics(fragmentStores).shaderStorageImageExtendedFormats(storageFormats).geometryShader(geometryShaders));
             var enabledDraw=VkPhysicalDeviceShaderDrawParametersFeatures.calloc(stack).sType$Default().shaderDrawParameters(draw.shaderDrawParameters());
             if(subset)enabledDraw.pNext(portability.enabled(stack).address());
-            deviceInfo.pNext(enabledDraw.address());
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.malloc(stack);
             vkGetPhysicalDeviceProperties(physicalDevice, properties);
+            long tracing=rayQueryRequested?RayQuerySupport.chain(physicalDevice,availableDeviceExtensions,
+                    Integer.compareUnsigned(app.apiVersion(),properties.apiVersion())<0?app.apiVersion():properties.apiVersion(),enabledDraw.pNext(),stack):0;
+            rayQuery=tracing!=0;
+            if(rayQuery)enabledDraw.pNext(tracing);
+            deviceInfo.pNext(enabledDraw.address());
             maxStorageBufferRange = Integer.toUnsignedLong(properties.limits().maxStorageBufferRange());
             capabilities = new DeviceCapabilities(supported.samplerAnisotropy(), supported.fillModeNonSolid(),
                 supported.independentBlend(), draw.shaderDrawParameters(), supported.samplerAnisotropy()
@@ -172,6 +186,7 @@ public final class VulkanContext implements AutoCloseable {
                 properties.limits().maxImageArrayLayers(), properties.limits().maxColorAttachments(),supported.logicOp());
             var deviceNames=new LinkedHashSet<String>();if(presentationEnabled)deviceNames.add(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
             if(subset)deviceNames.add(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+            if(rayQuery)deviceNames.addAll(RayQuerySupport.EXTENSIONS);
             if(!deviceNames.isEmpty()){
                 var enabled=stack.mallocPointer(deviceNames.size());for(String name:deviceNames)enabled.put(stack.UTF8(name));enabled.flip();deviceInfo.ppEnabledExtensionNames(enabled);
             }
@@ -269,6 +284,11 @@ public final class VulkanContext implements AutoCloseable {
     public boolean storageFormats() { requireOwner(); return storageFormats; }
     /** Shader packs' geometry programs need the stage; without it their draws are dropped. */
     public boolean geometryShaders() { requireOwner(); return geometryShaders; }
+    /**
+     * Acceleration structures, ray queries and buffer device addresses are enabled: {@link #requestRayQuery()} was
+     * called before this context opened, and the device runs Vulkan 1.2 with the extensions.
+     */
+    public boolean rayQuery() { requireOwner(); return rayQuery; }
     public int maxIndirectDrawCount() { requireOwner(); return maxIndirectDrawCount; }
     /** Largest storage buffer range one descriptor may bind. */
     public long maxStorageBufferRange() { requireOwner(); return maxStorageBufferRange; }

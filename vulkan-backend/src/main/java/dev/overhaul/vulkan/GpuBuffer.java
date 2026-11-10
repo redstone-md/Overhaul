@@ -10,7 +10,7 @@ public final class GpuBuffer implements AutoCloseable {
     private final int size;
     private final boolean hostVisible;
     private final int usage;
-    private long handle;
+    private long handle, address;
     private ByteBuffer mapping;
     private long hostWrittenBytes;
     private final java.util.Set<MappedRange> ranges = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -27,6 +27,19 @@ public final class GpuBuffer implements AutoCloseable {
     public long handle() { requireOpen(); return handle; }
     public int size() { return size; }
     public int usage(){return usage;}
+
+    /** The buffer's device address, for buffers created with {@code VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}. */
+    public long deviceAddress() {
+        requireOpen();
+        if ((usage & org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) == 0) throw new IllegalStateException("buffer has no device address");
+        if (address == 0) {
+            try (org.lwjgl.system.MemoryStack stack = VulkanStack.push()) {
+                address = org.lwjgl.vulkan.VK12.vkGetBufferDeviceAddress(allocator.context().device(),
+                        org.lwjgl.vulkan.VkBufferDeviceAddressInfo.calloc(stack).sType$Default().buffer(handle));
+            }
+        }
+        return address;
+    }
     public VulkanContext context(){requireOpen();return allocator.context();}
 
     public void write(ByteBuffer source) { write(0, source); }
