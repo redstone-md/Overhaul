@@ -29,6 +29,7 @@ public final class BlazeRenderer implements AutoCloseable {
     static final int GL_SHARED_ALIGNMENT=16;
     /** Pages free as soon as they empty, so the budget only bounds what mods hold at once, as their own buffers did. */
     private static final int GL_SHARED_PAGE=32*1024*1024;
+    private static final int GL_LINEAR=9729;
     private static final long GL_SHARED_BUDGET=16L*1024*1024*1024;
     private final Set<BlazeBufferPool.Slice> glSharedBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private final VulkanContext context;
@@ -299,7 +300,10 @@ public final class BlazeRenderer implements AutoCloseable {
     BlazeTarget packTarget(List<GpuImageView> colors,GpuImageView depth){requireOpen();BlazeTarget target=new BlazeTarget(context,colors,depth);target.attach(queue);return target;}
     /** Closes a resource once the work queued so far no longer reads it. */
     void retire(AutoCloseable resource){requireOpen();queue.retire(resource);}
-    public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){requireOpen();transfers.blit(source,from,destination,to,filter);}
+    /** Scales between two images; {@code filter} is OpenGL's GL_NEAREST or GL_LINEAR, as framebuffer blits name it. */
+    public void blitImage(GpuImage source,int[] from,GpuImage destination,int[] to,int filter){
+        requireOpen();transfers.blit(source,from,destination,to,filter==GL_LINEAR?VK_FILTER_LINEAR:VK_FILTER_NEAREST);
+    }
     /** Queues an upload in frame order, without the flush {@link #commands()} makes. */
     void uploadImage(GpuImage image,ImageRegion region,java.nio.ByteBuffer pixels,int pitch){requireOpen();transfers.upload(image,region,pixels,pitch);}
     /** Queues a colour clear in frame order, without the flush {@link #commands()} makes. */
