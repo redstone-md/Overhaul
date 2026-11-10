@@ -125,7 +125,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
     /** Mixins that serve several optimisations, applied while any of them is on. */
     private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
-            "GameRendererUpscale121Mixin", List.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS),
+            "GameRendererUpscale121Mixin", List.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.GPU_PRESET),
             "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS,
                     BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS, BlazeOptimization.MOD_ENTITY_WALKS),
             "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS),

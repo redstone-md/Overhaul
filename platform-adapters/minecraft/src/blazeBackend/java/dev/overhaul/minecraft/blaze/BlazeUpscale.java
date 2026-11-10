@@ -19,7 +19,6 @@ public final class BlazeUpscale {
     private static final BlazeUpscale INSTANCE = new BlazeUpscale();
     private static final int MINIMUM = 64, LINEAR = 9729;
     private static final double TELEPORT = 64;
-    private static final float RATIO = ratio(BlazeOptimization.value("fsr2Quality", "quality"));
     private static final float SHARPNESS = sharpness(BlazeOptimization.value("fsr2Sharpness", "0.3"));
 
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f();
@@ -37,6 +36,8 @@ public final class BlazeUpscale {
     private RenderTarget real;
     private Object level;
     private long lastNanos;
+    /** Display size over render size; read when a renderer is adopted, once its card's class is known. */
+    private float ratio = 1.5f;
     private float clipX, clipY;
     private final int[] shown = new int[4];
     private boolean active, captured, drawn, history, failed, shownDlss, upscaling;
@@ -67,8 +68,8 @@ public final class BlazeUpscale {
             dlssDisplay[1] = displayHeight;
         }
         int[] size = dlss != null ? dlssSize : null;
-        int renderWidth = size != null ? size[0] : Math.max(MINIMUM, Math.round(displayWidth / RATIO));
-        int renderHeight = size != null ? size[1] : Math.max(MINIMUM, Math.round(displayHeight / RATIO));
+        int renderWidth = size != null ? size[0] : Math.max(MINIMUM, Math.round(displayWidth / ratio));
+        int renderHeight = size != null ? size[1] : Math.max(MINIMUM, Math.round(displayHeight / ratio));
         boolean nativeSize = size != null && dlss.nativeResolution();
         if (renderWidth > displayWidth || renderHeight > displayHeight || !nativeSize && (renderWidth == displayWidth || renderHeight == displayHeight)) return null;
         try {
@@ -217,6 +218,7 @@ public final class BlazeUpscale {
     /** A new renderer owns none of the old one's objects, which closed with it. */
     private void adopt(BlazeRenderer renderer) {
         owner = renderer;
+        ratio = ratio(BlazeOptimization.value("fsr2Quality", "quality"));
         pipelines = null;
         motion = null;
         fsr = null;

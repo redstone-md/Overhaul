@@ -145,7 +145,8 @@ public enum BlazeOptimization {
     RAY_TRACING("rayTracing", "On a card with hardware ray queries, the terrain near the player goes into acceleration structures and rays traced against it add sun shadows, ambient occlusion and water reflections to the world; rtDistance sets how far, in blocks; a card without ray queries draws as before; off by default, it changes the image", false),
     RT_SHADOWS("rtShadows", "Ray traced shadows from the sun and moon; needs rayTracing"),
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
-    RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing");
+    RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing"),
+    GPU_PRESET("gpuPreset", "Picks what the card can afford from its class: FSR2 on GTX 10 and 16, integrated graphics and ray tracing cards, ray traced lighting where the card has ray queries; the quality settings follow the class either way unless set here; off by default, it changes the image", false);
 
     private final String key, description;
     private final boolean fallback, enabled;
@@ -164,8 +165,9 @@ public enum BlazeOptimization {
         if (!enabled) LoggerFactory.getLogger(BlazeOptimization.class).info("Overhaul optimisation off: {}", key);
     }
 
+    /** On as set, or, while {@link #GPU_PRESET} is on and no launch argument says otherwise, as the card's class recommends. */
     public boolean on() {
-        return enabled;
+        return enabled || GPU_PRESET.enabled && BlazeGpuClass.current().recommends(this) && !launchOverride();
     }
 
     public String key() {
@@ -186,11 +188,11 @@ public enum BlazeOptimization {
         return read(Settings.FILE_VALUES.getProperty(key), fallback);
     }
 
-    /** A setting that is not a toggle, read the same way: a launch argument first, then the file. */
+    /** A setting that is not a toggle, read the same way: a launch argument first, then the file, then the card's class. */
     public static String value(String key, String fallback) {
         String value = System.getProperty("overhaul.opt." + key);
         if (value == null) value = Settings.FILE_VALUES.getProperty(key);
-        return value == null ? fallback : value.trim();
+        return value == null ? BlazeGpuClass.current().preset(key, fallback) : value.trim();
     }
 
     private static boolean read(String value, boolean fallback) {

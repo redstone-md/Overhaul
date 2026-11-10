@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
  */
 public final class BlazeRayTracing {
     private static final BlazeRayTracing INSTANCE = new BlazeRayTracing();
-    private static final int DISTANCE = distance(BlazeOptimization.value("rtDistance", "64"));
     /** Shows only the traced light, grey on white, to check shadows and occlusion by eye. */
     private static final boolean SHOW_LIGHT = Boolean.getBoolean("overhaul.dev.rtShowLight");
 
@@ -26,6 +25,8 @@ public final class BlazeRayTracing {
     private BlazeRayPass pass;
     private Object level;
     private int frame;
+    /** How far rays reach, in blocks; read when a renderer is adopted, once its card's class is known. */
+    private int distance = 64;
     private boolean failed, logged;
 
     private BlazeRayTracing() {}
@@ -56,14 +57,14 @@ public final class BlazeRayTracing {
             if (atlas == null) return;
             renderer.flushCapturedDraws();
             Vec3 position = camera.getPosition();
-            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, DISTANCE);
+            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance);
             if (traced == null) return;
             if (BlazeUpscale.get().describe() != null) flags |= BlazeRayShader.MOVING_NOISE;
             if (SHOW_LIGHT) flags |= BlazeRayShader.SHOW_LIGHT;
             var lighting = new BlazeRayPass.Lighting(new Matrix4f(projection).mul(view).invert(), light(world, partialTick),
-                    sky(world, position, partialTick), flags, frame++, DISTANCE);
+                    sky(world, position, partialTick), flags, frame++, distance);
             pass.trace(renderer.target(client.getMainRenderTarget().frameBufferId), atlas, traced, lighting);
-            if (!logged) LoggerFactory.getLogger(BlazeRayTracing.class).info("Ray traced lighting on, {} blocks, {} instances", DISTANCE, traced.instances());
+            if (!logged) LoggerFactory.getLogger(BlazeRayTracing.class).info("Ray traced lighting on, {} blocks, {} instances", distance, traced.instances());
             logged = true;
         } catch (RuntimeException | Error failure) {
             failed = true;
@@ -88,6 +89,7 @@ public final class BlazeRayTracing {
     /** A new renderer owns none of the old one's objects; they close with the renderer that made them. */
     private void adopt(BlazeRenderer renderer) {
         owner = renderer;
+        distance = distance(BlazeOptimization.value("rtDistance", "64"));
         scene = null;
         pass = null;
         level = null;

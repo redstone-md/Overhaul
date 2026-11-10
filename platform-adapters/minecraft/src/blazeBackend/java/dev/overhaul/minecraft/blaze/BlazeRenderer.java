@@ -83,7 +83,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeRenderer(long glfwNoApiWindow,int width,int height){
         windowHandle=glfwNoApiWindow;
         dev.overhaul.minecraft.hud.HudCacheTarget.enableWorldVisibility();
-        context=openContext(glfwNoApiWindow);
+        context=openContext(glfwNoApiWindow);BlazeGpuClass.adopt(context);
         GpuImage.mergeBarriers(BlazeOptimization.MERGED_BARRIERS.on());
         try{
             allocator=new GpuAllocator(context);commands=new ImmediateCommands(context);
@@ -113,7 +113,8 @@ public final class BlazeRenderer implements AutoCloseable {
 
     /** Streamline comes up before the instance so its interposer sees it; a context it cannot open is retried without it. */
     private VulkanContext openContext(long window){
-        if(BlazeOptimization.RAY_TRACING.on())VulkanContext.requestRayQuery();
+        // The card's class is unknown until the device opens; the preset asks for ray queries and uses them only where it recommends them.
+        if(BlazeOptimization.RAY_TRACING.on()||BlazeOptimization.GPU_PRESET.on())VulkanContext.requestRayQuery();
         streamline=BlazeStreamline.open();
         if(streamline==null)return VulkanContext.openWindowed(window);
         try{VulkanContext opened=VulkanContext.openWindowed(window);streamline.restoreLoader();return opened;}
