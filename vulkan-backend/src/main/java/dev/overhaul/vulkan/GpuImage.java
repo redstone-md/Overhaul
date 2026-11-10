@@ -32,6 +32,10 @@ public final class GpuImage implements AutoCloseable {
     public int depth(){return depth;}
     public boolean volume(){return volume;}
     public int mipLevels(){return mips;}public int layers(){return layers;}public int usage(){return usage;}
+    /** The VkImageCreateFlags the image was made with. */
+    public int createFlags(){return flags;}
+    /** The VkDeviceMemory backing the image, for native libraries that need it. */
+    public long deviceMemory(){requireOpen();return allocator.deviceMemory(allocation);}
     /** Samples per pixel, a {@code VK_SAMPLE_COUNT_*_BIT} value; 1 for every image that is not a multisampled attachment. */
     public int samples(){return samples;}
     public int layout(int mip,int layer){requireOpen();checkSubresource(mip,layer);return layouts[layer*mips+mip];}

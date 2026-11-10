@@ -153,6 +153,15 @@ public final class GpuAllocator implements AutoCloseable {
     }
 
     void unmap(long allocation) { vmaUnmapMemory(handle, allocation); }
+
+    /** The device memory block an allocation lives in, for native libraries that describe images by memory. */
+    long deviceMemory(long allocation) {
+        try (MemoryStack stack = VulkanStack.push()) {
+            VmaAllocationInfo info = VmaAllocationInfo.malloc(stack);
+            vmaGetAllocationInfo(handle, allocation, info);
+            return info.deviceMemory();
+        }
+    }
     // VMA expands unaligned ranges to nonCoherentAtomSize; offsets stay local to this allocation.
     void flush(long allocation, long offset, long size) { vmaFlushAllocation(handle, allocation, offset, size); }
     void invalidate(long allocation, long size) { invalidate(allocation, 0, size); }

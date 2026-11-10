@@ -21,6 +21,7 @@ import static dev.overhaul.vulkan.VulkanException.check;
 
 /** One graphics queue, optionally paired with a presentation surface. Thread confined. */
 public final class VulkanContext implements AutoCloseable {
+    private static volatile int requestedApiVersion = VK_API_VERSION_1_1;
     private final Thread owner = Thread.currentThread();
     private VkInstance instance;
     private VkPhysicalDevice physicalDevice;
@@ -74,6 +75,22 @@ public final class VulkanContext implements AutoCloseable {
         return open(null, List.copyOf(Objects.requireNonNull(requiredInstanceExtensions, "required extensions")), validation);
     }
 
+    /**
+     * Asks contexts opened from now on for a later instance API version, for native libraries that need one. A loader
+     * that offers less keeps what it offers; Vulkan 1.1 stays the default.
+     */
+    public static void requestApiVersion(int version) {
+        if (Integer.compareUnsigned(version, VK_API_VERSION_1_1) > 0) requestedApiVersion = version;
+    }
+
+    private static int instanceApiVersion(MemoryStack stack) {
+        int requested = requestedApiVersion;
+        if (requested == VK_API_VERSION_1_1) return requested;
+        IntBuffer offered = stack.ints(VK_API_VERSION_1_1);
+        if (org.lwjgl.vulkan.VK11.vkEnumerateInstanceVersion(offered) != VK_SUCCESS) return VK_API_VERSION_1_1;
+        return Integer.compareUnsigned(offered.get(0), requested) < 0 ? offered.get(0) : requested;
+    }
+
     private static VulkanContext open(SurfaceProvider provider, List<String> requiredExtensions, boolean validate) {
         VulkanContext context = new VulkanContext();
         try {
@@ -89,7 +106,7 @@ public final class VulkanContext implements AutoCloseable {
         try (MemoryStack stack = VulkanStack.push()) {
             VkApplicationInfo app = VkApplicationInfo.calloc(stack).sType$Default()
                 .pApplicationName(stack.UTF8("overhaul")).applicationVersion(1)
-                .pEngineName(stack.UTF8("overhaul")).engineVersion(1).apiVersion(VK_API_VERSION_1_1);
+                .pEngineName(stack.UTF8("overhaul")).engineVersion(1).apiVersion(instanceApiVersion(stack));
             surfaceProvider = provider;
             presentationEnabled = provider != null || requiredExtensions != null;
             LinkedHashSet<String> names = new LinkedHashSet<>();
