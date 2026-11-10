@@ -15,6 +15,11 @@ public final class ShadercCompiler implements AutoCloseable {
     private long options;
 
     public ShadercCompiler() {
+        this(false);
+    }
+
+    /** @param vulkan12 targets Vulkan 1.2 and SPIR-V 1.4, as ray query shaders need, instead of Vulkan 1.1 */
+    public ShadercCompiler(boolean vulkan12) {
         compiler = shaderc_compiler_initialize();
         if (compiler == 0) throw new IllegalStateException("shaderc compiler initialization failed");
         options = shaderc_compile_options_initialize();
@@ -23,7 +28,7 @@ public final class ShadercCompiler implements AutoCloseable {
             compiler = 0;
             throw new IllegalStateException("shaderc options initialization failed");
         }
-        shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
+        shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, vulkan12 ? shaderc_env_version_vulkan_1_2 : shaderc_env_version_vulkan_1_1);
         shaderc_compile_options_set_optimization_level(options, shaderc_optimization_level_performance);
         shaderc_compile_options_set_warnings_as_errors(options);
     }
