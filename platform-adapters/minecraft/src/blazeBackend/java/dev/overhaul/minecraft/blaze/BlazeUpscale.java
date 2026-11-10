@@ -29,6 +29,9 @@ public final class BlazeUpscale {
     private BlazeFsr2Motion motion;
     private BlazeFsr2 fsr;
     private BlazeFsr2Motion.Binding binding;
+    private BlazeDlss dlss;
+    private int[] dlssSize;
+    private final int[] dlssDisplay = new int[2];
     private TextureTarget scaled;
     private RenderTarget real;
     private Object level;
@@ -45,7 +48,7 @@ public final class BlazeUpscale {
     /** @return the smaller target the world draws into this frame, or null to draw it as usual */
     public RenderTarget begin(Minecraft client) {
         active = captured = drawn = false;
-        if (!BlazeOptimization.FSR2.on() || failed) return null;
+        if (!BlazeOptimization.FSR2.on() && !BlazeOptimization.DLSS.on() || failed) return null;
         BlazeRenderer renderer = BlazeFrontend.current();
         if (renderer == null || client.level == null) return null;
         if (renderer != owner) adopt(renderer);
@@ -55,8 +58,17 @@ public final class BlazeUpscale {
         }
         RenderTarget main = client.getMainRenderTarget();
         int displayWidth = main.width, displayHeight = main.height;
-        int renderWidth = Math.max(MINIMUM, Math.round(displayWidth / RATIO)), renderHeight = Math.max(MINIMUM, Math.round(displayHeight / RATIO));
-        if (renderWidth >= displayWidth || renderHeight >= displayHeight) return null;
+        if (dlss == null && !BlazeOptimization.FSR2.on()) return null;
+        if (dlss != null && (dlssSize == null || dlssDisplay[0] != displayWidth || dlssDisplay[1] != displayHeight)) {
+            dlssSize = dlss.renderSize(displayWidth, displayHeight);
+            dlssDisplay[0] = displayWidth;
+            dlssDisplay[1] = displayHeight;
+        }
+        int[] size = dlss != null ? dlssSize : null;
+        int renderWidth = size != null ? size[0] : Math.max(MINIMUM, Math.round(displayWidth / RATIO));
+        int renderHeight = size != null ? size[1] : Math.max(MINIMUM, Math.round(displayHeight / RATIO));
+        boolean nativeSize = size != null && dlss.nativeResolution();
+        if (renderWidth > displayWidth || renderHeight > displayHeight || !nativeSize && (renderWidth == displayWidth || renderHeight == displayHeight)) return null;
         try {
             prepare(renderer, renderWidth, renderHeight, displayWidth, displayHeight);
         } catch (RuntimeException | Error failure) {
@@ -144,7 +156,14 @@ public final class BlazeUpscale {
         lastNanos = now;
         float verticalFov = (float) (2 * Math.atan(1 / projection.m11()));
         GpuImage color = owner.target(scaled.frameBufferId).color();
-        if (!fsr.dispatch(color, new BlazeFsr2.Frame(verticalFov, near, far, seconds, reset, SHARPNESS))) return false;
+        if (dlss != null) {
+            fsr.takeColor(color);
+            float aspect = projection.m11() / projection.m00();
+            Matrix4f toPrevious = reset ? new Matrix4f() : new Matrix4f(currentToPrevious);
+            var lens = new BlazeStreamlineStructs.Camera(new Matrix4f().setPerspective(verticalFov, aspect, near, far, true), toPrevious,
+                    fsr.constants().jitterX(), fsr.constants().jitterY(), near, far, verticalFov, aspect, reset);
+            if (!dlss.evaluate(owner, fsr.resources(), lens)) return false;
+        } else if (!fsr.dispatch(color, new BlazeFsr2.Frame(verticalFov, near, far, seconds, reset, SHARPNESS))) return false;
         GpuImage output = fsr.resources().image(BlazeFsr2Resources.Image.OUTPUT);
         owner.blitImage(output, new int[]{0, 0, output.width(0), output.height(0)}, destination, new int[]{0, 0, output.width(0), output.height(0)}, LINEAR);
         previousView.set(view);
@@ -167,7 +186,8 @@ public final class BlazeUpscale {
             dropContext(true);
             fsr = new BlazeFsr2(renderer, pipelines, renderWidth, renderHeight, displayWidth, displayHeight);
             history = false;
-            LoggerFactory.getLogger(BlazeUpscale.class).info("FSR2 upscales {}x{} to {}x{}, sharpness {}", renderWidth, renderHeight, displayWidth, displayHeight, SHARPNESS);
+            if (dlss != null) LoggerFactory.getLogger(BlazeUpscale.class).info("DLSS upscales {}x{} to {}x{}", renderWidth, renderHeight, displayWidth, displayHeight);
+            else LoggerFactory.getLogger(BlazeUpscale.class).info("FSR2 upscales {}x{} to {}x{}, sharpness {}", renderWidth, renderHeight, displayWidth, displayHeight, SHARPNESS);
         }
         if (scaled == null) scaled = new TextureTarget(renderWidth, renderHeight, true, Minecraft.ON_OSX);
         else if (scaled.width != renderWidth || scaled.height != renderHeight) scaled.resize(renderWidth, renderHeight, Minecraft.ON_OSX);
@@ -183,6 +203,9 @@ public final class BlazeUpscale {
         scaled = null;
         history = false;
         failed = false;
+        dlssSize = null;
+        dlss = BlazeOptimization.DLSS.on() ? BlazeDlss.create(renderer.streamline(), renderer.context()) : null;
+        if (dlss != null) renderer.closeWith(dlss);
         renderer.closeWith(() -> {
             if (owner == renderer) dropContext(false);
         });
@@ -204,7 +227,7 @@ public final class BlazeUpscale {
     private void fail(Throwable failure) {
         failed = true;
         history = false;
-        LoggerFactory.getLogger(BlazeUpscale.class).error("FSR2 stopped; the world draws at full resolution from now on", failure);
+        LoggerFactory.getLogger(BlazeUpscale.class).error("{} stopped; the world draws at full resolution from now on", dlss != null ? "DLSS" : "FSR2", failure);
     }
 
     private static float ratio(String quality) {

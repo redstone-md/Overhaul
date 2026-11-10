@@ -48,7 +48,6 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("AlexsMobsEffectPoses121Mixin", BlazeOptimization.EFFECT_POSES),
             Map.entry("VillagerLayerTextures121Mixin", BlazeOptimization.VILLAGER_TEXTURES),
             Map.entry("DhClouds121Mixin", BlazeOptimization.DH_CLOUDS),
-            Map.entry("GameRendererUpscale121Mixin", BlazeOptimization.FSR2),
             Map.entry("DhRenderList121Mixin", BlazeOptimization.DH_RENDER_LIST),
             Map.entry("DhVertexBufferBlazeMixin", BlazeOptimization.DH_DEVICE_CACHE),
             Map.entry("ViewAreaColumns121Mixin", BlazeOptimization.SECTION_GRID),
@@ -126,6 +125,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("SectionCompilerBlockIds121Mixin", BlazeOptimization.PACK_BLOCK_IDS));
     /** Mixins that serve several optimisations, applied while any of them is on. */
     private static final Map<String, List<BlazeOptimization>> SHARED = Map.of(
+            "GameRendererUpscale121Mixin", List.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS),
             "EntitySectionManagerClasses121Mixin", List.of(BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS,
                     BlazeOptimization.WITHER_GLOWS, BlazeOptimization.VEIL_SKELETONS, BlazeOptimization.MOD_ENTITY_WALKS),
             "ServerEntityClasses121Mixin", List.of(BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.COLLISION_SCANS),

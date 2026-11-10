@@ -89,14 +89,19 @@ final class BlazeFsr2 implements AutoCloseable {
             constants.packSpd(bytes, BlazeFsr2Constants.SPD_OFFSET);
             BlazeFsr2Constants.packRcas(bytes, BlazeFsr2Constants.RCAS_OFFSET, frame.sharpness());
         }
-        GpuImage input = resources.image(BlazeFsr2Resources.Image.INPUT_COLOR);
-        if (sceneColor.format() == input.format()) owner.copyImage(sceneColor, ImageRegion.whole(sceneColor, 0, 0), input, ImageRegion.whole(input, 0, 0));
-        else owner.blitImage(sceneColor, new int[]{0, 0, sceneColor.width(0), sceneColor.height(0)}, input, new int[]{0, 0, input.width(0), input.height(0)}, NEAREST);
+        takeColor(sceneColor);
         if (reset) resources.reset(owner, odd);
         owner.enqueue(new Passes(frame.sharpness() > 0 ? SHARPENED : PLAIN, odd, slot));
         owner.retire(() -> free.add(slot));
         dispatches++;
         return true;
+    }
+
+    /** Queues the copy of the game's jittered colour into the input image, which DLSS reads as well. */
+    void takeColor(GpuImage sceneColor) {
+        GpuImage input = resources.image(BlazeFsr2Resources.Image.INPUT_COLOR);
+        if (sceneColor.format() == input.format()) owner.copyImage(sceneColor, ImageRegion.whole(sceneColor, 0, 0), input, ImageRegion.whole(input, 0, 0));
+        else owner.blitImage(sceneColor, new int[]{0, 0, sceneColor.width(0), sceneColor.height(0)}, input, new int[]{0, 0, input.width(0), input.height(0)}, NEAREST);
     }
 
     private void createSets() {
