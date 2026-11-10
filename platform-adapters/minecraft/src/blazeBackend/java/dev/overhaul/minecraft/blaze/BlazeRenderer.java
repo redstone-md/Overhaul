@@ -113,6 +113,7 @@ public final class BlazeRenderer implements AutoCloseable {
 
     /** Streamline comes up before the instance so its interposer sees it; a context it cannot open is retried without it. */
     private VulkanContext openContext(long window){
+        if(BlazeOptimization.RAY_TRACING.on())VulkanContext.requestRayQuery();
         streamline=BlazeStreamline.open();
         if(streamline==null)return VulkanContext.openWindowed(window);
         try{VulkanContext opened=VulkanContext.openWindowed(window);streamline.restoreLoader();return opened;}
