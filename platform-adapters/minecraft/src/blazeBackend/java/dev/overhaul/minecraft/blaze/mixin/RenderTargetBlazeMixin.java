@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeTarget;
+import dev.overhaul.minecraft.blaze.BlazeUpscale;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -48,6 +49,10 @@ public abstract class RenderTargetBlazeMixin {
         // Vanilla createBuffers forces nearest on each new allocation, including resize.
         filterMode=-1;self.setFilterMode(9728);self.clear(checkError);self.unbindRead();c.cancel();
     }
+
+    /** Code that binds the main target back without its viewport still expects one of the main target's size. */
+    @Inject(method="bindWrite(Z)V",at=@At("RETURN"),require=1)
+    private void overhaul$bound(boolean setViewport,CallbackInfo c){if(!setViewport)BlazeUpscale.get().bound((RenderTarget)(Object)this);}
 
     @Inject(method="destroyBuffers()V",at=@At("HEAD"),cancellable=true,require=1)
     private void overhaul$destroy(CallbackInfo c){

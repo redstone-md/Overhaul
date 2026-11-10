@@ -2,6 +2,7 @@ package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.platform.GlStateManager;
 import dev.overhaul.vulkan.GpuImage;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
@@ -111,6 +112,14 @@ public final class BlazeUpscale {
         this.projection.translation(-clipX, -clipY, 0).mul(projection);
         camera.set(x, y, z);
         captured = true;
+    }
+
+    /**
+     * Mods with their own targets at window size bind the main target back without setting the viewport, as is safe when
+     * both share a size. The scaled target is smaller, so its viewport is put back whenever it is bound that way.
+     */
+    public void bound(RenderTarget target) {
+        if (active && target == scaled) GlStateManager._viewport(0, 0, scaled.viewWidth, scaled.viewHeight);
     }
 
     /** Copies the world's depth aside, before the game clears depth to draw the hand. */
