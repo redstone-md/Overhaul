@@ -36,7 +36,7 @@ public final class OverhaulSettingsScreen extends BlazeScreenBase {
         this.parent = parent;
         Minecraft game = Minecraft.getInstance();
         this.quality = new QualityPage(game, this::refresh, finished -> BenchmarkWorld.start(game, this, finished));
-        this.pages = List.of(quality, new VideoPage(game, this::refresh), new OptimizationPage(this::refresh), new ShaderPackPage(game, this::refresh));
+        this.pages = List.of(quality, new VideoPage(game, this::refresh), new OptimizationPage(this::refresh), new OverlayPage(this::refresh), new ShaderPackPage(game, this::refresh));
     }
 
     /** Called for every screen the game opens; only video settings on the owned device are replaced. */
