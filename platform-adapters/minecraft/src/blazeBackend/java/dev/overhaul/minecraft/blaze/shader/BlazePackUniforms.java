@@ -59,7 +59,7 @@ final class BlazePackUniforms implements PackGraphRuntime.Uniforms, PackCustomUn
         }
         // The game's projection is GL clip space here, so near comes back from its depth terms.
         near = projection[14] / (projection[10] - 1);
-        if (!Float.isFinite(near) || near <= 0) throw new UnsupportedShaderException("Unsupported shader-pack camera near plane");
+        if (!Float.isFinite(near) || near <= 0) throw new UnsupportedShaderException("Unsupported shader-pack camera near plane from projection " + java.util.Arrays.toString(projection));
         far = capture.minecraft().gameRenderer.getRenderDistance();
         var position = capture.camera().getPosition();
         x = position.x;

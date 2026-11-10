@@ -101,9 +101,12 @@ public final class BlazeUpscale {
         return shown[0] + "x" + shown[1] + " > " + shown[2] + "x" + shown[3] + (shownDlss ? " DLSS" : " FSR2");
     }
 
-    /** Offsets a projection by this frame's jitter while the world draws scaled. */
+    /**
+     * Offsets a projection by this frame's jitter while the world draws scaled. A zero field of view, as some frames
+     * have while a world joins, scales by infinity, which the offset would turn into NaN, so that one stays as it is.
+     */
     public Matrix4f jitter(Matrix4f projection) {
-        return active ? new Matrix4f().translation(clipX, clipY, 0).mul(projection) : projection;
+        return active && projection.isFinite() ? new Matrix4f().translation(clipX, clipY, 0).mul(projection) : projection;
     }
 
     /** Keeps the matrices the world is drawn with, the projection without its jitter. */
