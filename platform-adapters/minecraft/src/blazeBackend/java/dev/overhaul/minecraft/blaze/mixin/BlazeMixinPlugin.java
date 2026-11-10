@@ -108,6 +108,7 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("DhStringPool121Mixin", BlazeOptimization.DH_STRING_POOL),
             Map.entry("DhUpdateQueueIdle121Mixin", BlazeOptimization.DH_UPDATE_QUEUE_IDLE),
             Map.entry("DhRegenQueueIdle121Mixin", BlazeOptimization.DH_REGEN_QUEUE_IDLE),
+            Map.entry("DhTintPairCache121Mixin", BlazeOptimization.DH_TINT_CACHE),
             Map.entry("SparkBackgroundSampler121Mixin", BlazeOptimization.SPARK_BACKGROUND),
             Map.entry("ServerLevelNoiseBiomes121Mixin", BlazeOptimization.NOISE_BIOMES),
             Map.entry("FlowingFluidSourceEvent121Mixin", BlazeOptimization.FLUID_SOURCE_EVENT),

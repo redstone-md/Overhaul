@@ -125,6 +125,7 @@ public enum BlazeOptimization {
     DH_STRING_POOL("dhStringPool", "Distant Horizons hands back the pooled block or biome name a thread was last given for the same characters before it walks its pool's trie one character at a time"),
     DH_UPDATE_QUEUE_IDLE("dhUpdateQueueIdle", "Distant Horizons' chunk update thread sleeps a few milliseconds after a pass that neither pre-updated nor dispatched a chunk, instead of spinning a core while the closest chunk waits out its debounce"),
     DH_REGEN_QUEUE_IDLE("dhRegenQueueIdle", "Distant Horizons' regeneration thread stops re-querying its database once a pass finds only positions that are already generating, and waits for the next propagator tick instead of spinning a core"),
+    DH_TINT_CACHE("dhTintCache", "Distant Horizons' LOD builders remember the biome tint they last resolved for a block, instead of walking three hash maps again for every neighbour of a blended column"),
     SPARK_BACKGROUND("sparkBackground", "spark's background profiler is stopped where it would sample with its Java engine, which halts every thread at a safepoint a hundred times a second"),
     NOISE_BIOMES("noiseBiomes", "World generation hands back the noise biome a thread last sampled at the same quart of the same level before it samples the climate noise again"),
     SECTION_SLOT_KEEP("sectionSlotKeep", "A section scan keeps each table slot that already holds the same section, reading its mesh again only after that mesh changed; needs sectionDraws"),
