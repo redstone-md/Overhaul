@@ -59,7 +59,11 @@ tasks.named('processResources') {
     if (streamlineSdk != null) {
         inputs.property('streamlineSdk', streamlineSdk)
         from(file("${streamlineSdk}/bin/x64")) {
-            include 'sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll'
+            include 'sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll', 'nvngx_dlss.license.txt'
+            into 'overhaul/streamline'
+        }
+        from(file("${streamlineSdk}/license.txt")) {
+            rename { 'streamline.license.txt' }
             into 'overhaul/streamline'
         }
     }
