@@ -37,6 +37,8 @@ public final class VulkanContext implements AutoCloseable {
     private int queueFamily;
     private int queueFlags;
     private String deviceName;
+    private int vendorId,deviceType;
+    private long deviceLocalBytes;
     private boolean multiDrawIndirect;
     private boolean indirectFirstInstance;
     private boolean vertexStores,fragmentStores,storageFormats,geometryShaders,rayQuery;
@@ -229,6 +231,9 @@ public final class VulkanContext implements AutoCloseable {
                     queueFamily = j;
                     queueFlags = families.get(j).queueFlags();
                     deviceName = properties.deviceNameString();
+                    vendorId = properties.vendorID();
+                    deviceType = properties.deviceType();
+                    deviceLocalBytes = largestDeviceHeap(candidate, stack);
                     // Vulkan exposes uint32_t; Java draw counts and RenderPearl limits are signed ints.
                     maxIndirectDrawCount = (int)Math.min(Integer.MAX_VALUE,
                             Integer.toUnsignedLong(properties.limits().maxDrawIndirectCount()));
@@ -237,6 +242,16 @@ public final class VulkanContext implements AutoCloseable {
             }
         }
         if (physicalDevice == null) throw new IllegalStateException("No Vulkan 1.1 graphics device supports this target");
+    }
+
+    private static long largestDeviceHeap(VkPhysicalDevice candidate, MemoryStack stack) {
+        VkPhysicalDeviceMemoryProperties memory = VkPhysicalDeviceMemoryProperties.malloc(stack);
+        vkGetPhysicalDeviceMemoryProperties(candidate, memory);
+        long largest = 0;
+        for (int heap = 0; heap < memory.memoryHeapCount(); heap++) {
+            if ((memory.memoryHeaps(heap).flags() & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) largest = Math.max(largest, memory.memoryHeaps(heap).size());
+        }
+        return largest;
     }
 
     /** Attaches exactly one surface without recreating the device or taking ownership of its window. */
@@ -275,6 +290,12 @@ public final class VulkanContext implements AutoCloseable {
     public boolean supportsCompute() { requireOwner(); return (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0; }
     public long surface() { requireOwner(); return surface; }
     public String deviceName() { requireOwner(); return deviceName; }
+    /** The PCI vendor id the driver reports, such as 0x10DE for NVIDIA. */
+    public int vendorId() { requireOwner(); return vendorId; }
+    /** A VK_PHYSICAL_DEVICE_TYPE_* value. */
+    public int deviceType() { requireOwner(); return deviceType; }
+    /** Size of the largest device local memory heap; on an integrated GPU it is shared system memory. */
+    public long deviceLocalBytes() { requireOwner(); return deviceLocalBytes; }
     public boolean multiDrawIndirect() { requireOwner(); return multiDrawIndirect; }
     public boolean indirectFirstInstance() { requireOwner(); return indirectFirstInstance; }
     /** Vertex and geometry stages may write storage images, as shader-pack voxelization does. */
