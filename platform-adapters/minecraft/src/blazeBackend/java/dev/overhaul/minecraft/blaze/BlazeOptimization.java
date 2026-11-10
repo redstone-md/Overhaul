@@ -140,7 +140,8 @@ public enum BlazeOptimization {
     PARTICLE_ATLAS_WRITE("particleAtlasWrite", "Inventory Particles copies its atlas cache rows at once and encodes and writes the PNG off the render thread"),
     GPU_OCCLUSION("gpuOcclusion", "Terrain sections tested against the newest terrain depth on the GPU right before they draw, instead of one CPU test per section against depth read back frames earlier; needs sectionOcclusion; off by default, it measured no faster", false),
     DH_QUIET_BUFFERS("dhQuietBuffers", "Distant Horizons' per-buffer render event copies the frame's matrices once per pass instead of for every LOD drawn, and is skipped while no API listener is bound to it"),
-    FSR2("fsr2", "The world draws at a lower resolution with a jittered projection and AMD FidelityFX Super Resolution 2 upscales it to the window; fsr2Quality picks quality, balanced, performance or ultra and fsr2Sharpness 0 to 1; off by default, it changes the image", false);
+    FSR2("fsr2", "The world draws at a lower resolution with a jittered projection and AMD FidelityFX Super Resolution 2 upscales it to the window; fsr2Quality picks quality, balanced, performance or ultra and fsr2Sharpness 0 to 1; off by default, it changes the image", false),
+    DLSS("dlss", "On an NVIDIA RTX card, NVIDIA DLSS Super Resolution through Streamline upscales the world in place of FSR2, from the Streamline and DLSS libraries in overhaul/streamline; dlssQuality picks quality, balanced, performance, ultra or dlaa; any card or driver without it keeps FSR2 or full resolution; off by default, it changes the image", false);
 
     private final String key, description;
     private final boolean fallback, enabled;

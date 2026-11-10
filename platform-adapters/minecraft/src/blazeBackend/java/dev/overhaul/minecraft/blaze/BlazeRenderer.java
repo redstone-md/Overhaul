@@ -33,6 +33,7 @@ public final class BlazeRenderer implements AutoCloseable {
     private final Set<BlazeBufferPool.Slice> glSharedBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private final VulkanContext context;
     private final long windowHandle;
+    private BlazeStreamline streamline;
     private final BlazeDrawState state=new BlazeDrawState();
     private final Set<BlazeMesh> meshes=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GpuBuffer> glDeviceBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
@@ -82,7 +83,7 @@ public final class BlazeRenderer implements AutoCloseable {
     public BlazeRenderer(long glfwNoApiWindow,int width,int height){
         windowHandle=glfwNoApiWindow;
         dev.overhaul.minecraft.hud.HudCacheTarget.enableWorldVisibility();
-        context=VulkanContext.openWindowed(glfwNoApiWindow);
+        context=openContext(glfwNoApiWindow);
         GpuImage.mergeBarriers(BlazeOptimization.MERGED_BARRIERS.on());
         try{
             allocator=new GpuAllocator(context);commands=new ImmediateCommands(context);
@@ -110,7 +111,20 @@ public final class BlazeRenderer implements AutoCloseable {
         }catch(RuntimeException|Error failure){try{close();}catch(RuntimeException|Error cleanup){failure.addSuppressed(cleanup);}throw failure;}
     }
 
+    /** Streamline comes up before the instance so its interposer sees it; a context it cannot open is retried without it. */
+    private VulkanContext openContext(long window){
+        streamline=BlazeStreamline.open();
+        if(streamline==null)return VulkanContext.openWindowed(window);
+        try{VulkanContext opened=VulkanContext.openWindowed(window);streamline.restoreLoader();return opened;}
+        catch(RuntimeException|Error failure){
+            org.slf4j.LoggerFactory.getLogger(BlazeRenderer.class).warn("DLSS unavailable: Vulkan did not start through Streamline",failure);
+            streamline.abandon();streamline=null;
+            return VulkanContext.openWindowed(window);
+        }
+    }
     public VulkanContext context(){requireOpen();return context;}
+    /** @return Streamline when it came up with this device, or null */
+    BlazeStreamline streamline(){return streamline;}
     public GpuAllocator allocator(){requireOpen();return allocator;}
     /** Explicit immediate callers are ordering boundaries; ordinary draws/uploads use the queued lane. */
     public ImmediateCommands commands(){requireOpen();queue.flush();return commands;}
@@ -407,6 +421,7 @@ public final class BlazeRenderer implements AutoCloseable {
         if(queue!=null)failure=release(queue::drain,failure);
         failure=release(context::waitIdle,failure);
         for(AutoCloseable resource:closeWith)failure=release(()->{try{resource.close();}catch(Exception problem){throw new IllegalStateException(problem);}},failure);closeWith.clear();
+        if(streamline!=null){failure=release(streamline::close,failure);streamline=null;}
         for(BlazeMesh mesh:new ArrayList<>(meshes))failure=release(mesh::close,failure);
         if(terrain!=null)failure=release(terrain::close,failure);
         if(dh!=null)failure=release(dh::close,failure);

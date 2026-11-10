@@ -54,6 +54,15 @@ tasks.named('processResources') {
     filesMatching('overhaul.blaze.mixins.json') {
         expand(compatibility: "JAVA_${target.java}")
     }
+    // NVIDIA's Streamline and DLSS libraries ship only when a local SDK is named; without them DLSS stays off.
+    def streamlineSdk = providers.gradleProperty('streamlineSdk').orNull
+    if (streamlineSdk != null) {
+        inputs.property('streamlineSdk', streamlineSdk)
+        from(file("${streamlineSdk}/bin/x64")) {
+            include 'sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll'
+            into 'overhaul/streamline'
+        }
+    }
 }
 apply from: 'gradle/blaze-runtime.gradle'
 // A pack profile owns its game directory and must already disable the FML early window.
