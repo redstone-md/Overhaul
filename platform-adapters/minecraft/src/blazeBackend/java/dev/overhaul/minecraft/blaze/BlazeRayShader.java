@@ -149,7 +149,7 @@ final class BlazeRayShader {
                 return mix(color, sky.rgb, clamp(distance / FAR, 0.0, 1.0));
             }
 
-            // Whether the camera ray first meets upward facing translucent geometry at the depth's distance.
+            // Whether the camera ray first meets an upward facing water surface at the depth's distance.
             bool water(vec3 position, float distance) {
                 vec3 direction = position / distance;
                 rayQueryEXT query;
@@ -159,7 +159,11 @@ final class BlazeRayShader {
                 if (abs(rayQueryGetIntersectionTEXT(query, true) - distance) > 0.3 + distance * 0.004) return false;
                 Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
                         rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
-                return abs(surface.normal.y) > 0.9 && direction.y < 0.0;
+                // Water takes its biome's tint; glass, ice and slime keep a grey vertex colour, darkened only by baked
+                // shading, and are not mirrors.
+                vec3 tint = surface.color.rgb;
+                bool tinted = max(tint.r, max(tint.g, tint.b)) - min(tint.r, min(tint.g, tint.b)) > 0.06;
+                return tinted && abs(surface.normal.y) > 0.9 && direction.y < 0.0;
             }
 
             void main() {
