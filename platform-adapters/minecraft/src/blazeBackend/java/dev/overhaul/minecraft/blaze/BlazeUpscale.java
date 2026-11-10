@@ -55,7 +55,7 @@ public final class BlazeUpscale {
         BlazeRenderer renderer = BlazeFrontend.current();
         if (renderer == null || client.level == null) return null;
         if (renderer != owner) adopt(renderer);
-        if (renderer.packScene() != null || Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) {
+        if (renderer.packScene() != null && !BlazeOptimization.PACK_UPSCALE.on() || Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) {
             history = false;
             return null;
         }
