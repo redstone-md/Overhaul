@@ -37,7 +37,8 @@ public final class BlazeUpscale {
     private Object level;
     private long lastNanos;
     private float clipX, clipY;
-    private boolean active, captured, drawn, history, failed;
+    private final int[] shown = new int[4];
+    private boolean active, captured, drawn, history, failed, shownDlss, upscaling;
 
     private BlazeUpscale() {}
 
@@ -47,7 +48,7 @@ public final class BlazeUpscale {
 
     /** @return the smaller target the world draws into this frame, or null to draw it as usual */
     public RenderTarget begin(Minecraft client) {
-        active = captured = drawn = false;
+        active = captured = drawn = upscaling = false;
         if (!BlazeOptimization.FSR2.on() && !BlazeOptimization.DLSS.on() || failed) return null;
         BlazeRenderer renderer = BlazeFrontend.current();
         if (renderer == null || client.level == null) return null;
@@ -83,8 +84,19 @@ public final class BlazeUpscale {
         clipX = fsr.constants().clipJitterX();
         clipY = fsr.constants().clipJitterY();
         real = main;
-        active = true;
+        active = upscaling = true;
+        shownDlss = dlss != null;
+        shown[0] = renderWidth;
+        shown[1] = renderHeight;
+        shown[2] = displayWidth;
+        shown[3] = displayHeight;
         return scaled;
+    }
+
+    /** @return the sizes and upscaler of the frame being drawn, or null when it draws at full size */
+    public String describe() {
+        if (!upscaling) return null;
+        return shown[0] + "x" + shown[1] + " > " + shown[2] + "x" + shown[3] + (shownDlss ? " DLSS" : " FSR2");
     }
 
     /** Offsets a projection by this frame's jitter while the world draws scaled. */
