@@ -14,6 +14,8 @@ enum QualityPreset {
             4, 5, GraphicsStatus.FAST, CloudStatus.OFF, false, ParticleStatus.MINIMAL, 0, false, 50, 0),
     LOW("Low", "Entry graphics cards. Close view, flat leaves, fewer particles",
             8, 6, GraphicsStatus.FAST, CloudStatus.OFF, true, ParticleStatus.DECREASED, 1, false, 75, 2),
+    OPTIMIZED("Optimized", "The usual choice for most players. Fancy leaves and smooth lighting at a moderate distance; clouds, entity shadows and extra particles that cost frames and add little are off",
+            12, 6, GraphicsStatus.FANCY, CloudStatus.OFF, true, ParticleStatus.DECREASED, 2, false, 100, 4),
     MEDIUM("Medium", "Mid-range cards. Fancy leaves and clouds at a moderate distance",
             12, 8, GraphicsStatus.FANCY, CloudStatus.FAST, true, ParticleStatus.ALL, 2, true, 100, 4),
     HIGH("High", "Recent cards. Long view, fancy clouds, wider biome blending",
