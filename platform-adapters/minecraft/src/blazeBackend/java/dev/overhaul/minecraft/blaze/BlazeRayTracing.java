@@ -25,8 +25,8 @@ public final class BlazeRayTracing {
     private BlazeRayPass pass;
     private Object level;
     private int frame;
-    /** How far rays reach, in blocks; read when a renderer is adopted, once its card's class is known. */
-    private int distance = 64;
+    /** How far rays reach, in blocks; read again whenever the settings are saved. */
+    private int distance = 64, revision = -1;
     private boolean failed, logged, packNoted;
 
     private BlazeRayTracing() {}
@@ -37,7 +37,7 @@ public final class BlazeRayTracing {
 
     /** Lights the world just drawn into the main target, with the camera matrices it was drawn with. */
     public void worldDrawn(Minecraft client, ViewArea area, Camera camera, float partialTick, Matrix4f view, Matrix4f projection) {
-        if (!BlazeOptimization.RAY_TRACING.on() || failed || area == null) return;
+        if (!BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
         int flags = (BlazeOptimization.RT_SHADOWS.on() ? BlazeRayShader.SHADOWS : 0) | (BlazeOptimization.RT_AO.on() ? BlazeRayShader.AMBIENT_OCCLUSION : 0)
                 | (BlazeOptimization.RT_REFLECTIONS.on() ? BlazeRayShader.REFLECTIONS : 0);
         ClientLevel world = client.level;
@@ -52,6 +52,11 @@ public final class BlazeRayTracing {
         if (Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) return;
         try {
             if (renderer != owner) adopt(renderer);
+            if (revision != BlazeOptimization.revision()) {
+                revision = BlazeOptimization.revision();
+                distance = distance(BlazeOptimization.value("rtDistance", "64"));
+                failed = false;
+            }
             if (world != level) {
                 level = world;
                 if (scene != null) owner.retire(scene);
@@ -95,7 +100,7 @@ public final class BlazeRayTracing {
     /** A new renderer owns none of the old one's objects; they close with the renderer that made them. */
     private void adopt(BlazeRenderer renderer) {
         owner = renderer;
-        distance = distance(BlazeOptimization.value("rtDistance", "64"));
+        revision = -1;
         scene = null;
         pass = null;
         level = null;

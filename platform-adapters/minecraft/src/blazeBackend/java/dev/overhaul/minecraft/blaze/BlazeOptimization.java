@@ -7,7 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Every optimisation that can be turned off to measure what it gives. Read once, before mixins apply, from
  * {@code config/overhaul-optimizations.properties}; {@code -Doverhaul.opt.<key>=false} overrides the file. The game must
- * restart for a change to count. Vulkan itself is not listed: the frontend has no OpenGL path to fall back to.
+ * restart for a change to count, but for the {@link #live()} ones. Vulkan itself is not listed: the frontend has no OpenGL path to fall back to.
  */
 public enum BlazeOptimization {
     SECTION_BATCH("sectionBatch", "Terrain layers as one indirect multi-draw per geometry page instead of one draw per section"),
@@ -150,10 +150,15 @@ public enum BlazeOptimization {
     RT_SHADOWS("rtShadows", "Ray traced shadows from the sun and moon; needs rayTracing"),
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
     RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing"),
+    UPSCALE_READY("upscaleReady", "Loads what FSR2, DLSS and ray tracing need at startup, the world pass hook, Streamline on Windows and the device's ray queries, so the upscaling page turns them on and off without a restart; off, they need fsr2, dlss or rayTracing on at launch"),
     GPU_PRESET("gpuPreset", "Picks what the card can afford from its class: FSR2 on GTX 10 and 16, integrated graphics and ray tracing cards, ray traced lighting where the card has ray queries; the quality settings follow the class either way unless set here; off by default, it changes the image", false);
 
     private final String key, description;
-    private final boolean fallback, enabled;
+    /** The value the game started with, which decides what loaded at startup. */
+    private final boolean fallback, launched;
+    /** Final for all but the {@link #live()} options, which the settings screen changes while the game runs. */
+    private volatile boolean enabled;
+    private static volatile int revision;
 
     BlazeOptimization(String key, String description) {
         this(key, description, true);
@@ -165,7 +170,7 @@ public enum BlazeOptimization {
         this.fallback = fallback;
         String value = System.getProperty("overhaul.opt." + key);
         if (value == null) value = Settings.FILE_VALUES.getProperty(key);
-        enabled = read(value, fallback);
+        enabled = launched = read(value, fallback);
         if (!enabled) LoggerFactory.getLogger(BlazeOptimization.class).info("Overhaul optimisation off: {}", key);
     }
 
@@ -180,6 +185,34 @@ public enum BlazeOptimization {
 
     public String description() {
         return description;
+    }
+
+    /** Takes effect as soon as it is saved, with no restart; the upscaler and ray tracing read it every frame. */
+    public boolean live() {
+        return switch (this) {
+            case FSR2, DLSS, PACK_UPSCALE, RAY_TRACING, RT_SHADOWS, RT_AO, RT_REFLECTIONS, GPU_PRESET -> true;
+            default -> false;
+        };
+    }
+
+    /** Whether it was set on when the game started, before any change from the settings screen. */
+    public boolean launched() {
+        return launched;
+    }
+
+    /** Whether the card's class turns this on while {@link #GPU_PRESET} is on. */
+    public boolean recommended() {
+        return BlazeGpuClass.current().recommends(this);
+    }
+
+    /** What the card's class sets a value to when neither a launch argument nor the file does. */
+    public static String recommendedValue(String key, String fallback) {
+        return BlazeGpuClass.current().preset(key, fallback);
+    }
+
+    /** Grows with every save, so whatever caches a setting knows to read it again. */
+    public static int revision() {
+        return revision;
     }
 
     /** A launch argument wins over the file, so the settings screen cannot change this one. */
@@ -205,30 +238,46 @@ public enum BlazeOptimization {
         return trimmed.equalsIgnoreCase("true") || !trimmed.equalsIgnoreCase("false") && fallback;
     }
 
-    /** Rewrites each line in place, so comments and order the player left in the file survive. */
+    /** Rewrites each line in place, so comments and order the player left in the file survive; live options apply at once. */
     public static void save(Map<BlazeOptimization, Boolean> values) {
+        Map<String, String[]> lines = new LinkedHashMap<>();
+        values.forEach((option, value) -> lines.put(option.key, new String[]{value.toString(), option.description}));
+        write(lines);
+        values.forEach((option, value) -> {
+            if (option.live() && !option.launchOverride()) option.enabled = value;
+        });
+        revision++;
+    }
+
+    /** Saves a setting that is not a toggle, such as a quality mode, which {@link #value} returns from now on. */
+    public static void saveValue(String key, String value, String description) {
+        write(Map.of(key, new String[]{value, description}));
+        revision++;
+    }
+
+    /** @param values each key's new value and the comment written above it when the file lacks the key */
+    private static void write(Map<String, String[]> values) {
         Path path = Settings.PATH;
         try {
             List<String> lines = Files.isRegularFile(path) ? new ArrayList<>(Files.readAllLines(path)) : new ArrayList<>();
-            Map<BlazeOptimization, Boolean> missing = new EnumMap<>(values);
+            Map<String, String[]> missing = new LinkedHashMap<>(values);
             for (int index = 0; index < lines.size(); index++) {
                 String line = lines.get(index).trim();
                 int separator = line.indexOf('=');
                 if (line.startsWith("#") || separator < 1) continue;
                 String name = line.substring(0, separator).trim();
-                for (var entry : values.entrySet()) {
-                    if (!entry.getKey().key.equals(name)) continue;
-                    lines.set(index, name + "=" + entry.getValue());
-                    missing.remove(entry.getKey());
-                }
+                String[] value = values.get(name);
+                if (value == null) continue;
+                lines.set(index, name + "=" + value[0]);
+                missing.remove(name);
             }
-            for (var entry : missing.entrySet()) {
-                lines.add("# " + entry.getKey().description);
-                lines.add(entry.getKey().key + "=" + entry.getValue());
-            }
+            missing.forEach((name, value) -> {
+                lines.add("# " + value[1]);
+                lines.add(name + "=" + value[0]);
+            });
             Files.createDirectories(path.toAbsolutePath().getParent());
             Files.write(path, lines);
-            values.forEach((option, value) -> Settings.FILE_VALUES.setProperty(option.key, value.toString()));
+            values.forEach((name, value) -> Settings.FILE_VALUES.setProperty(name, value[0]));
         } catch (IOException failure) {
             LoggerFactory.getLogger(BlazeOptimization.class).warn("Cannot write {}", path, failure);
         }

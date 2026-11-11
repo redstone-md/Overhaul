@@ -114,8 +114,9 @@ public final class BlazeRenderer implements AutoCloseable {
 
     /** Streamline comes up before the instance so its interposer sees it; a context it cannot open is retried without it. */
     private VulkanContext openContext(long window){
-        // The card's class is unknown until the device opens; the preset asks for ray queries and uses them only where it recommends them.
-        if(BlazeOptimization.RAY_TRACING.on()||BlazeOptimization.GPU_PRESET.on())VulkanContext.requestRayQuery();
+        // The card's class is unknown until the device opens; the preset asks for ray queries and uses them only where it recommends them,
+        // and upscaleReady asks so the settings screen can turn ray tracing on later.
+        if(BlazeOptimization.RAY_TRACING.on()||BlazeOptimization.GPU_PRESET.on()||BlazeOptimization.UPSCALE_READY.on())VulkanContext.requestRayQuery();
         streamline=BlazeStreamline.open();
         if(streamline==null)return VulkanContext.openWindowed(window);
         try{VulkanContext opened=VulkanContext.openWindowed(window);streamline.restoreLoader();return opened;}
@@ -128,6 +129,8 @@ public final class BlazeRenderer implements AutoCloseable {
     public VulkanContext context(){requireOpen();return context;}
     /** @return Streamline when it came up with this device, or null */
     BlazeStreamline streamline(){return streamline;}
+    /** Whether Streamline came up at startup, which DLSS needs. */
+    public boolean streamlineLoaded(){return streamline!=null;}
     public GpuAllocator allocator(){requireOpen();return allocator;}
     /** Explicit immediate callers are ordering boundaries; ordinary draws/uploads use the queued lane. */
     public ImmediateCommands commands(){requireOpen();queue.flush();return commands;}

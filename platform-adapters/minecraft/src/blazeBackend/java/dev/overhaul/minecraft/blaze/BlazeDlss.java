@@ -32,7 +32,7 @@ final class BlazeDlss implements AutoCloseable {
 
     private final BlazeStreamline streamline;
     private final long optimalSettings, setOptions;
-    private final int mode;
+    private int mode;
     private final ByteBuffer viewport, options, settings, token;
     private boolean closed, warned;
 
@@ -67,6 +67,11 @@ final class BlazeDlss implements AutoCloseable {
             return null;
         }
         return new BlazeDlss(streamline, optimal, set, mode(BlazeOptimization.value("dlssQuality", "quality")));
+    }
+
+    /** Picks the quality mode from now on; Streamline takes the options with every frame, so nothing is rebuilt. */
+    void quality(String quality) {
+        mode = mode(quality);
     }
 
     boolean nativeResolution() {

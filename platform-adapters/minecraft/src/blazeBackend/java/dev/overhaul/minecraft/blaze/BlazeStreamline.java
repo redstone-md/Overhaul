@@ -54,10 +54,10 @@ final class BlazeStreamline implements AutoCloseable {
     /**
      * Initialises Streamline for DLSS and makes its interposer the Vulkan library. Call before the first instance.
      *
-     * @return null when DLSS is off, the platform is not Windows, the files are missing or Streamline refuses
+     * @return null when DLSS is off and not readied for the settings screen, the platform is not Windows, the files are missing or Streamline refuses
      */
     static BlazeStreamline open() {
-        if (!BlazeOptimization.DLSS.on() || !System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) return null;
+        if (!BlazeOptimization.DLSS.on() && !BlazeOptimization.UPSCALE_READY.on() || !System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) return null;
         Path directory = directory();
         if (directory == null) return null;
         Path interposer = directory.resolve(INTERPOSER);
