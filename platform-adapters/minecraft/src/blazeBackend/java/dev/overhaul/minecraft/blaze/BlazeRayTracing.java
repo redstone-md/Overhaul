@@ -27,7 +27,7 @@ public final class BlazeRayTracing {
     private int frame;
     /** How far rays reach, in blocks; read when a renderer is adopted, once its card's class is known. */
     private int distance = 64;
-    private boolean failed, logged;
+    private boolean failed, logged, packNoted;
 
     private BlazeRayTracing() {}
 
@@ -43,7 +43,13 @@ public final class BlazeRayTracing {
         ClientLevel world = client.level;
         BlazeRenderer renderer = BlazeFrontend.current();
         if (flags == 0 || world == null || renderer == null || !renderer.context().rayQuery()) return;
-        if (renderer.packScene() != null || Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) return;
+        if (renderer.packScene() != null) {
+            if (!packNoted) LoggerFactory.getLogger(BlazeRayTracing.class).info("Ray traced lighting waits while a shader pack lights the world");
+            packNoted = true;
+            return;
+        }
+        packNoted = false;
+        if (Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) return;
         try {
             if (renderer != owner) adopt(renderer);
             if (world != level) {
