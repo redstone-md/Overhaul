@@ -41,6 +41,9 @@ public final class BlazeUpscale {
     private float clipX, clipY;
     private final int[] shown = new int[4];
     private boolean active, captured, drawn, history, failed, shownDlss, upscaling;
+    /** How many world passes are open inside the one that swapped the target, and the frame that one began in. */
+    private int depth;
+    private long beganFrame;
 
     private BlazeUpscale() {}
 
@@ -48,8 +51,34 @@ public final class BlazeUpscale {
         return INSTANCE;
     }
 
-    /** @return the smaller target the world draws into this frame, or null to draw it as usual */
+    /**
+     * Mods that photograph the world or draw a scope's view draw it again inside the frame's own world pass, often into
+     * a target they swapped in and destroy right after. Such a nested pass draws at full size and leaves the outer swap
+     * alone. A pass whose end never ran, because a mod cancelled it, is found by the next frame and its target put back.
+     *
+     * @return the target to draw into from now on, or null to keep the current one
+     */
     public RenderTarget begin(Minecraft client) {
+        RenderTarget restore = null;
+        if (depth > 0) {
+            BlazeRenderer renderer = BlazeFrontend.current();
+            if (renderer != null && renderer == owner && renderer.frame() == beganFrame) {
+                depth++;
+                return null;
+            }
+            if (client.getMainRenderTarget() == scaled) restore = real;
+            depth = 0;
+            active = false;
+            real = null;
+        }
+        RenderTarget target = start(client, restore != null ? restore : client.getMainRenderTarget());
+        if (target == null) return restore;
+        depth = 1;
+        beganFrame = owner.frame();
+        return target;
+    }
+
+    private RenderTarget start(Minecraft client, RenderTarget main) {
         active = captured = drawn = upscaling = false;
         if (!BlazeOptimization.FSR2.on() && !BlazeOptimization.DLSS.on() || failed) return null;
         BlazeRenderer renderer = BlazeFrontend.current();
@@ -59,7 +88,6 @@ public final class BlazeUpscale {
             history = false;
             return null;
         }
-        RenderTarget main = client.getMainRenderTarget();
         int displayWidth = main.width, displayHeight = main.height;
         if (dlss == null && !BlazeOptimization.FSR2.on()) return null;
         if (dlss != null && (dlssSize == null || dlssDisplay[0] != displayWidth || dlssDisplay[1] != displayHeight)) {
@@ -106,12 +134,12 @@ public final class BlazeUpscale {
      * have while a world joins, scales by infinity, which the offset would turn into NaN, so that one stays as it is.
      */
     public Matrix4f jitter(Matrix4f projection) {
-        return active && projection.isFinite() ? new Matrix4f().translation(clipX, clipY, 0).mul(projection) : projection;
+        return outermost() && projection.isFinite() ? new Matrix4f().translation(clipX, clipY, 0).mul(projection) : projection;
     }
 
     /** Keeps the matrices the world is drawn with, the projection without its jitter. */
     public void capture(Matrix4f view, Matrix4f projection, double x, double y, double z) {
-        if (!active) return;
+        if (!outermost()) return;
         this.view.set(view);
         this.projection.translation(-clipX, -clipY, 0).mul(projection);
         camera.set(x, y, z);
@@ -128,7 +156,7 @@ public final class BlazeUpscale {
 
     /** Copies the world's depth aside, before the game clears depth to draw the hand. */
     public void worldDrawn() {
-        if (!active || !captured) return;
+        if (!outermost() || !captured) return;
         try {
             BlazeTarget target = owner.target(scaled.frameBufferId);
             if (binding == null || !binding.reads(target.sampledDepthView(), fsr.resources())) {
@@ -146,7 +174,7 @@ public final class BlazeUpscale {
 
     /** Upscales the scaled frame into the real main target. @return the target to put back, or null if none was swapped */
     public RenderTarget end() {
-        if (!active) return null;
+        if (depth == 0 || --depth > 0 || !active) return null;
         active = false;
         RenderTarget restore = real;
         real = null;
@@ -216,6 +244,10 @@ public final class BlazeUpscale {
         }
         if (scaled == null) scaled = new TextureTarget(renderWidth, renderHeight, true, Minecraft.ON_OSX);
         else if (scaled.width != renderWidth || scaled.height != renderHeight) scaled.resize(renderWidth, renderHeight, Minecraft.ON_OSX);
+    }
+
+    private boolean outermost() {
+        return active && depth == 1;
     }
 
     /** A new renderer owns none of the old one's objects, which closed with it. */
