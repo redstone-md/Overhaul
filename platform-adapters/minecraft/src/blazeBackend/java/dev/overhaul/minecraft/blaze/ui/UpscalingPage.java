@@ -19,7 +19,7 @@ import net.minecraft.network.chat.Component;
  */
 final class UpscalingPage extends SettingsPage {
     /** The options this page owns, which the optimisation page leaves out. */
-    static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE,
+    static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_AO, BlazeOptimization.RT_REFLECTIONS,
             BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance";
@@ -97,6 +97,8 @@ final class UpscalingPage extends SettingsPage {
                         () -> Math.round(number(BlazeOptimization.value(SHARPNESS, "0.3"), 0.3f) * 100),
                         value -> saveValue(SHARPNESS, String.valueOf(value / 100f)), value -> value + "%"));
             }
+            rows.add(toggle(BlazeOptimization.UPSCALE_MIP_BIAS, "Sharp textures",
+                    "Textures keep full resolution detail while the world draws smaller"));
             rows.add(toggle(BlazeOptimization.PACK_UPSCALE, "Under shader packs",
                     "The pack draws at the lower resolution too; turn off its own TAA"));
             rows.add(new SettingsRow.Action(Component.literal("Now drawing"), "Render resolution and window resolution this frame",

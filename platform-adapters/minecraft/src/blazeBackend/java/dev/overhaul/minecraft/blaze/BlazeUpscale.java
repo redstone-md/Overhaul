@@ -81,6 +81,7 @@ public final class BlazeUpscale {
 
     private RenderTarget start(Minecraft client, RenderTarget main) {
         active = captured = drawn = upscaling = false;
+        BlazeSamplerState.worldBias(0);
         if (!BlazeOptimization.FSR2.on() && !BlazeOptimization.DLSS.on()) {
             history = false;
             return null;
@@ -132,6 +133,8 @@ public final class BlazeUpscale {
         shown[1] = renderHeight;
         shown[2] = displayWidth;
         shown[3] = displayHeight;
+        // Textures pick their mip level as if drawn at the window's size, so the upscaled frame keeps their detail.
+        if (BlazeOptimization.UPSCALE_MIP_BIAS.on()) BlazeSamplerState.worldBias((float) (Math.log((double) renderWidth / displayWidth) / Math.log(2)));
         return scaled;
     }
 
@@ -188,6 +191,7 @@ public final class BlazeUpscale {
     public RenderTarget end() {
         if (depth == 0 || --depth > 0 || !active) return null;
         active = false;
+        BlazeSamplerState.worldBias(0);
         RenderTarget restore = real;
         real = null;
         // A target rebuilt mid frame has nothing to upscale into; the next frame starts over at its new size.

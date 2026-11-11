@@ -14,6 +14,12 @@ final class BlazeSamplerState {
     private int min=GL_NEAREST_MIPMAP_LINEAR,mag=GL_LINEAR,wrapS=GL_REPEAT,wrapT=GL_REPEAT,wrapR=GL_REPEAT,compareMode=GL_NONE,compareFunc=GL_LEQUAL;
     private float minLod=-1000,maxLod=1000,lodBias;
     private SamplerSettings.Border border=SamplerSettings.Border.TRANSPARENT_BLACK;
+    /** Extra bias for mipmapped textures while the world draws below the window's resolution; zero otherwise. */
+    private static volatile float worldBias;
+
+    /** Sets the bias every mipmapped texture adds from now on; render thread only. */
+    static void worldBias(float bias){worldBias=Math.max(-MAX_LOD_BIAS,Math.min(0,bias));}
+    static float worldBias(){return worldBias;}
 
     /** A render target's own view samples nearest and clamped. */
     static BlazeSamplerState target(){var state=new BlazeSamplerState();state.min=state.mag=GL_NEAREST;state.wrapS=state.wrapT=GL_CLAMP_TO_EDGE;return state;}
@@ -64,7 +70,8 @@ final class BlazeSamplerState {
         float highest=mipmapped()?highestMip:0,low=Math.max(0,Math.min(highest,minLod)),high=Math.max(low,Math.min(highest,maxLod));
         return new SamplerSettings(filter,mag==GL_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST,
                 min==GL_NEAREST_MIPMAP_LINEAR||min==GL_LINEAR_MIPMAP_LINEAR?SamplerSettings.Mipmap.LINEAR:SamplerSettings.Mipmap.NEAREST,
-                address(wrapS),address(wrapT),address(wrapR),low,high,1,compareMode==GL_NONE?SamplerSettings.Compare.NONE:comparison(compareFunc),lodBias,border);
+                address(wrapS),address(wrapT),address(wrapR),low,high,1,compareMode==GL_NONE?SamplerSettings.Compare.NONE:comparison(compareFunc),
+                mipmapped()?Math.max(-MAX_LOD_BIAS,lodBias+worldBias):lodBias,border);
     }
 
     private static SamplerSettings.Address address(int mode){return switch(mode){case GL_REPEAT->SamplerSettings.Address.REPEAT;case GL_CLAMP_TO_EDGE->SamplerSettings.Address.CLAMP;case GL_MIRRORED_REPEAT,34627->SamplerSettings.Address.MIRROR;case GL_CLAMP_TO_BORDER->SamplerSettings.Address.BORDER;case GL_CLAMP->SamplerSettings.Address.CLAMP;default->throw unsupported(mode);};}
