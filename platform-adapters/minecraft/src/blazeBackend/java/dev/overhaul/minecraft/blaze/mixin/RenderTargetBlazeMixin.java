@@ -5,6 +5,9 @@ import dev.overhaul.minecraft.blaze.BlazeFrontend;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeTarget;
 import dev.overhaul.minecraft.blaze.BlazeUpscale;
+import com.mojang.blaze3d.platform.Window;
+import net.minecraft.client.Minecraft;
+import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -48,6 +51,21 @@ public abstract class RenderTargetBlazeMixin {
         RenderTarget self=(RenderTarget)(Object)this;
         // Vanilla createBuffers forces nearest on each new allocation, including resize.
         filterMode=-1;self.setFilterMode(9728);self.clear(checkError);self.unbindRead();c.cancel();
+    }
+
+    /**
+     * Vanilla rebuilds the main target when the window changes mode and only logs a failure, which left it without a
+     * framebuffer and crashed the next frame. Binding it rebuilds it at the window's size, so a passing failure heals
+     * and a lasting one fails here with its own cause.
+     */
+    @Inject(method="bindWrite(Z)V",at=@At("HEAD"),require=1)
+    private void overhaul$heal(boolean setViewport,CallbackInfo c){
+        if(frameBufferId>=0||overhaul$target!=null||!overhaul$owned||BlazeFrontend.current()==null)return;
+        Minecraft client=Minecraft.getInstance();RenderTarget self=(RenderTarget)(Object)this;
+        if(client==null||client.getMainRenderTarget()!=self)return;
+        Window window=client.getWindow();
+        LoggerFactory.getLogger(RenderTargetBlazeMixin.class).warn("The main framebuffer was lost, most likely while the window changed mode; rebuilding it at {}x{}",window.getWidth(),window.getHeight());
+        self.createBuffers(Math.max(1,window.getWidth()),Math.max(1,window.getHeight()),Minecraft.ON_OSX);
     }
 
     /** Code that binds the main target back without its viewport still expects one of the main target's size. */

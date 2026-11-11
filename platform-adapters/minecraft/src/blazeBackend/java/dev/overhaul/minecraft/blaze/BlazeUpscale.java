@@ -190,6 +190,11 @@ public final class BlazeUpscale {
         active = false;
         RenderTarget restore = real;
         real = null;
+        // A target rebuilt mid frame has nothing to upscale into; the next frame starts over at its new size.
+        if (restore.frameBufferId < 0 || scaled.frameBufferId < 0) {
+            history = false;
+            return restore;
+        }
         GpuImage source = owner.target(scaled.frameBufferId).color(), destination = owner.target(restore.frameBufferId).color();
         boolean upscaled = false;
         try {
