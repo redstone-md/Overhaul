@@ -58,7 +58,7 @@ final class OptimizationPage extends SettingsPage {
             }
         }
         List<SettingsRow> rest = new ArrayList<>();
-        for (BlazeOptimization option : BlazeOptimization.values()) if (!listed.contains(option)) rest.add(row(option));
+        for (BlazeOptimization option : BlazeOptimization.values()) if (!listed.contains(option) && !UpscalingPage.OPTIONS.contains(option)) rest.add(row(option));
         if (!rest.isEmpty()) {
             rows.add(new SettingsRow.Header("More"));
             rows.addAll(rest);
@@ -76,7 +76,7 @@ final class OptimizationPage extends SettingsPage {
 
     private void setAll(boolean value) {
         Map<BlazeOptimization, Boolean> values = new EnumMap<>(BlazeOptimization.class);
-        for (BlazeOptimization option : BlazeOptimization.values()) if (!option.launchOverride()) values.put(option, value);
+        for (BlazeOptimization option : BlazeOptimization.values()) if (!option.launchOverride() && !UpscalingPage.OPTIONS.contains(option)) values.put(option, value);
         set(values);
     }
 
@@ -86,19 +86,24 @@ final class OptimizationPage extends SettingsPage {
     }
 
     private long count(boolean value) {
-        return saved.values().stream().filter(v -> v == value).count();
+        return saved.entrySet().stream().filter(e -> !UpscalingPage.OPTIONS.contains(e.getKey()) && e.getValue() == value).count();
     }
 
     @Override
     String status() {
-        long pending = saved.entrySet().stream().filter(e -> e.getValue() != e.getKey().on()).count();
+        long pending = saved.entrySet().stream().filter(OptimizationPage::pending).count();
         if (pending == 0) return "Changes here apply after a restart";
         return "Restart the game to apply " + pending + (pending == 1 ? " change" : " changes");
     }
 
     @Override
     boolean statusIsPending() {
-        return saved.entrySet().stream().anyMatch(e -> e.getValue() != e.getKey().on());
+        return saved.entrySet().stream().anyMatch(OptimizationPage::pending);
+    }
+
+    /** Options on the upscaling page apply there, at once, so they never wait for a restart here. */
+    private static boolean pending(Map.Entry<BlazeOptimization, Boolean> entry) {
+        return !UpscalingPage.OPTIONS.contains(entry.getKey()) && entry.getValue() != entry.getKey().on();
     }
 
     private static Map<BlazeOptimization, String> labels() {
