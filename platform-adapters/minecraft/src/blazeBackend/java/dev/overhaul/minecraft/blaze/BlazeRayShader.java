@@ -2,12 +2,15 @@ package dev.overhaul.minecraft.blaze;
 
 /**
  * The compute shader that lights the finished world with ray queries. It rebuilds each pixel's camera-relative
- * position from depth and its normal from the neighbouring depths, then traces toward the sun or moon for shadows,
- * a few short rays for ambient occlusion and, on upward facing water, one reflected ray shaded from the hit
- * triangle's own vertices and the block atlas. Cutout geometry is alpha tested against the atlas while rays search.
+ * position from depth and its normal from the neighbouring depths. A camera ray finds the terrain the pixel shows and
+ * reads its baked light levels, so the terrain can be lit again: a coloured sun through a small disc of shadow rays
+ * that translucent blocks thin rather than stop, a sky tinted ambient and warm block light, each measured against the
+ * game's flat lighting. A few short rays add ambient occlusion and, on upward facing water, one reflected ray is shaded
+ * from the hit triangle's own vertices and the block atlas. Cutout geometry is alpha tested against the atlas while
+ * rays search.
  */
 final class BlazeRayShader {
-    static final int SHADOWS = 1, AMBIENT_OCCLUSION = 2, REFLECTIONS = 4, MOVING_NOISE = 8, SHOW_LIGHT = 16;
+    static final int SHADOWS = 1, AMBIENT_OCCLUSION = 2, REFLECTIONS = 4, MOVING_NOISE = 8, SHOW_LIGHT = 16, LIGHTING = 32;
     static final int PUSH_BYTES = 128;
 
     static final String SOURCE = """
@@ -85,6 +88,81 @@ final class BlazeRayShader {
                 rayQueryInitializeEXT(query, scene, gl_RayFlagsTerminateOnFirstHitEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, far);
                 SEARCH(query)
                 return rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT;
+            }
+
+            // How much light passes the translucent layers ahead, water, ice, glass and slime each keeping part of it.
+            float transmitted(vec3 origin, vec3 direction, float far) {
+                rayQueryEXT query;
+                rayQueryInitializeEXT(query, scene, gl_RayFlagsNoOpaqueEXT, TRANSLUCENT, origin, 0.0, direction, far);
+                float light = 1.0;
+                while (rayQueryProceedEXT(query)) {
+                    if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) continue;
+                    Surface candidate = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
+                            rayQueryGetIntersectionPrimitiveIndexEXT(query, false), rayQueryGetIntersectionBarycentricsEXT(query, false));
+                    light *= 1.0 - 0.5 * textureLod(atlas, candidate.uv, 0.0).a;
+                    if (light < 0.1) rayQueryTerminateEXT(query);
+                }
+                return light;
+            }
+
+            // The share of the sun or moon a point sees: rays spread over a small disc around it, so a shadow
+            // softens the farther it falls from what casts it.
+            float sunlight(vec3 origin, vec3 normal, float noise) {
+                const int RAYS = 4;
+                const float SPREAD = 0.035;
+                vec3 side = normalize(abs(light.y) < 0.9 ? cross(light.xyz, vec3(0.0, 1.0, 0.0)) : cross(light.xyz, vec3(1.0, 0.0, 0.0)));
+                vec3 other = cross(light.xyz, side);
+                float seen = 0.0;
+                for (int ray = 0; ray < RAYS; ray++) {
+                    float turn = (float(ray) + noise) * (6.2831853 / float(RAYS));
+                    float radius = SPREAD * sqrt((float(ray) + 0.5) / float(RAYS));
+                    vec3 direction = normalize(light.xyz + (side * cos(turn) + other * sin(turn)) * radius);
+                    if (dot(normal, direction) <= 0.0 || blocked(origin, direction, 256.0)) continue;
+                    seen += 1.0;
+                }
+                seen /= float(RAYS);
+                return seen > 0.0 ? seen * transmitted(origin, light.xyz, 256.0) : 0.0;
+            }
+
+            // The baked block and sky light of the terrain a pixel shows, when the camera ray meets terrain at the
+            // depth's distance; anything else there, an entity, a hand or a particle, has none to read.
+            bool terrainLight(vec3 position, float distance, out vec2 levels) {
+                levels = vec2(0.0);
+                rayQueryEXT query;
+                rayQueryInitializeEXT(query, scene, gl_RayFlagsNoneEXT, SOLID_AND_CUTOUT, vec3(0.0), 0.0, position / distance, distance + 0.5);
+                SEARCH(query)
+                if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return false;
+                if (abs(rayQueryGetIntersectionTEXT(query, true) - distance) > 0.3 + distance * 0.004) return false;
+                Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
+                        rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
+                levels = clamp(surface.lightmap / 240.0, 0.0, 1.0);
+                return true;
+            }
+
+            // The game's own brightness curve for a light level from 0 to 1.
+            float brightness(float level) { return level / (4.0 - 3.0 * level); }
+
+            // The sun warms toward the horizon; the moon is a cool, faint blue.
+            vec3 sunColor() {
+                if (sky.w < 0.5) return vec3(0.55, 0.65, 1.0) * 0.5;
+                return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
+            }
+
+            // How much brighter or darker, and in what colour, this light makes a pixel than the game's flat lighting:
+            // the sun where rays reach it and the surface faces it, the sky through what occludes it, and blocks
+            // in a warm tone.
+            vec3 relight(vec2 levels, vec3 origin, vec3 normal, float noise, float occluded, bool shadows) {
+                float daylight = sky.w;
+                float open = levels.y * levels.y;
+                float direct = 0.0;
+                float facing = max(dot(normal, light.xyz), 0.0);
+                if (light.w > 0.0 && open > 0.0 && facing > 0.0) direct = light.w * open * facing * (shadows ? sunlight(origin, normal, noise) : 1.0);
+                vec3 tint = sky.rgb / max(dot(sky.rgb, vec3(0.3, 0.59, 0.11)), 0.05);
+                vec3 ambient = mix(vec3(1.0), tint, 0.4) * brightness(levels.y) * daylight * occluded;
+                vec3 block = vec3(1.0, 0.8, 0.55) * brightness(levels.x) * mix(1.0, occluded, 0.5);
+                vec3 lit = sunColor() * 0.9 * direct + 0.55 * ambient + block;
+                float plain = max(brightness(levels.x), brightness(levels.y) * daylight) + 0.03;
+                return clamp((lit + 0.03) / plain, vec3(0.2), vec3(1.6));
             }
 
             vec3 positionOf(ivec2 pixel) {
@@ -181,13 +259,14 @@ final class BlazeRayShader {
                 vec3 normal = normalAt(pixel, position);
                 float fade = 1.0 - smoothstep(0.75 * reach, reach, distance);
                 vec3 origin = position + normal * (0.03 + distance * 0.002);
-                float shade = 1.0;
-                if ((options.x & 1u) != 0u && light.w > 0.0) {
-                    bool facing = dot(normal, light.xyz) > 0.0;
-                    if (!facing || blocked(origin, light.xyz, 256.0)) shade = 1.0 - 0.4 * light.w;
-                }
-                if ((options.x & 2u) != 0u) shade *= occlusion(origin, normal, noiseAt(vec2(pixel)));
-                vec3 result = (options.x & 16u) != 0u ? vec3(shade) : color.rgb * mix(1.0, shade, fade);
+                float noise = noiseAt(vec2(pixel));
+                bool shadows = (options.x & 1u) != 0u;
+                float occluded = (options.x & 2u) != 0u ? occlusion(origin, normal, noise) : 1.0;
+                vec2 levels;
+                vec3 shade;
+                if ((options.x & 32u) != 0u && terrainLight(position, distance, levels)) shade = relight(levels, origin, normal, noise, occluded, shadows);
+                else shade = vec3(occluded * (shadows && light.w > 0.0 ? 1.0 - 0.6 * light.w * (1.0 - sunlight(origin, normal, noise)) : 1.0));
+                vec3 result = (options.x & 16u) != 0u ? shade / 1.6 : color.rgb * mix(vec3(1.0), shade, fade);
                 if ((options.x & 4u) != 0u && water(position, distance)) {
                     vec3 view = position / distance;
                     vec3 bounce = reflect(view, vec3(0.0, 1.0, 0.0));

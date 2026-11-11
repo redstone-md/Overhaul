@@ -148,6 +148,7 @@ public enum BlazeOptimization {
     PACK_UPSCALE("packUpscale", "FSR2 and DLSS also upscale under a shader pack: the pack runs at the render resolution and its finished frame is upscaled to the window; a pack with its own TAA is best run with that TAA off; needs fsr2 or dlss"),
     RAY_TRACING("rayTracing", "On a card with hardware ray queries, the terrain near the player goes into acceleration structures and rays traced against it add sun shadows, ambient occlusion and water reflections to the world; rtDistance sets how far, in blocks; a card without ray queries draws as before; off by default, it changes the image", false),
     RT_SHADOWS("rtShadows", "Ray traced shadows from the sun and moon; needs rayTracing"),
+    RT_LIGHTING("rtLighting", "Ray traced terrain lights itself again from its baked light levels: a coloured sun that sets warm and only reaches what faces it, a sky tinted ambient and warm block light, in place of the game's flat lighting; needs rayTracing"),
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
     RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing"),
     UPSCALE_MIP_BIAS("upscaleMipBias", "While FSR2 or DLSS draws the world at a lower resolution, mipmapped textures sample by the window's resolution instead, so blocks stay as sharp as at full size; needs fsr2 or dlss"),
@@ -191,7 +192,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler and ray tracing read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, RAY_TRACING, RT_SHADOWS, RT_AO, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_REFLECTIONS, GPU_PRESET -> true;
             default -> false;
         };
     }

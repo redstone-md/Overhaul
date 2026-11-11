@@ -39,6 +39,7 @@ public final class BlazeRayTracing {
     public void worldDrawn(Minecraft client, ViewArea area, Camera camera, float partialTick, Matrix4f view, Matrix4f projection) {
         if (!BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
         int flags = (BlazeOptimization.RT_SHADOWS.on() ? BlazeRayShader.SHADOWS : 0) | (BlazeOptimization.RT_AO.on() ? BlazeRayShader.AMBIENT_OCCLUSION : 0)
+                | (BlazeOptimization.RT_LIGHTING.on() ? BlazeRayShader.LIGHTING : 0)
                 | (BlazeOptimization.RT_REFLECTIONS.on() ? BlazeRayShader.REFLECTIONS : 0);
         ClientLevel world = client.level;
         BlazeRenderer renderer = BlazeFrontend.current();
