@@ -13,8 +13,8 @@ import java.util.Set;
 import net.minecraft.network.chat.Component;
 
 /**
- * Upscaling and ray tracing, laid out the way games offer them: one upscaler, a quality mode, sharpening and the ray
- * traced effects. Every change applies to the next frame. While the card's preset decides, the first change here
+ * Image quality, upscaling and ray tracing, laid out the way games offer them: anti-aliasing, sharpening and texture
+ * filtering, one upscaler with a quality mode, and the ray traced effects. Every change applies to the next frame. While the card's preset decides, the first change here
  * writes out what the preset picked, so nothing else moves, and the page is custom from then on.
  */
 final class UpscalingPage extends SettingsPage {
@@ -22,7 +22,20 @@ final class UpscalingPage extends SettingsPage {
     static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_REFLECTIONS,
             BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
-    private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance";
+    private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
+            ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
+    private static final List<Integer> ANISOTROPY_LEVELS = List.of(1, 2, 4, 8, 16);
+
+    /** How edges are smoothed: by a pass over the finished frame or by an upscaler drawing at full resolution. */
+    private enum AntiAliasing {
+        OFF("Off"), FXAA("FXAA"), TAA("TAA  FSR 2"), DLAA("DLAA");
+
+        final String label;
+
+        AntiAliasing(String label) {
+            this.label = label;
+        }
+    }
 
     private enum Upscaler {
         OFF("Off"), FSR2("FSR 2"), DLSS("DLSS");
@@ -64,7 +77,7 @@ final class UpscalingPage extends SettingsPage {
 
     @Override
     String title() {
-        return "Upscaling";
+        return "Graphics";
     }
 
     @Override
@@ -79,6 +92,18 @@ final class UpscalingPage extends SettingsPage {
         rows.add(new SettingsRow.Action(Component.literal("Recommended for this card"),
                 "Sets this page to what the card affords",
                 this::recommend, () -> BlazeOptimization.GPU_PRESET.on() ? "In use" : "Apply"));
+        rows.add(new SettingsRow.Header("Image quality"));
+        rows.add(new SettingsRow.Choice<>(Component.literal("Anti-aliasing"),
+                "FXAA smooths edges for almost nothing; TAA and DLAA smooth more, shimmer less and cost more",
+                List.of(AntiAliasing.values()), this::antiAliasing, this::antiAliasing, value -> value.label)
+                .enabledWhen(() -> !scaledDown() && !locked(BlazeOptimization.FSR2) && !locked(BlazeOptimization.DLSS))
+                .note(() -> scaledDown() ? "The upscaler smooths the image" : null));
+        rows.add(new SettingsRow.Slider(Component.literal("Sharpening"), "Contrast adaptive sharpening of the finished frame", 0, 100, 5,
+                () -> (int) number(BlazeOptimization.value(SHARPENING, "0"), 0), value -> saveValue(SHARPENING, String.valueOf(value)),
+                value -> value == 0 ? "Off" : value + "%").enabledWhen(() -> upscaler() == Upscaler.OFF)
+                .note(() -> upscaler() == Upscaler.OFF ? null : "The upscaler sharpens the image"));
+        rows.add(new SettingsRow.Choice<>(Component.literal("Anisotropic filtering"), "Keeps textures sharp on floors and walls seen at an angle",
+                ANISOTROPY_LEVELS, () -> anisotropy(), value -> saveValue(ANISOTROPY, String.valueOf(value)), value -> value == 1 ? "Off" : value + "x"));
         rows.add(new SettingsRow.Header("Upscaling"));
         Upscaler upscaler = upscaler();
         rows.add(new SettingsRow.Choice<>(Component.literal("Upscaler"),
@@ -153,6 +178,36 @@ final class UpscalingPage extends SettingsPage {
         refresh.run();
     }
 
+    /** An upscaler at full resolution is the anti-aliasing; at any lower one it has no separate choice. */
+    private AntiAliasing antiAliasing() {
+        Upscaler upscaler = upscaler();
+        if (upscaler == Upscaler.DLSS) return AntiAliasing.DLAA;
+        if (upscaler == Upscaler.FSR2) return AntiAliasing.TAA;
+        return BlazeOptimization.value(ANTI_ALIASING, "off").equalsIgnoreCase("fxaa") ? AntiAliasing.FXAA : AntiAliasing.OFF;
+    }
+
+    private void antiAliasing(AntiAliasing choice) {
+        switch (choice) {
+            case TAA -> saveValue(FSR_QUALITY, "native");
+            case DLAA -> saveValue(DLSS_QUALITY, "dlaa");
+            default -> saveValue(ANTI_ALIASING, choice == AntiAliasing.FXAA ? "fxaa" : "off");
+        }
+        upscaler(choice == AntiAliasing.DLAA ? Upscaler.DLSS : choice == AntiAliasing.TAA ? Upscaler.FSR2 : Upscaler.OFF);
+    }
+
+    /** Whether an upscaler draws below full resolution, which leaves anti-aliasing to it. */
+    private boolean scaledDown() {
+        Upscaler upscaler = upscaler();
+        return upscaler != Upscaler.OFF && Mode.of(BlazeOptimization.value(qualityKey(upscaler), "quality")).percent < 100;
+    }
+
+    private static int anisotropy() {
+        int wanted = (int) number(BlazeOptimization.value(ANISOTROPY, "1"), 1);
+        int chosen = 1;
+        for (int level : ANISOTROPY_LEVELS) if (level <= wanted) chosen = level;
+        return chosen;
+    }
+
     private static String qualityKey(Upscaler upscaler) {
         return upscaler == Upscaler.DLSS ? DLSS_QUALITY : FSR_QUALITY;
     }
@@ -200,6 +255,8 @@ final class UpscalingPage extends SettingsPage {
         for (String key : List.of(FSR_QUALITY, DLSS_QUALITY, DISTANCE)) {
             BlazeOptimization.saveValue(key, BlazeOptimization.recommendedValue(key, key.equals(DISTANCE) ? "64" : "quality"), "Set from the upscaling page");
         }
+        BlazeOptimization.saveValue(ANISOTROPY, BlazeOptimization.recommendedValue(ANISOTROPY, "16"), "Set from the upscaling page");
+        BlazeOptimization.saveValue(ANTI_ALIASING, BlazeOptimization.recommendedValue(ANTI_ALIASING, "fxaa"), "Set from the upscaling page");
         refresh.run();
     }
 
