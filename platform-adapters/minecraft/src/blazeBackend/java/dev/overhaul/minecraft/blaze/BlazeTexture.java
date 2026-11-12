@@ -14,7 +14,7 @@ final class BlazeTexture implements AutoCloseable {
     private GpuImage image;
     private GpuImageView view,borrowed;
     private GpuSampler sampler;
-    private float samplerBias;
+    private float samplerBias,samplerAnisotropy;
     private boolean[] defined;
     private BlazeSamplerState sampling=new BlazeSamplerState();
     private int base,max=1000;
@@ -125,8 +125,8 @@ final class BlazeTexture implements AutoCloseable {
         return view;
     }
     GpuSampler sampler(){
-        float bias=sampling.mipmapped()?BlazeSamplerState.worldBias():0;
-        if(sampler==null||samplerBias!=bias){sampler=sampler(sampling);samplerBias=bias;}
+        float bias=sampling.mipmapped()?BlazeSamplerState.worldBias():0,anisotropy=sampling.mipmapped()?BlazeSamplerState.worldAnisotropy():1;
+        if(sampler==null||samplerBias!=bias||samplerAnisotropy!=anisotropy){sampler=sampler(sampling);samplerBias=bias;samplerAnisotropy=anisotropy;}
         return sampler;
     }
     /** A sampler object bound over this texture samples with its own state, clamped to this texture's mip range. */

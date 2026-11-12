@@ -15,7 +15,11 @@ final class BlazeSamplers implements AutoCloseable {
     private final BlazeQueue queue;
     private final Map<SamplerSettings,GpuSampler> samplers=new HashMap<>();
 
-    BlazeSamplers(GpuAllocator allocator,BlazeQueue queue){this.allocator=allocator;this.queue=queue;}
+    BlazeSamplers(GpuAllocator allocator,BlazeQueue queue){
+        this.allocator=allocator;this.queue=queue;
+        var capabilities=allocator.context().capabilities();
+        BlazeSamplerState.anisotropyLimit(capabilities.samplerAnisotropy()?capabilities.maxSamplerAnisotropy():1);
+    }
     GpuSampler get(SamplerSettings settings){
         GpuSampler sampler=samplers.get(settings);
         if(sampler==null){

@@ -21,6 +21,24 @@ final class BlazeSamplerState {
     static void worldBias(float bias){worldBias=Math.max(-MAX_LOD_BIAS,Math.min(0,bias));}
     static float worldBias(){return worldBias;}
 
+    /** The most anisotropy the device allows, 1 where it has none; set once the device exists. */
+    private static volatile float anisotropyLimit=1;
+    private static float anisotropy=1;
+    private static int anisotropyRevision=-1;
+
+    static void anisotropyLimit(float limit){anisotropyLimit=Math.max(1,limit);anisotropyRevision=-1;}
+
+    /** The anisotropy every mipmapped texture filters with, from the {@code anisotropy} setting, 1 to the device's most. */
+    static float worldAnisotropy(){
+        int now=BlazeOptimization.revision();
+        if(now!=anisotropyRevision){
+            float wanted;
+            try{wanted=Float.parseFloat(BlazeOptimization.value("anisotropy","1"));}catch(NumberFormatException ignored){wanted=1;}
+            anisotropy=Float.isFinite(wanted)?Math.max(1,Math.min(anisotropyLimit,wanted)):1;anisotropyRevision=now;
+        }
+        return anisotropy;
+    }
+
     /** A render target's own view samples nearest and clamped. */
     static BlazeSamplerState target(){var state=new BlazeSamplerState();state.min=state.mag=GL_NEAREST;state.wrapS=state.wrapT=GL_CLAMP_TO_EDGE;return state;}
 
@@ -70,7 +88,7 @@ final class BlazeSamplerState {
         float highest=mipmapped()?highestMip:0,low=Math.max(0,Math.min(highest,minLod)),high=Math.max(low,Math.min(highest,maxLod));
         return new SamplerSettings(filter,mag==GL_LINEAR?SamplerSettings.Filter.LINEAR:SamplerSettings.Filter.NEAREST,
                 min==GL_NEAREST_MIPMAP_LINEAR||min==GL_LINEAR_MIPMAP_LINEAR?SamplerSettings.Mipmap.LINEAR:SamplerSettings.Mipmap.NEAREST,
-                address(wrapS),address(wrapT),address(wrapR),low,high,1,compareMode==GL_NONE?SamplerSettings.Compare.NONE:comparison(compareFunc),
+                address(wrapS),address(wrapT),address(wrapR),low,high,mipmapped()?worldAnisotropy():1,compareMode==GL_NONE?SamplerSettings.Compare.NONE:comparison(compareFunc),
                 mipmapped()?Math.max(-MAX_LOD_BIAS,lodBias+worldBias):lodBias,border);
     }
 
