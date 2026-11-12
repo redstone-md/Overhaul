@@ -20,7 +20,7 @@ import net.minecraft.network.chat.Component;
 final class UpscalingPage extends SettingsPage {
     /** The options this page owns, which the optimisation page leaves out. */
     static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
-            BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_REFLECTIONS,
+            BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
             BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
             ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
@@ -139,6 +139,7 @@ final class UpscalingPage extends SettingsPage {
         rows.add(toggle(BlazeOptimization.RT_SHADOWS, "Shadows", "Sun and moon shadows traced against the terrain").enabledWhen(this::tracing));
         rows.add(toggle(BlazeOptimization.RT_LIGHTING, "Lighting", "Coloured sun, sky and block light in place of the flat game lighting").enabledWhen(this::tracing));
         rows.add(toggle(BlazeOptimization.RT_AO, "Ambient occlusion", "Soft darkening in corners and under overhangs").enabledWhen(this::tracing));
+        rows.add(toggle(BlazeOptimization.RT_GI, "Global illumination", "Sunlight and block light bounce once off the terrain").enabledWhen(this::tracing));
         rows.add(toggle(BlazeOptimization.RT_REFLECTIONS, "Reflections", "Reflections on water and other upward facing translucent surfaces").enabledWhen(this::tracing));
         rows.add(new SettingsRow.Slider(Component.literal("Ray distance"), "How far rays reach; farther costs more", 16, 256, 16,
                 () -> (int) number(BlazeOptimization.value(DISTANCE, "64"), 64), value -> saveValue(DISTANCE, String.valueOf(value)), value -> value + " blocks")

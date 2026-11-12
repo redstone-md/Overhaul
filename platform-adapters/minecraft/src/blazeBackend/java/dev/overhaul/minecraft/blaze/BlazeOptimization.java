@@ -150,6 +150,7 @@ public enum BlazeOptimization {
     RT_SHADOWS("rtShadows", "Ray traced shadows from the sun and moon; needs rayTracing"),
     RT_LIGHTING("rtLighting", "Ray traced terrain lights itself again from its baked light levels: a coloured sun that sets warm and only reaches what faces it, a sky tinted ambient and warm block light, in place of the game's flat lighting; needs rayTracing"),
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
+    RT_GI("rtGi", "Ray traced global illumination: light bounces once off the terrain, so sunlit blocks brighten and colour what faces them and lit rooms glow past their corners; needs rayTracing"),
     RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing"),
     UPSCALE_MIP_BIAS("upscaleMipBias", "While FSR2 or DLSS draws the world at a lower resolution, mipmapped textures sample by the window's resolution instead, so blocks stay as sharp as at full size; needs fsr2 or dlss"),
     UPSCALE_READY("upscaleReady", "Loads what FSR2, DLSS and ray tracing need at startup, the world pass hook, Streamline on Windows and the device's ray queries, so the upscaling page turns them on and off without a restart; off, they need fsr2, dlss or rayTracing on at launch"),
@@ -192,7 +193,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler and ray tracing read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
             default -> false;
         };
     }

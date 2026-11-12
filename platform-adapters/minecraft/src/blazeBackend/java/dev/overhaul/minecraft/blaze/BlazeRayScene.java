@@ -65,7 +65,11 @@ final class BlazeRayScene implements AutoCloseable {
      * Gathers the sections within {@code distance} blocks of the camera, queues this frame's builds and returns what
      * the rays read, or null when nothing near holds geometry yet.
      */
-    Frame prepare(ViewArea area, double x, double y, double z, int distance) {
+    /**
+     * Gathers the terrain within {@code distance} of the camera. {@code trailer} follows the hit table in the same
+     * buffer, sixteen byte aligned, for the pass's own per-frame values.
+     */
+    Frame prepare(ViewArea area, double x, double y, double z, int distance, float[] trailer) {
         frame++;
         placed.clear();
         offsets.clear();
@@ -95,7 +99,7 @@ final class BlazeRayScene implements AutoCloseable {
         }
         List<Blas> builds = startBuilds();
         evict();
-        return placed.isEmpty() ? null : queue(builds);
+        return placed.isEmpty() ? null : queue(builds, trailer);
     }
 
     private boolean traceable(BlazeMesh mesh) {
@@ -147,7 +151,7 @@ final class BlazeRayScene implements AutoCloseable {
         }
     }
 
-    private Frame queue(List<Blas> builds) {
+    private Frame queue(List<Blas> builds, float[] trailer) {
         int count = placed.size();
         if (top == null || topCapacity < count) {
             if (top != null) owner.retire(top);
@@ -159,9 +163,9 @@ final class BlazeRayScene implements AutoCloseable {
                 topScratch = sizes.buildScratchSize();
             }
         }
-        GpuBuffer instances = instanceBuffers.take(count * INSTANCE_BYTES), table = tableBuffers.take(count * ENTRY_BYTES);
+        GpuBuffer instances = instanceBuffers.take(count * INSTANCE_BYTES), table = tableBuffers.take(count * ENTRY_BYTES + trailer.length * 4);
         try (var instanceRange = instances.mapRange(0, count * INSTANCE_BYTES, false, true);
-             var tableRange = table.mapRange(0, count * ENTRY_BYTES, false, true)) {
+             var tableRange = table.mapRange(0, count * ENTRY_BYTES + trailer.length * 4, false, true)) {
             ByteBuffer instanceData = instanceRange.buffer(), tableData = tableRange.buffer();
             for (int index = 0; index < count; index++) {
                 Blas blas = placed.get(index);
@@ -178,6 +182,7 @@ final class BlazeRayScene implements AutoCloseable {
                 tableData.putLong(entry, blas.vertexAddress).putLong(entry + 8, blas.indexAddress)
                         .putInt(entry + 16, blas.indexBytes).putInt(entry + 20, blas.compact ? 1 : 0).putInt(entry + 24, blas.mask).putInt(entry + 28, 0);
             }
+            for (int i = 0; i < trailer.length; i++) tableData.putFloat(count * ENTRY_BYTES + i * 4, trailer[i]);
         }
         owner.enqueue(new Build(builds, instances.deviceAddress(), count, top, topScratch));
         instanceBuffers.giveBack(instances);

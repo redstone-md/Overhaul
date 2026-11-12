@@ -40,6 +40,7 @@ public final class BlazeRayTracing {
         if (!BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
         int flags = (BlazeOptimization.RT_SHADOWS.on() ? BlazeRayShader.SHADOWS : 0) | (BlazeOptimization.RT_AO.on() ? BlazeRayShader.AMBIENT_OCCLUSION : 0)
                 | (BlazeOptimization.RT_LIGHTING.on() ? BlazeRayShader.LIGHTING : 0)
+                | (BlazeOptimization.RT_GI.on() ? BlazeRayShader.GLOBAL_ILLUMINATION : 0)
                 | (BlazeOptimization.RT_REFLECTIONS.on() ? BlazeRayShader.REFLECTIONS : 0);
         ClientLevel world = client.level;
         BlazeRenderer renderer = BlazeFrontend.current();
@@ -69,13 +70,16 @@ public final class BlazeRayTracing {
             if (atlas == null) return;
             renderer.flushCapturedDraws();
             Vec3 position = camera.getPosition();
-            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance);
+            BlazeTarget target = renderer.target(client.getMainRenderTarget().frameBufferId);
+            Matrix4f viewProjection = new Matrix4f(projection).mul(view);
+            float[] trailer = pass.trailer(target, viewProjection, position.x, position.y, position.z);
+            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance, trailer);
             if (traced == null) return;
             if (BlazeUpscale.get().describe() != null) flags |= BlazeRayShader.MOVING_NOISE;
             if (SHOW_LIGHT) flags |= BlazeRayShader.SHOW_LIGHT;
-            var lighting = new BlazeRayPass.Lighting(new Matrix4f(projection).mul(view).invert(), light(world, partialTick),
+            var lighting = new BlazeRayPass.Lighting(viewProjection.invert(new Matrix4f()), light(world, partialTick),
                     sky(world, position, partialTick), flags, frame++, distance);
-            pass.trace(renderer.target(client.getMainRenderTarget().frameBufferId), atlas, traced, lighting);
+            pass.trace(target, atlas, traced, lighting);
             if (!logged) LoggerFactory.getLogger(BlazeRayTracing.class).info("Ray traced lighting on, {} blocks, {} instances", distance, traced.instances());
             logged = true;
         } catch (RuntimeException | Error failure) {
