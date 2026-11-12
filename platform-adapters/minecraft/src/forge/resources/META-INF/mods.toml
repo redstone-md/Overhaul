@@ -6,6 +6,8 @@ issueTrackerURL="https://github.com/redstone-md/Overhaul/issues"
 modId="overhaul"
 version="${version}"
 displayName="Overhaul"
+logoFile="overhaul_logo.png"
+displayURL="https://github.com/redstone-md/Overhaul"
 description='''A Vulkan renderer for Minecraft with ray traced lighting, upscaling and its own settings screen.'''
 [[dependencies.overhaul]]
 modId="minecraft"
