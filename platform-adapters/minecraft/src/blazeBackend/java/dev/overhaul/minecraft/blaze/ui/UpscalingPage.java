@@ -140,7 +140,7 @@ final class UpscalingPage extends SettingsPage {
         rows.add(toggle(BlazeOptimization.RT_LIGHTING, "Lighting", "Coloured sun, sky and block light in place of the flat game lighting").enabledWhen(this::tracing));
         rows.add(toggle(BlazeOptimization.RT_AO, "Ambient occlusion", "Soft darkening in corners and under overhangs").enabledWhen(this::tracing));
         rows.add(toggle(BlazeOptimization.RT_GI, "Global illumination", "Sunlight and block light bounce once off the terrain").enabledWhen(this::tracing));
-        rows.add(toggle(BlazeOptimization.RT_REFLECTIONS, "Reflections", "Reflections on water and other upward facing translucent surfaces").enabledWhen(this::tracing));
+        rows.add(toggle(BlazeOptimization.RT_REFLECTIONS, "Reflections", "Reflections on water, glass and ice").enabledWhen(this::tracing));
         rows.add(new SettingsRow.Slider(Component.literal("Ray distance"), "How far rays reach; farther costs more", 16, 256, 16,
                 () -> (int) number(BlazeOptimization.value(DISTANCE, "64"), 64), value -> saveValue(DISTANCE, String.valueOf(value)), value -> value + " blocks")
                 .enabledWhen(this::tracing));

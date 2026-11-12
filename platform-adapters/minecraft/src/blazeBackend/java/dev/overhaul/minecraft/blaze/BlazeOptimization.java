@@ -151,7 +151,7 @@ public enum BlazeOptimization {
     RT_LIGHTING("rtLighting", "Ray traced terrain lights itself again from its baked light levels: a coloured sun that sets warm and only reaches what faces it, a sky tinted ambient and warm block light, in place of the game's flat lighting; needs rayTracing"),
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
     RT_GI("rtGi", "Ray traced global illumination: light bounces once off the terrain, so sunlit blocks brighten and colour what faces them and lit rooms glow past their corners; needs rayTracing"),
-    RT_REFLECTIONS("rtReflections", "Ray traced reflections on water and other upward facing translucent surfaces; needs rayTracing"),
+    RT_REFLECTIONS("rtReflections", "Ray traced reflections on water, glass and ice; needs rayTracing"),
     UPSCALE_MIP_BIAS("upscaleMipBias", "While FSR2 or DLSS draws the world at a lower resolution, mipmapped textures sample by the window's resolution instead, so blocks stay as sharp as at full size; needs fsr2 or dlss"),
     UPSCALE_READY("upscaleReady", "Loads what FSR2, DLSS and ray tracing need at startup, the world pass hook, Streamline on Windows and the device's ray queries, so the upscaling page turns them on and off without a restart; off, they need fsr2, dlss or rayTracing on at launch"),
     GPU_PRESET("gpuPreset", "Picks what the card can afford from its class: FSR2 on GTX 10 and 16, integrated graphics and ray tracing cards, ray traced lighting where the card has ray queries; the quality settings follow the class either way unless set here; off by default, it changes the image", false);
