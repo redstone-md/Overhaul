@@ -1,11 +1,12 @@
 modLoader="javafml"
 loaderVersion="[36,)"
-license="All Rights Reserved"
+license="GPL-3.0-only"
+issueTrackerURL="https://github.com/redstone-md/Overhaul/issues"
 [[mods]]
 modId="overhaul"
 version="${version}"
-displayName="overhaul"
-description='''Experimental engine adapter; renderer replacement is under development.'''
+displayName="Overhaul"
+description='''A Vulkan renderer for Minecraft with ray traced lighting, upscaling and its own settings screen.'''
 [[dependencies.overhaul]]
 modId="minecraft"
 mandatory=true
