@@ -8,7 +8,7 @@
 
 <img src="https://raw.githubusercontent.com/redstone-md/Overhaul/main/docs/assets/modrinth/title-about.png" alt="About" width="100%">
 
-Overhaul replaces Minecraft's OpenGL renderer with a **native Vulkan renderer**. It adds ray traced lighting and modern upscaling, and gives the game a new video settings screen. It talks to Vulkan directly, so it is not a Zink-style translation layer.
+Overhaul replaces Minecraft's OpenGL renderer with a **native Vulkan renderer**. It adds ray traced lighting, DLSS and FSR 2 upscaling, and a new video settings screen. It talks to Vulkan directly and does not translate OpenGL calls.
 
 > **Alpha.** Expect rendering bugs and mod conflicts, and keep backups of your worlds.
 
@@ -25,7 +25,7 @@ Overhaul replaces Minecraft's OpenGL renderer with a **native Vulkan renderer**.
 
 <center><img src="https://raw.githubusercontent.com/redstone-md/Overhaul/main/docs/assets/modrinth/performance.png" alt="Overhaul 385 FPS, vanilla renderer 57 FPS" width="100%"></center>
 
-Ray tracing and shader packs cost frames, as they do in any renderer.
+Ray tracing and shader packs lower these numbers, as in any renderer.
 
 <img src="https://raw.githubusercontent.com/redstone-md/Overhaul/main/docs/assets/modrinth/title-screenshots.png" alt="Screenshots" width="100%">
 
