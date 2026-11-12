@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="docs/assets/banner-wide.jpg" alt="Overhaul" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/redstone-md/Overhaul/releases"><img alt="Release" src="https://img.shields.io/github/v/release/redstone-md/Overhaul?include_prereleases&label=release&color=40c4ff"></a>
+  <img alt="Minecraft 1.21.1" src="https://img.shields.io/badge/Minecraft-1.21.1-5b8731">
+  <img alt="NeoForge 21.1" src="https://img.shields.io/badge/NeoForge-21.1-e8742c">
+  <img alt="Vulkan 1.2" src="https://img.shields.io/badge/Vulkan-1.2-ac162c">
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/github/license/redstone-md/Overhaul?color=blue"></a>
+</p>
+
 # Overhaul
 
 Overhaul is a Vulkan renderer for Minecraft. It replaces the game's OpenGL
@@ -33,6 +45,18 @@ gives the game a new video settings screen.
 All options are under **Options → Video Settings**, which opens the Overhaul
 screen. Its pages are Quality, Video, Upscaling, Optimization, Overlay and Shader
 Packs, and changes apply while you play.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/water.jpg" alt="Sunlight reflected on shallow water" width="100%">
+  <br><em>Sunlight on shallow water, with the BSL shader pack.</em>
+</p>
+
+<p align="center">
+  <img src="docs/assets/meadow.jpg" alt="A grassy hill with mountains and clouds in the distance" width="100%">
+  <br><em>Grass shadows and volumetric clouds, with the BSL shader pack.</em>
+</p>
 
 ## Performance
 
@@ -107,3 +131,7 @@ Release jars also include third-party components under their own licenses:
   NVIDIA Corporation.
 
 Overhaul is not affiliated with Mojang, Microsoft, NVIDIA or AMD.
+
+<p align="center">
+  <img src="docs/assets/logo.png" alt="" width="96">
+</p>
