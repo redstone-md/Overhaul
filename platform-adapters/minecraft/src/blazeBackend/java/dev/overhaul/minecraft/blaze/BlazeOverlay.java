@@ -1,7 +1,6 @@
 package dev.overhaul.minecraft.blaze;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -25,7 +24,6 @@ public final class BlazeOverlay {
 
     private final BlazeOverlaySettings settings = BlazeOverlaySettings.get();
     private final long[] durations = new long[HISTORY], sorted = new long[HISTORY];
-    private final com.sun.management.OperatingSystemMXBean system = processBean();
     private final List<String[]> lines = new ArrayList<>();
     private final List<Integer> colours = new ArrayList<>();
     private int head, count, windowFrames, revision = -1, labelWidth, valueWidth, rowWidth;
@@ -129,7 +127,10 @@ public final class BlazeOverlay {
                 case FRAME_TIME -> add("Frame", String.format(Locale.ROOT, "%.1f ms", frameMillis), tint);
                 case LOWS -> add("1% / 0.1%", worst == 0 ? "-" : String.format(Locale.ROOT, "%d / %d", Math.round(1e9 / worst), Math.round(1e9 / worstest)), tint);
                 case GPU_TIME -> add("GPU", gpu == null || gpu.millis() < 0 ? "-" : String.format(Locale.ROOT, "%.1f ms", gpu.millis()), tint);
-                case CPU -> add("CPU", system == null ? "-" : Math.round(Math.max(0, system.getProcessCpuLoad()) * 100) + "%", tint);
+                case CPU -> {
+                    double load = BlazeCpuLoad.get();
+                    add("CPU", load < 0 ? "-" : Math.round(load * 100) + "%", tint);
+                }
                 case MEMORY -> {
                     Runtime runtime = Runtime.getRuntime();
                     add("RAM", gigabytes(runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory()), tint);
@@ -243,9 +244,5 @@ public final class BlazeOverlay {
         }
         int line = bottom - (int) (TARGET * GRAPH_HEIGHT / graphTop);
         graphics.fill(left, line, left + width, line + 1, 0x90000000 | MUTED);
-    }
-
-    private static com.sun.management.OperatingSystemMXBean processBean() {
-        return ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean bean ? bean : null;
     }
 }
