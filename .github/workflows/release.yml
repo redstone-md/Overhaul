@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  STREAMLINE_VERSION: v2.14.16
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Download NVIDIA Streamline
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'streamline.zip'
+          $sdk = Join-Path $env:RUNNER_TEMP 'streamline'
+          Invoke-WebRequest "https://github.com/NVIDIA-RTX/Streamline/releases/download/$env:STREAMLINE_VERSION/streamline-sdk-$env:STREAMLINE_VERSION.zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath $sdk
+          $root = (Get-ChildItem $sdk -Recurse -Filter sl.interposer.dll | Where-Object { $_.Directory.Name -eq 'x64' } | Select-Object -First 1).Directory.Parent.Parent.FullName
+          if (-not $root) { throw 'Streamline bin/x64 not found in the SDK archive' }
+          "STREAMLINE_SDK=$root" >> $env:GITHUB_ENV
+      - name: Build the NeoForge 1.21.1 renderer
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          ./gradlew.bat -p platform-adapters/minecraft "-Ptarget=neoforge-1.21.1" -PblazeBackend "-PloaderVersionOverride=21.1.265" "-PstreamlineSdk=$env:STREAMLINE_SDK" "-PmodVersion=$version" assemble -x compileTestJava -x test --no-daemon --console=plain
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $jars = Get-ChildItem platform-adapters/minecraft/build/neoforge-1.21.1-blaze/libs/*.jar | Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' }
+          if (-not $jars) { throw 'No release jar was built' }
+          $jars | ForEach-Object { Write-Host $_.Name }
+          $options = @('--title', "Overhaul $env:GITHUB_REF_NAME", '--generate-notes')
+          if ($env:GITHUB_REF_NAME -match '^v0\.') { $options += '--prerelease' }
+          gh release create $env:GITHUB_REF_NAME @($jars.FullName) @options
