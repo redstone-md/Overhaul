@@ -1,18 +1,20 @@
 package dev.overhaul.minecraft.blaze;
 
 /**
- * The compute shader that lights the finished world with ray queries. It rebuilds each pixel's camera-relative
- * position from depth and its normal from the neighbouring depths. A camera ray finds the terrain the pixel shows and
- * reads its baked light levels, so the terrain can be lit again: a coloured sun through a small disc of shadow rays
- * that translucent blocks thin rather than stop, a sky tinted ambient and warm block light, each measured against the
- * game's flat lighting. A few short rays add ambient occlusion and, on upward facing water, one reflected ray is shaded
- * from the hit triangle's own vertices and the block atlas. Cutout geometry is alpha tested against the atlas while
- * rays search. Global illumination sends one cosine weighted ray per pixel; what it meets passes on its own colour,
- * lit the same way, and each pixel's bounce blends into a history reprojected from the last frame, read through a
- * small filter so the noise settles within a few frames.
+ * The compute shaders that light the finished world with ray queries, in two passes over one source. The trace pass
+ * runs at half resolution: each of its pixels stands for a two by two block of the screen and takes a different one of
+ * the four each frame. It rebuilds that pixel's camera-relative position from depth and its normal from the
+ * neighbouring depths, and a camera ray finds the terrain the pixel shows and reads its baked light levels, so the
+ * terrain can be lit again: a coloured sun through shadow rays that translucent blocks thin rather than stop, a sky
+ * tinted ambient, warm block light and, with global illumination, one cosine weighted bounce off what lies around it,
+ * each measured against the game's flat lighting. The result is a factor on the pixel's colour; it blends into a
+ * history reprojected from the last frame, so a pixel with a history needs only a ray or two of each kind while a
+ * newly seen one traces more. The composite pass runs at full resolution: it reads the nearby factors whose distance
+ * matches its own, multiplies the colour by them and, where the trace marked water, glass or ice, adds one reflected
+ * ray lit the same way as a bounce. Cutout geometry is alpha tested against the atlas while rays search.
  */
 final class BlazeRayShader {
-    static final int SHADOWS = 1, AMBIENT_OCCLUSION = 2, REFLECTIONS = 4, MOVING_NOISE = 8, SHOW_LIGHT = 16, LIGHTING = 32, GLOBAL_ILLUMINATION = 64;
+    static final int SHADOWS = 1, AMBIENT_OCCLUSION = 2, REFLECTIONS = 4, SHOW_LIGHT = 16, LIGHTING = 32, GLOBAL_ILLUMINATION = 64;
     /** Floats the pass appends after the hit table: last frame's view projection, then the camera's motion and whether a history exists. */
     static final int TRAILER_FLOATS = 20;
     static final int PUSH_BYTES = 128;
@@ -29,7 +31,12 @@ final class BlazeRayShader {
             layout(binding = 3) uniform sampler2D atlas;
             layout(binding = 4, rgba8) writeonly uniform image2D lit;
             layout(binding = 5) uniform sampler2D history;
+            // Half resolution: the factor on colour, then the distance it was found at, negative where a reflection waits.
+            #ifdef COMPOSITE
+            layout(binding = 6, rgba16f) readonly uniform image2D accumulated;
+            #else
             layout(binding = 6, rgba16f) writeonly uniform image2D accumulated;
+            #endif
             layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words { uint w[]; };
             layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Table { uvec4 e[]; };
             // Last frame's view projection; motion: where the camera was relative to now, then 1 while a history exists.
@@ -91,6 +98,9 @@ final class BlazeRayShader {
                             rayQueryGetIntersectionPrimitiveIndexEXT(query, false), rayQueryGetIntersectionBarycentricsEXT(query, false)); \\
                     if (textureLod(atlas, candidate.uv, 0.0).a >= 0.1) rayQueryConfirmIntersectionEXT(query); }
 
+            #define COMMITTED(query) fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true), \\
+                    rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true))
+
             bool blocked(vec3 origin, vec3 direction, float far) {
                 rayQueryEXT query;
                 rayQueryInitializeEXT(query, scene, gl_RayFlagsTerminateOnFirstHitEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, far);
@@ -115,20 +125,19 @@ final class BlazeRayShader {
 
             // The share of the sun or moon a point sees: rays spread over a small disc around it, so a shadow
             // softens the farther it falls from what casts it.
-            float sunlight(vec3 origin, vec3 normal, float noise) {
-                const int RAYS = 4;
+            float sunlight(vec3 origin, vec3 normal, float noise, int rays) {
                 const float SPREAD = 0.035;
                 vec3 side = normalize(abs(light.y) < 0.9 ? cross(light.xyz, vec3(0.0, 1.0, 0.0)) : cross(light.xyz, vec3(1.0, 0.0, 0.0)));
                 vec3 other = cross(light.xyz, side);
                 float seen = 0.0;
-                for (int ray = 0; ray < RAYS; ray++) {
-                    float turn = (float(ray) + noise) * (6.2831853 / float(RAYS));
-                    float radius = SPREAD * sqrt((float(ray) + 0.5) / float(RAYS));
+                for (int ray = 0; ray < rays; ray++) {
+                    float turn = (float(ray) + noise) * (6.2831853 / float(rays));
+                    float radius = SPREAD * sqrt(fract(noise * 7.31 + (float(ray) + 0.5) / float(rays)));
                     vec3 direction = normalize(light.xyz + (side * cos(turn) + other * sin(turn)) * radius);
                     if (dot(normal, direction) <= 0.0 || blocked(origin, direction, 256.0)) continue;
                     seen += 1.0;
                 }
-                seen /= float(RAYS);
+                seen /= float(rays);
                 return seen > 0.0 ? seen * transmitted(origin, light.xyz, 256.0) : 0.0;
             }
 
@@ -141,9 +150,7 @@ final class BlazeRayShader {
                 SEARCH(query)
                 if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return false;
                 if (abs(rayQueryGetIntersectionTEXT(query, true) - distance) > 0.3 + distance * 0.004) return false;
-                Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
-                        rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
-                levels = clamp(surface.lightmap / 240.0, 0.0, 1.0);
+                levels = clamp(COMMITTED(query).lightmap / 240.0, 0.0, 1.0);
                 return true;
             }
 
@@ -164,16 +171,28 @@ final class BlazeRayShader {
             // How much brighter or darker, and in what colour, this light makes a pixel than the game's flat lighting:
             // the sun where rays reach it and the surface faces it, the sky through what occludes it, and blocks
             // in a warm tone.
-            vec3 relight(vec2 levels, vec3 origin, vec3 normal, float noise, float occluded, bool shadows) {
-                float daylight = sky.w;
+            vec3 relight(vec2 levels, vec3 origin, vec3 normal, float noise, float occluded, bool shadows, int rays) {
                 float open = levels.y * levels.y;
                 float direct = 0.0;
                 float facing = max(dot(normal, light.xyz), 0.0);
-                if (light.w > 0.0 && open > 0.0 && facing > 0.0) direct = light.w * open * facing * (shadows ? sunlight(origin, normal, noise) : 1.0);
-                vec3 ambient = mix(vec3(1.0), skyTint(), 0.4) * brightness(levels.y) * daylight * occluded;
+                if (light.w > 0.0 && open > 0.0 && facing > 0.0) direct = light.w * open * facing * (shadows ? sunlight(origin, normal, noise, rays) : 1.0);
+                vec3 ambient = mix(vec3(1.0), skyTint(), 0.4) * brightness(levels.y) * sky.w * occluded;
                 vec3 block = vec3(1.0, 0.8, 0.55) * brightness(levels.x) * mix(1.0, occluded, 0.5);
                 vec3 lit = sunColor() * 0.9 * direct + 0.55 * ambient + block;
                 return clamp((lit + 0.03) / plainLight(levels), vec3(0.2), vec3(1.6));
+            }
+
+            // What a secondary ray's hit sends back along it: its own colour lit by the sun where a shadow ray
+            // reaches it and by its sky and block light levels.
+            vec3 hitLight(Surface surface, vec3 origin, vec3 direction, float along) {
+                vec3 facing = dot(surface.normal, direction) > 0.0 ? -surface.normal : surface.normal;
+                vec3 point = origin + direction * along + facing * 0.03;
+                vec2 levels = clamp(surface.lightmap / 240.0, 0.0, 1.0);
+                float toSun = max(dot(facing, light.xyz), 0.0);
+                float sun = light.w > 0.0 && toSun > 0.0 && levels.y > 0.0 && !blocked(point, light.xyz, 128.0) ? light.w * toSun * levels.y * levels.y : 0.0;
+                vec3 incoming = sunColor() * 0.9 * sun + 0.55 * mix(vec3(1.0), skyTint(), 0.4) * brightness(levels.y) * sky.w
+                        + vec3(1.0, 0.8, 0.55) * brightness(levels.x);
+                return textureLod(atlas, surface.uv, 0.0).rgb * surface.color.rgb * incoming;
             }
 
             vec3 positionOf(ivec2 pixel) {
@@ -184,6 +203,86 @@ final class BlazeRayShader {
                 return position.xyz / position.w;
             }
 
+            float fadeAt(float distance) {
+                float reach = uintBitsToFloat(options.z);
+                return 1.0 - smoothstep(0.75 * reach, reach, distance);
+            }
+
+            // Whether the pixel shows nothing to light: the sky, or beyond the traced terrain.
+            bool unlit(ivec2 pixel, float distance) {
+                return texelFetch(sceneDepth, pixel, 0).r >= 1.0 || distance > uintBitsToFloat(options.z) || distance < 0.05;
+            }
+
+            // Whether the camera ray first meets water, glass or ice at the depth's distance: 1 for upward facing
+            // water, which takes its biome's tint, 2 for the untinted rest, with the surface's normal toward the camera.
+            int glazing(vec3 position, float distance, out vec3 normal) {
+                normal = vec3(0.0, 1.0, 0.0);
+                vec3 direction = position / distance;
+                rayQueryEXT query;
+                rayQueryInitializeEXT(query, scene, gl_RayFlagsOpaqueEXT, TRANSLUCENT, vec3(0.0), 0.0, direction, distance + 0.5);
+                while (rayQueryProceedEXT(query)) {}
+                if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return 0;
+                if (abs(rayQueryGetIntersectionTEXT(query, true) - distance) > 0.3 + distance * 0.004) return 0;
+                Surface surface = COMMITTED(query);
+                vec3 tint = surface.color.rgb;
+                if (max(tint.r, max(tint.g, tint.b)) - min(tint.r, min(tint.g, tint.b)) > 0.06)
+                    return abs(surface.normal.y) > 0.9 && direction.y < 0.0 ? 1 : 0;
+                normal = dot(surface.normal, direction) > 0.0 ? -surface.normal : surface.normal;
+                return 2;
+            }
+
+            #ifdef COMPOSITE
+            vec3 reflection(vec3 origin, vec3 direction) {
+                const float FAR = 96.0;
+                rayQueryEXT query;
+                rayQueryInitializeEXT(query, scene, gl_RayFlagsNoneEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, FAR);
+                SEARCH(query)
+                if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return sky.rgb;
+                float along = rayQueryGetIntersectionTEXT(query, true);
+                vec3 color = hitLight(COMMITTED(query), origin, direction, along) * 0.8;
+                return mix(color, sky.rgb, clamp(along / FAR, 0.0, 1.0));
+            }
+
+            void main() {
+                ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+                if (any(greaterThanEqual(uvec2(pixel), size.xy))) return;
+                vec4 color = texelFetch(sceneColor, pixel, 0);
+                vec3 position = positionOf(pixel);
+                float distance = length(position);
+                if (unlit(pixel, distance)) {
+                    imageStore(lit, pixel, color);
+                    return;
+                }
+                // The nearby half resolution factors, each weighed by how close it lies and how well its distance
+                // matches, so light does not bleed across an edge; with no match, the closest in distance.
+                ivec2 halfSize = ivec2((size.xy + 1u) / 2u), center = pixel / 2;
+                float tolerance = 0.05 + distance * 0.02, weight = 0.0, bestGap = 1e9;
+                vec3 sum = vec3(0.0);
+                vec4 best = vec4(1.0, 1.0, 1.0, 0.0);
+                for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+                    ivec2 at = clamp(center + ivec2(x, y), ivec2(0), halfSize - 1);
+                    vec4 tap = imageLoad(accumulated, at);
+                    if (tap.a == 0.0) continue;
+                    float gap = abs(abs(tap.a) - distance) / tolerance;
+                    vec2 offset = vec2(at * 2 + 1) - (vec2(pixel) + 0.5);
+                    float w = exp(-dot(offset, offset) * 0.25 - gap * gap);
+                    sum += tap.rgb * w;
+                    weight += w;
+                    if (gap < bestGap) { bestGap = gap; best = tap; }
+                }
+                vec3 factor = weight > 1e-4 ? sum / weight : best.rgb;
+                vec3 result = ((options.x & 16u) != 0u ? vec3(1.0 / 1.6) : color.rgb) * factor;
+                vec3 normal;
+                int kind = best.a < 0.0 ? glazing(position, distance, normal) : 0;
+                if (kind != 0) {
+                    vec3 view = position / distance;
+                    float base = kind == 1 ? 0.02 : 0.04;
+                    float fresnel = base + (1.0 - base) * pow(1.0 - clamp(-dot(view, normal), 0.0, 1.0), 5.0);
+                    result = mix(result, reflection(position + normal * 0.02, reflect(view, normal)), fresnel * fadeAt(distance));
+                }
+                imageStore(lit, pixel, vec4(result, color.a));
+            }
+            #else
             vec3 normalAt(ivec2 pixel, vec3 center) {
                 vec3 left = center - positionOf(pixel - ivec2(1, 0)), right = positionOf(pixel + ivec2(1, 0)) - center;
                 vec3 down = center - positionOf(pixel - ivec2(0, 1)), up = positionOf(pixel + ivec2(0, 1)) - center;
@@ -197,71 +296,38 @@ final class BlazeRayShader {
                 return normal;
             }
 
-            float noiseAt(vec2 pixel) {
-                if ((options.x & 8u) != 0u) pixel += 5.588238 * float(options.y & 63u);
+            // Interleaved gradient noise that moves every frame, so the history gathers new directions.
+            float noiseAt(vec2 pixel, uint salt) {
+                pixel += 5.588238 * float((options.y + salt * 17u) & 1023u);
                 return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
             }
 
-            float occlusion(vec3 origin, vec3 normal, float noise) {
+            vec3 hemisphere(vec3 normal, float turn, float spread) {
                 vec3 side = normalize(abs(normal.y) < 0.9 ? cross(normal, vec3(0.0, 1.0, 0.0)) : cross(normal, vec3(1.0, 0.0, 0.0)));
                 vec3 other = cross(normal, side);
-                const int RAYS = 8;
+                float radius = sqrt(spread);
+                return normalize((side * cos(turn) + other * sin(turn)) * radius + normal * sqrt(1.0 - spread));
+            }
+
+            float occlusion(vec3 origin, vec3 normal, float noise, int rays) {
                 int hits = 0;
-                for (int ray = 0; ray < RAYS; ray++) {
+                for (int ray = 0; ray < rays; ray++) {
                     float turn = fract(noise + float(ray) * 0.618034) * 6.2831853;
-                    float spread = (float(ray) + fract(noise * 7.31)) / float(RAYS);
-                    float radius = sqrt(spread);
-                    vec3 direction = side * cos(turn) * radius + other * sin(turn) * radius + normal * sqrt(1.0 - spread);
-                    if (blocked(origin, direction, 1.5)) hits++;
+                    if (blocked(origin, hemisphere(normal, turn, (float(ray) + fract(noise * 7.31)) / float(rays)), 1.5)) hits++;
                 }
-                return 1.0 - 0.35 * float(hits) / float(RAYS);
+                return 1.0 - 0.35 * float(hits) / float(rays);
             }
 
-            float faceShade(vec3 normal) {
-                vec3 axes = abs(normal);
-                if (axes.y >= axes.x && axes.y >= axes.z) return normal.y > 0.0 ? 1.0 : 0.5;
-                return axes.x > axes.z ? 0.6 : 0.8;
-            }
-
-            vec3 reflection(vec3 origin, vec3 direction) {
-                const float FAR = 96.0;
-                rayQueryEXT query;
-                rayQueryInitializeEXT(query, scene, gl_RayFlagsNoneEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, FAR);
-                SEARCH(query)
-                if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return sky.rgb;
-                Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
-                        rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
-                vec3 normal = dot(surface.normal, direction) > 0.0 ? -surface.normal : surface.normal;
-                float brightness = max(max(surface.lightmap.x, surface.lightmap.y * sky.w) / 240.0, 0.05);
-                vec3 color = textureLod(atlas, surface.uv, 0.0).rgb * surface.color.rgb * faceShade(normal) * brightness;
-                float distance = rayQueryGetIntersectionTEXT(query, true);
-                return mix(color, sky.rgb, clamp(distance / FAR, 0.0, 1.0));
-            }
-
-            // One bounce: a cosine weighted ray leaves the surface, and what it meets passes on its own colour, lit by the
-            // sun where a shadow ray reaches it and by its sky and block light levels. A miss adds nothing, since the
-            // sky's own light already arrives through the sky light level.
+            // One bounce: a cosine weighted ray leaves the surface and what it meets passes on its light. A miss adds
+            // nothing, since the sky's own light already arrives through the sky light level.
             vec3 bounce(vec3 origin, vec3 normal, vec2 noise) {
                 const float FAR = 24.0;
-                vec3 side = normalize(abs(normal.y) < 0.9 ? cross(normal, vec3(0.0, 1.0, 0.0)) : cross(normal, vec3(1.0, 0.0, 0.0)));
-                vec3 other = cross(normal, side);
-                float turn = noise.x * 6.2831853, radius = sqrt(noise.y);
-                vec3 direction = normalize((side * cos(turn) + other * sin(turn)) * radius + normal * sqrt(1.0 - noise.y));
+                vec3 direction = hemisphere(normal, noise.x * 6.2831853, noise.y);
                 rayQueryEXT query;
                 rayQueryInitializeEXT(query, scene, gl_RayFlagsNoneEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, FAR);
                 SEARCH(query)
                 if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return vec3(0.0);
-                Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
-                        rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
-                vec3 facing = dot(surface.normal, direction) > 0.0 ? -surface.normal : surface.normal;
-                vec3 point = origin + direction * rayQueryGetIntersectionTEXT(query, true) + facing * 0.03;
-                vec2 levels = clamp(surface.lightmap / 240.0, 0.0, 1.0);
-                float toSun = max(dot(facing, light.xyz), 0.0);
-                float sun = light.w > 0.0 && toSun > 0.0 && levels.y > 0.0 && !blocked(point, light.xyz, 128.0) ? light.w * toSun * levels.y * levels.y : 0.0;
-                vec3 incoming = sunColor() * 0.9 * sun + 0.55 * mix(vec3(1.0), skyTint(), 0.4) * brightness(levels.y) * sky.w
-                        + vec3(1.0, 0.8, 0.55) * brightness(levels.x);
-                vec3 albedo = textureLod(atlas, surface.uv, 0.0).rgb * surface.color.rgb;
-                return min(albedo * incoming, vec3(4.0));
+                return min(hitLight(COMMITTED(query), origin, direction, rayQueryGetIntersectionTEXT(query, true)), vec3(4.0));
             }
 
             Previous previous() {
@@ -269,94 +335,70 @@ final class BlazeRayShader {
                 return Previous(uvec2(low, size.w + (low < size.z ? 1u : 0u)));
             }
 
-            // Blends this frame's bounce into last frame's, found where the surface was then and read through five taps
-            // whose distance must match, so history from another surface is left out. The result becomes next frame's
-            // history, with the distance it was found at.
-            vec3 accumulate(ivec2 pixel, vec3 position, vec3 raw) {
+            // Last frame's factor where this surface was then, read through five taps whose distance must match, so
+            // history from another surface is left out; the alpha is 1 when one was found.
+            vec4 recall(vec3 position) {
                 Previous before = previous();
                 vec3 then = position + before.motion.xyz;
                 float expected = length(then);
-                vec3 result = raw;
                 vec4 clip = before.viewProjection * vec4(then, 1.0);
-                if (before.motion.w > 0.5 && clip.w > 0.0) {
-                    vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
-                    if (all(greaterThan(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)))) {
-                        const vec2 TAPS[5] = vec2[](vec2(0.0), vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0));
-                        vec2 texel = 1.0 / vec2(size.xy);
-                        vec3 sum = vec3(0.0);
-                        float weight = 0.0;
-                        for (int tap = 0; tap < 5; tap++) {
-                            vec4 old = textureLod(history, uv + TAPS[tap] * texel, 0.0);
-                            float w = abs(old.a - expected) < 0.1 + expected * 0.03 ? (tap == 0 ? 2.0 : 1.0) : 0.0;
-                            sum += old.rgb * w;
-                            weight += w;
-                        }
-                        if (weight > 0.0) result = mix(sum / weight, raw, 0.1);
-                    }
+                if (before.motion.w < 0.5 || clip.w <= 0.0) return vec4(0.0);
+                vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+                if (any(lessThanEqual(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) return vec4(0.0);
+                const vec2 TAPS[5] = vec2[](vec2(0.0), vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0));
+                vec2 texel = 1.0 / vec2((size.xy + 1u) / 2u);
+                vec3 sum = vec3(0.0);
+                float weight = 0.0;
+                for (int tap = 0; tap < 5; tap++) {
+                    vec4 old = textureLod(history, uv + TAPS[tap] * texel * 0.5, 0.0);
+                    float w = old.a != 0.0 && abs(abs(old.a) - expected) < 0.1 + expected * 0.03 ? (tap == 0 ? 2.0 : 1.0) : 0.0;
+                    sum += old.rgb * w;
+                    weight += w;
                 }
-                imageStore(accumulated, pixel, vec4(result, length(position)));
-                return result;
-            }
-
-            // Whether the camera ray first meets an upward facing water surface at the depth's distance.
-            bool water(vec3 position, float distance) {
-                vec3 direction = position / distance;
-                rayQueryEXT query;
-                rayQueryInitializeEXT(query, scene, gl_RayFlagsOpaqueEXT, TRANSLUCENT, vec3(0.0), 0.0, direction, distance + 0.5);
-                while (rayQueryProceedEXT(query)) {}
-                if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionNoneEXT) return false;
-                if (abs(rayQueryGetIntersectionTEXT(query, true) - distance) > 0.3 + distance * 0.004) return false;
-                Surface surface = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, true),
-                        rayQueryGetIntersectionPrimitiveIndexEXT(query, true), rayQueryGetIntersectionBarycentricsEXT(query, true));
-                // Water takes its biome's tint; glass, ice and slime keep a grey vertex colour, darkened only by baked
-                // shading, and are not mirrors.
-                vec3 tint = surface.color.rgb;
-                bool tinted = max(tint.r, max(tint.g, tint.b)) - min(tint.r, min(tint.g, tint.b)) > 0.06;
-                return tinted && abs(surface.normal.y) > 0.9 && direction.y < 0.0;
+                return weight > 0.0 ? vec4(sum / weight, 1.0) : vec4(0.0);
             }
 
             void main() {
-                ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-                if (any(greaterThanEqual(uvec2(pixel), size.xy))) return;
-                vec4 color = texelFetch(sceneColor, pixel, 0);
-                float depth = texelFetch(sceneDepth, pixel, 0).r;
-                float reach = uintBitsToFloat(options.z);
+                ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
+                if (any(greaterThanEqual(uvec2(cell), (size.xy + 1u) / 2u))) return;
+                const ivec2 JITTER[4] = ivec2[](ivec2(0, 0), ivec2(1, 1), ivec2(1, 0), ivec2(0, 1));
+                ivec2 pixel = min(cell * 2 + JITTER[options.y & 3u], ivec2(size.xy) - 1);
                 vec3 position = positionOf(pixel);
                 float distance = length(position);
-                if (depth >= 1.0 || distance > reach || distance < 0.05) {
-                    imageStore(accumulated, pixel, vec4(0.0, 0.0, 0.0, -1.0));
-                    imageStore(lit, pixel, color);
+                if (unlit(pixel, distance)) {
+                    imageStore(accumulated, cell, vec4(1.0, 1.0, 1.0, 0.0));
                     return;
                 }
                 vec3 normal = normalAt(pixel, position);
-                float fade = 1.0 - smoothstep(0.75 * reach, reach, distance);
+                float fade = fadeAt(distance);
                 vec3 origin = position + normal * (0.03 + distance * 0.002);
-                float noise = noiseAt(vec2(pixel));
+                float noise = noiseAt(vec2(pixel), 0u);
+                vec4 before = recall(position);
+                // A pixel with a history averages over frames; a newly seen one has only this frame to go on.
+                bool settled = before.a > 0.0;
+                int rays = settled ? 1 : 4;
                 bool shadows = (options.x & 1u) != 0u;
-                float occluded = (options.x & 2u) != 0u ? occlusion(origin, normal, noise) : 1.0;
+                float occluded = (options.x & 2u) != 0u ? occlusion(origin, normal, noise, rays * 2) : 1.0;
                 vec2 levels;
                 vec3 shade;
                 bool terrain = (options.x & 96u) != 0u && terrainLight(position, distance, levels);
-                if ((options.x & 32u) != 0u && terrain) shade = relight(levels, origin, normal, noise, occluded, shadows);
-                else shade = vec3(occluded * (shadows && light.w > 0.0 ? 1.0 - 0.6 * light.w * (1.0 - sunlight(origin, normal, noise)) : 1.0));
-                vec3 result = (options.x & 16u) != 0u ? shade / 1.6 : color.rgb * mix(vec3(1.0), shade, fade);
+                if ((options.x & 32u) != 0u && terrain) shade = relight(levels, origin, normal, noise, occluded, shadows, rays);
+                else shade = vec3(occluded * (shadows && light.w > 0.0 ? 1.0 - 0.6 * light.w * (1.0 - sunlight(origin, normal, noise, rays)) : 1.0));
+                vec3 factor = mix(vec3(1.0), shade, fade);
                 if ((options.x & 64u) != 0u && terrain) {
-                    // The bounce's own noise moves every frame, so the history gathers new directions.
-                    vec2 moving = vec2(pixel) + 5.588238 * float(options.y & 1023u);
-                    float first = fract(52.9829189 * fract(dot(moving, vec2(0.06711056, 0.00583715))));
-                    float second = fract(first * 7.31 + 0.5 + 0.618034 * float(options.y & 255u));
-                    vec3 gi = accumulate(pixel, position, bounce(origin, normal, vec2(first, second)));
-                    vec3 albedo = (options.x & 16u) != 0u ? vec3(0.5 / 1.6) : min(color.rgb / plainLight(levels), vec3(1.5));
-                    result += albedo * gi * 0.6 * fade;
-                } else imageStore(accumulated, pixel, vec4(0.0, 0.0, 0.0, -1.0));
-                if ((options.x & 4u) != 0u && water(position, distance)) {
-                    vec3 view = position / distance;
-                    vec3 bounce = reflect(view, vec3(0.0, 1.0, 0.0));
-                    float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(-view.y, 0.0, 1.0), 5.0);
-                    result = mix(result, reflection(position + vec3(0.0, 0.02, 0.0), bounce), fresnel * fade);
+                    int bounces = settled ? 1 : 2;
+                    vec3 gathered = vec3(0.0);
+                    for (int ray = 0; ray < bounces; ray++)
+                        gathered += bounce(origin, normal, vec2(noiseAt(vec2(pixel), 1u + uint(ray)), noiseAt(vec2(pixel.yx), 3u + uint(ray))));
+                    factor += gathered / float(bounces) * (0.6 * fade / plainLight(levels));
                 }
-                imageStore(lit, pixel, vec4(result, color.a));
+                factor = min(factor, vec3(3.0));
+                if (settled) factor = mix(before.rgb, factor, 0.1);
+                vec3 facing;
+                bool glazed = (options.x & 4u) != 0u && glazing(position, distance, facing) != 0;
+                imageStore(accumulated, cell, vec4(factor, glazed ? -distance : distance));
             }
+            #endif
             """;
 
     private BlazeRayShader() {}

@@ -19,10 +19,11 @@ import static org.lwjgl.vulkan.KHRAccelerationStructure.VK_DESCRIPTOR_TYPE_ACCEL
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
- * Runs {@link BlazeRayShader} over a finished world target: it reads the target's colour and depth, writes the lit
- * picture to an image of its own, since colour targets cannot be written as storage, and copies that back over the
- * colour. Two bounce histories take turns, one read as last frame's and one written as this frame's. The pipeline
- * lives as long as the renderer; the output and histories follow the target's size.
+ * Runs {@link BlazeRayShader} over a finished world target in two dispatches: the trace at half resolution into one
+ * of two histories, which take turns as last frame's and this frame's, then the composite at full resolution, which
+ * reads the target's colour and depth with that history and writes the lit picture to an image of its own, since
+ * colour targets cannot be written as storage, before it is copied back over the colour. The pipelines live as long as
+ * the renderer; the output and histories follow the target's size.
  */
 final class BlazeRayPass implements AutoCloseable {
     private static final int BINDINGS = 7;
@@ -30,7 +31,7 @@ final class BlazeRayPass implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
     private final GpuSampler sampler, historySampler;
-    private long setLayout, pipelineLayout, pipeline;
+    private long setLayout, pipelineLayout, pipeline, composite;
     private GpuImage output;
     private GpuImageView outputView;
     private final GpuImage[] histories = new GpuImage[2];
@@ -74,14 +75,23 @@ final class BlazeRayPass implements AutoCloseable {
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "ray pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile("overhaul_ray_light", BlazeRayShader.SOURCE, ShaderStage.COMPUTE).directBuffer();
+            pipeline = pipeline(compiler, "overhaul_ray_trace", BlazeRayShader.SOURCE);
+            composite = pipeline(compiler, "overhaul_ray_composite", BlazeRayShader.SOURCE.replaceFirst("#version 460\n", "#version 460\n#define COMPOSITE\n"));
+        }
+    }
+
+    private long pipeline(ShadercCompiler compiler, String name, String source) {
+        VkDevice device = context.device();
+        try (MemoryStack stack = VulkanStack.push()) {
+            var pointer = stack.mallocLong(1);
+            var code = compiler.compile(name, source, ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "ray module");
             long module = pointer.get(0);
             try {
                 var info = VkComputePipelineCreateInfo.calloc(1, stack).sType$Default().layout(pipelineLayout);
                 info.stage().sType$Default().stage(VK_SHADER_STAGE_COMPUTE_BIT).module(module).pName(stack.UTF8("main"));
                 BlazeFsr2Pipelines.check(vkCreateComputePipelines(device, VK_NULL_HANDLE, info, null, pointer), "ray pipeline");
-                pipeline = pointer.get(0);
+                return pointer.get(0);
             } finally {
                 vkDestroyShaderModule(device, module, null);
             }
@@ -128,7 +138,8 @@ final class BlazeRayPass implements AutoCloseable {
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         outputView = output.view(0, 1, 0, 1);
         for (int i = 0; i < 2; i++) {
-            histories[i] = owner.allocator().createImage(ImageFormat.RGBA16_SFLOAT, width, height, 1, 1, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            histories[i] = owner.allocator().createImage(ImageFormat.RGBA16_SFLOAT, (width + 1) / 2, (height + 1) / 2, 1, 1,
+                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
             historyViews[i] = histories[i].view(0, 1, 0, 1);
         }
     }
@@ -242,9 +253,14 @@ final class BlazeRayPass implements AutoCloseable {
                 for (int i = 0; i < 4; i++) push.putFloat(64 + i * 4, lighting.light()[i]).putFloat(80 + i * 4, lighting.sky()[i]);
                 push.putInt(96, width).putInt(100, height).putLong(104, scene.table());
                 push.putInt(112, lighting.flags()).putInt(116, lighting.frame()).putFloat(120, lighting.distance()).putInt(124, scene.instances());
-                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(binding.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
+                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+                vkCmdDispatch(command, ((width + 1) / 2 + 7) / 8, ((height + 1) / 2 + 7) / 8, 1);
+                // The composite reads what the trace just wrote.
+                var written = VkMemoryBarrier.calloc(1, stack).sType$Default().srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT).dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
+                vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, written, null, null);
+                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, composite);
                 vkCmdDispatch(command, (width + 7) / 8, (height + 7) / 8, 1);
             }
         }
@@ -269,9 +285,10 @@ final class BlazeRayPass implements AutoCloseable {
         output = null;
         VkDevice device = context.device();
         if (pipeline != 0) vkDestroyPipeline(device, pipeline, null);
+        if (composite != 0) vkDestroyPipeline(device, composite, null);
         if (pipelineLayout != 0) vkDestroyPipelineLayout(device, pipelineLayout, null);
         if (setLayout != 0) vkDestroyDescriptorSetLayout(device, setLayout, null);
-        pipeline = pipelineLayout = setLayout = 0;
+        pipeline = composite = pipelineLayout = setLayout = 0;
         sampler.close();
         historySampler.close();
     }

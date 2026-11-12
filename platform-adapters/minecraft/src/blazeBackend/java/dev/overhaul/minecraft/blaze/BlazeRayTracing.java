@@ -19,6 +19,8 @@ public final class BlazeRayTracing {
     private static final BlazeRayTracing INSTANCE = new BlazeRayTracing();
     /** Shows only the traced light, grey on white, to check shadows and occlusion by eye. */
     private static final boolean SHOW_LIGHT = Boolean.getBoolean("overhaul.dev.rtShowLight");
+    /** Lets a measurement in the running game compare frames with and without tracing; no setting reads it. */
+    public static volatile boolean paused;
 
     private BlazeRenderer owner;
     private BlazeRayScene scene;
@@ -37,7 +39,7 @@ public final class BlazeRayTracing {
 
     /** Lights the world just drawn into the main target, with the camera matrices it was drawn with. */
     public void worldDrawn(Minecraft client, ViewArea area, Camera camera, float partialTick, Matrix4f view, Matrix4f projection) {
-        if (!BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
+        if (paused || !BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
         int flags = (BlazeOptimization.RT_SHADOWS.on() ? BlazeRayShader.SHADOWS : 0) | (BlazeOptimization.RT_AO.on() ? BlazeRayShader.AMBIENT_OCCLUSION : 0)
                 | (BlazeOptimization.RT_LIGHTING.on() ? BlazeRayShader.LIGHTING : 0)
                 | (BlazeOptimization.RT_GI.on() ? BlazeRayShader.GLOBAL_ILLUMINATION : 0)
@@ -75,7 +77,6 @@ public final class BlazeRayTracing {
             float[] trailer = pass.trailer(target, viewProjection, position.x, position.y, position.z);
             BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance, trailer);
             if (traced == null) return;
-            if (BlazeUpscale.get().describe() != null) flags |= BlazeRayShader.MOVING_NOISE;
             if (SHOW_LIGHT) flags |= BlazeRayShader.SHOW_LIGHT;
             var lighting = new BlazeRayPass.Lighting(viewProjection.invert(new Matrix4f()), light(world, partialTick),
                     sky(world, position, partialTick), flags, frame++, distance);
