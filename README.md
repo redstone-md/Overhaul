@@ -1,139 +1,109 @@
-# overhaul
+# Overhaul
 
-A modular Vulkan rendering and world-processing overhaul for Minecraft.
+Overhaul is a Vulkan renderer for Minecraft. It replaces the game's OpenGL
+renderer with its own Vulkan device, adds ray traced lighting and upscaling, and
+gives the game a new video settings screen.
 
-Development is underway. An opt-in Fabric 26.3 build now runs the actual game
-window through Overhaul's Vulkan backend, with GUI and disposable-world evidence.
-See [roadmap.md](roadmap.md) for the remaining scene, shader-pack, version and
-performance acceptance gates. Production support and full parity are not established.
+> **Alpha.** This is an early release. Expect rendering bugs and mod conflicts,
+> and keep backups of your worlds.
 
-The engine separates immutable world processing, explicit native resource
-ownership, shader translation and loader-specific adapters. Legacy and modern
-runtime dependencies are isolated rather than bundled into one incompatible jar.
+## Features
 
-## Build and verify
+- **Native Vulkan renderer.** Overhaul talks to Vulkan directly. It does not
+  translate OpenGL calls, so it is not a Zink-style layer.
+- **Ray traced lighting** on GPUs with Vulkan ray queries:
+  - sun shadows;
+  - reflections on water, glass and ice;
+  - one-bounce global illumination, traced at half resolution and accumulated
+    over frames.
+- **Upscaling and anti-aliasing:**
+  - NVIDIA DLSS (via Streamline) on RTX GPUs;
+  - AMD FSR 2 on any GPU;
+  - FXAA and contrast-adaptive sharpening.
+- **Shader packs** in the Iris/OptiFine format, such as BSL and Complementary.
+  You can turn them on or off without restarting.
+- **Performance overlay** for FPS, frame time, 1% lows, a frame graph and GPU
+  time. It is toggled with F10 by default, and its contents and position can be
+  changed.
+- **Built-in benchmark.** It creates a world from a fixed seed, so every machine
+  measures the same land, charts the result and then deletes the world.
+- **Every optimisation can be switched off** from the settings screen, so you can
+  find out which one causes a problem.
 
-Use JDK 25 to run the pinned Gradle wrapper. Engine modules produce Java 8 or
-Java 17 bytecode as appropriate; loader targets have their own runtime requirements.
+All options are under **Options → Video Settings**, which opens the Overhaul
+screen. Its pages are Quality, Video, Upscaling, Optimization, Overlay and Shader
+Packs, and changes apply while you play.
 
-```powershell
-$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-25.0.3.9-hotspot'
-.\gradlew.bat build
-.\gradlew.bat :integration-tests:nativeTest
-.\gradlew.bat :vulkan-backend:sdlVulkanSmoke
-.\gradlew.bat :vulkan-backend:vulkanSmoke --args="--present --output build/verification/triangle.ppm"
-```
+## Performance
 
-`build` runs CPU and shader-compiler tests. `nativeTest` requires a working Vulkan
-1.1 device and fails if one is unavailable. It renders real worker-built geometry
-and executes image dependencies through Vulkan. The PNG result is written to
-`integration-tests/build/verification/chunk-vulkan.png`.
+These are rough numbers from one machine, not a promise:
 
-`vulkanSmoke` verifies device-local staging, indirect draws, asynchronous frame
-reuse, instancing, resource retirement and optional hidden-window presentation.
-`--validation` additionally requires installed Khronos validation layers and fails
-explicitly when they are absent. These tests do not establish in-game parity or
-performance improvements over Minecraft.
+- The test was a NeoForge 1.21.1 pack with 332 mods and Distant Horizons.
+- With Overhaul, the scene averaged about **385 FPS**.
+- The same scene averaged about **57 FPS** on the vanilla renderer.
+- Ray tracing and shader packs cost frames, as they do in any renderer.
 
-The Gradle tasks configure LWJGL's native stack to 1024 KiB and enable native
-access for JDK 25. Standalone applications using the engine need the same settings
-before loading LWJGL: `-Dorg.lwjgl.system.stackSize=1024` and
-`--enable-native-access=ALL-UNNAMED`.
+## Requirements
 
-## Current engine
+- Minecraft **1.21.1** with **NeoForge 21.1.x**.
+- Windows x64.
+- A GPU and driver with **Vulkan 1.2**.
+- For ray tracing: Vulkan ray query support, such as NVIDIA RTX 20 series or
+  newer, or AMD RX 6000 series or newer.
+- For DLSS: an NVIDIA RTX GPU.
 
-- Immutable palette-packed sections and pooled off-heap packet/geometry storage.
-- Bounded workers for decoding, generation callbacks, emissive lighting and greedy
-  opaque-cube meshing, with revision gates and cancellation cleanup.
-- Conservative frustum/software-depth culling, spatial queries and tick budgets.
-- VMA staging, camera descriptors, depth-tested indexed indirect rendering,
-  instanced batches, fence-backed frame rings and swapchain recreation.
-- Shader-pack source/include handling, explicit GLSL compatibility lowering,
-  SPIR-V compilation, uniform layouts and versioned render-graph planning.
-- Real Vulkan draws of pinned Iris example programs with texture, uniform,
-  coordinate-conversion and blending checks.
-- Native graph image allocation and transitions with explicit pass callbacks.
-- Pooled baked-model vertices with real atlas/lightmap sampling, cutout discard
-  and translucent sorting that uploads only changed translucent indices.
+**Do not install Sodium, Embeddium, Iris or Oculus alongside Overhaul.** It
+replaces the renderer they patch, and they will conflict.
 
-The cube mesher is separate from the new baked-model path. A Fabric 26.3
-development smoke captures actual baked geometry, final tint/AO, atlas and
-lightmap, then draws those assets through Vulkan on a worker. See the
-[captured result](docs/evidence/world-model-2026-11-03.png). Its extraction still
-uses Minecraft's tessellator. That model-only smoke leaves the game window on its
-normal backend; the separate backend build below selects Overhaul itself.
-Emissive lighting is not the vanilla
-skylight/lighting engine. The deferred graph still needs actual scene lighting,
-shadow and post-processing passes. Shader-pack support remains a defined subset.
-Direct slabs are reusable within their fixed budget; the JVM reclaims the pool's
-backing direct memory after collection.
+## Install
 
-Loader builds are isolated under `platform-adapters/minecraft`; normal artifacts
-retain their diagnostic behavior. The experimental native backend is selected
-explicitly and currently targets Fabric 26.3 only.
-All 11 pinned loader builds pass; see [validation evidence](docs/VALIDATION.md)
-and the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact limits.
+1. Download `overhaul-neoforge-1.21.1-blaze-client-windows-<version>.jar` from
+   [Releases](https://github.com/redstone-md/Overhaul/releases).
+2. Put the jar in your instance's `mods` folder.
+3. Start the game.
+4. Open **Options → Video Settings** to set it up.
 
-To reproduce the isolated live-world model check:
+## Building
+
+Builds need JDK 25. The Gradle wrapper downloads everything else.
 
 ```powershell
-.\gradlew.bat :vulkan-backend:jar :shader-pipeline:jar
-.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PworldSmoke -PmodelSmoke verifyWorldSmoke --no-configuration-cache
+.\gradlew.bat -p platform-adapters/minecraft "-Ptarget=neoforge-1.21.1" -PblazeBackend "-PloaderVersionOverride=21.1.265" assemble
 ```
 
-It creates a uniquely named development world inside this workspace, verifies
-server-to-client block fixtures, renders their captured assets, then saves and
-disconnects normally. Development drivers use separate build directories and are
-excluded from normal loader jars. The optional `-sdl34.jar` surface adapter is
-packaged separately and requires a runtime with matching LWJGL 3.4.3 bindings.
+The jar is written to `platform-adapters/minecraft/build/neoforge-1.21.1-blaze/libs/`.
 
-To verify the actual game backend:
+DLSS support is only included when you pass a path to an extracted
+[NVIDIA Streamline SDK](https://github.com/NVIDIA-RTX/Streamline/releases) with
+`-PstreamlineSdk=<dir>`. Without it the build still works, but the DLSS option
+stays unavailable. Release builds use Streamline v2.14.16; see
+[`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-```powershell
-.\gradlew.bat :vulkan-backend:assemble :shader-pipeline:jar
-.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend build backendNativeTest --no-configuration-cache
-.\gradlew.bat -p platform-adapters/minecraft '-Ptarget=fabric-26.3' -PoverhaulBackend -PworldSmoke verifyWorldSmoke verifyBackendSmoke --no-configuration-cache
-```
+Releases are built automatically when a `v*` tag is pushed.
 
-The [world frame](docs/evidence/backend-terrain-reloaded-2026-11-03.png) includes terrain,
-clouds, the player hand, HUD, edited boundary blocks, fluid basins and a chest. Its GPU source
-image is saved with the presentation Y flip applied. Overhaul owns the native
-device, resources, pipelines, commands and SDL swapchain; Minecraft's shared
-frontend supplies shader compilation and validation. No vanilla graphics backend
-acts as fallback. The adapter now batches ordered commands over three fenced
-slots, stages GPU buffer writes, and synchronizes overlapping mappings and slot
-reuse. Transient arenas also rotate over three frames. Unmappable buffers use
-device-preferred allocations with staged initial data; mapped buffers retain host
-access. Bounded caches reuse retired descriptors and framebuffers. FPS/frame-time
-improvements have not been measured. Run adapter builds and
-clients serially because Gradle can clean a previous variant's class output.
+## Repository layout
 
-The opt-in 26.3 build also replaces ordinary section compilation: owned workers
-stream all model layers and fluids through bounded vertex pages into the game's
-normal terrain upload/draw path. The live check verifies edits after received
-client states and resource reload. Shared game tessellation/light/tint queries
-remain a compatibility boundary; fully frozen inputs and broader parity remain
-open. See [terrain integration](docs/TERRAIN_INTEGRATION.md).
+| Path | Contents |
+| --- | --- |
+| `vulkan-backend/` | Vulkan device, memory, swapchain and command code |
+| `shader-pipeline/` | Shader pack parsing, GLSL lowering and SPIR-V compilation |
+| `core-common/` | Loader-independent world processing and shared engine code |
+| `platform-adapters/minecraft/` | Loader adapters; the NeoForge renderer is in `src/blazeBackend` |
+| `docs/` | Architecture notes and validation records |
 
-Ordinary terrain draw groups now use mesh-owned certified faces for bounded
-software occlusion. The live smoke checks hiding behind a wall and restoration
-after opening geometry or moving the camera. Unknown shader/mod semantics disable
-the filter. Accepted native counters also verify indirect instanced terrain
-batches. See [occlusion integration](docs/OCCLUSION_INTEGRATION.md); controlled
-performance comparisons and broader compatibility remain open.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [roadmap.md](roadmap.md)
+for more detail.
 
-The ordinary quad-particle feature path now uploads 56-byte instance records and
-executes indexed indirect instanced draws. Native pixels match the game's expanded
-quads; live flame/end-rod scenes pass in normal mode, improved transparency and
-after resource reload. See [particle integration](docs/PARTICLE_INTEGRATION.md).
+## License
 
-Ordinary rain and snow also use indexed indirect instancing with 48-byte column
-records. The particle and weather paths share owned rendering helpers. See
-[weather integration](docs/WEATHER_INTEGRATION.md) for data, lifecycle and live
-pixel-verification boundaries.
+Overhaul is licensed under the [GNU General Public License v3.0](LICENSE).
 
-The pinned 26.3 adapters also use range seeks for sparse entity section queries
-on the existing index, with original traversal for short/dense workloads. Live server
-checks preserve ordered results across movement, removal and tracking changes.
-See [entity query integration](docs/ENTITY_QUERY_INTEGRATION.md) and its measured
-performance boundaries.
+Release jars also include third-party components under their own licenses:
+
+- **AMD FidelityFX FSR 2** (MIT). Its license is in
+  `overhaul/fsr2/LICENSE.txt` inside the jar.
+- **NVIDIA Streamline and DLSS.** Their license texts are in
+  `overhaul/streamline/` inside the jar. NVIDIA, RTX and DLSS are trademarks of
+  NVIDIA Corporation.
+
+Overhaul is not affiliated with Mojang, Microsoft, NVIDIA or AMD.
