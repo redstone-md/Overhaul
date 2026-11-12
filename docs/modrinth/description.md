@@ -34,7 +34,7 @@ Ray tracing and shader packs lower these numbers, as in any renderer.
 
 <img src="https://raw.githubusercontent.com/redstone-md/Overhaul/main/docs/assets/modrinth/title-requirements.png" alt="Requirements" width="100%">
 
-- Minecraft **1.21.1** with **NeoForge 21.1.x**, on Windows x64.
+- For now: Minecraft **1.21.1** with **NeoForge 21.1.x**, on Windows x64.
 - A GPU and driver with **Vulkan 1.2**.
 - Ray tracing: NVIDIA RTX 20 series or newer, or AMD RX 6000 series or newer.
 - DLSS: an NVIDIA RTX GPU.
@@ -49,7 +49,7 @@ Ray tracing and shader packs lower these numbers, as in any renderer.
 
 <img src="https://raw.githubusercontent.com/redstone-md/Overhaul/main/docs/assets/modrinth/title-faq.png" alt="FAQ" width="100%">
 
-**Does it work with Fabric?** Not yet. This release is for NeoForge 1.21.1.
+**Does it work with Fabric or other Minecraft versions?** Not yet. The first build is for NeoForge 1.21.1. More Minecraft versions and loaders, Fabric and Forge among them, are planned.
 
 **Do I need it on the server?** No. Overhaul is client-side only.
 
