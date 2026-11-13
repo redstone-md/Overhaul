@@ -12,6 +12,39 @@ public final class BlazeEarlyWindow {
 
     private BlazeEarlyWindow() {}
 
+    /** Thirty frames a second is plenty for a plain colour and leaves the loading threads the CPU. */
+    private static final long FRAME_NANOS = 33_000_000L;
+    private static long lastFrame;
+    private static boolean paintFailed;
+
+    /**
+     * The early screen's tick while mods load: pump events and keep the window filled with the loading screen's
+     * background, which an unpainted window would otherwise show as white.
+     */
+    public static void tick() {
+        GLFW.glfwPollEvents();
+        long now = System.nanoTime();
+        if (now - lastFrame < FRAME_NANOS) return;
+        lastFrame = now;
+        var renderer = BlazeFrontend.current();
+        if (renderer == null || paintFailed) return;
+        try {
+            int color = background();
+            renderer.presentSolid((color >> 16 & 0xFF) / 255f, (color >> 8 & 0xFF) / 255f, (color & 0xFF) / 255f);
+        } catch (RuntimeException failure) {
+            // A plain colour is cosmetic: a window left unpainted beats a failed start.
+            paintFailed = true;
+            org.slf4j.LoggerFactory.getLogger(BlazeEarlyWindow.class).warn("Overhaul stopped painting the window while mods load", failure);
+        }
+    }
+
+    /** The colour LoadingOverlay draws next: Mojang red, or black with the dark background option. */
+    private static int background() {
+        var client = net.minecraft.client.Minecraft.getInstance();
+        var options = client == null ? null : client.options;
+        return options != null && options.darkMojangStudiosBackground().get() ? 0x000000 : 0xEF323D;
+    }
+
     public static boolean replaced() {
         return replaced;
     }
