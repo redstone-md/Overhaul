@@ -149,12 +149,18 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         String name = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         if (name.equals("MouseGrabBlazeMixin")) return Boolean.getBoolean("overhaul.dev.noGrab");
         // Vanilla targets: without Sable these wrappers would only add a boxed call to every particle move or rain column.
-        if (name.contains("Sable") && BlazeMixinPlugin.class.getClassLoader().getResource("dev/ryanhcode/sable/Sable.class") == null) return false;
-        if (name.startsWith("Atmosphere") && BlazeMixinPlugin.class.getClassLoader().getResource("com/possible_triangle/atmosphere/impl/ServerLevelWeather.class") == null) return false;
+        if (name.contains("Sable") && !present("dev/ryanhcode/sable/Sable.class")) return false;
+        if (name.startsWith("Atmosphere") && !present("com/possible_triangle/atmosphere/impl/ServerLevelWeather.class")) return false;
+        // BadOptimizations caches the renderer on the entity type too and rewrites getRenderer, leaving no Map.get to wrap.
+        if (OWNERS.get(name) == BlazeOptimization.ENTITY_RENDERER_CACHE && present("me/thosea/badoptimizations/config/Config.class")) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
         return owner == null || owner.on();
+    }
+
+    private static boolean present(String classFile) {
+        return BlazeMixinPlugin.class.getClassLoader().getResource(classFile) != null;
     }
 
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {}

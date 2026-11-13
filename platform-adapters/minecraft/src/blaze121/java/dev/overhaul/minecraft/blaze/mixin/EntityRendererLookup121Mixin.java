@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 /** Wraps only the map read, so other mods still see getRenderer run. Player skin models are not entity types and keep the map. */
 @Mixin(EntityRenderDispatcher.class)
 abstract class EntityRendererLookup121Mixin {
-    @WrapOperation(method="getRenderer",at=@At(value="INVOKE",target="Ljava/util/Map;get(Ljava/lang/Object;)Ljava/lang/Object;"))
+    @WrapOperation(method="getRenderer",require=0,at=@At(value="INVOKE",target="Ljava/util/Map;get(Ljava/lang/Object;)Ljava/lang/Object;"))
     private Object overhaul$typeRenderer(Map<?,?> renderers,Object key,Operation<Object> lookup){
         if(!(key instanceof BlazeEntityTypeRenderer type))return lookup.call(renderers,key);
         if(type.overhaul$rendererSource()==renderers)return type.overhaul$renderer();
