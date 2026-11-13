@@ -39,6 +39,7 @@ public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuff
     }
 
     private static void copy(ByteBuffer target, ProgramBindings.Uniform layout, Uniform value) {
+        if (layout.array()) { copyArray(target, layout, value); return; }
         String type = layout.type();
         boolean integer = type.equals("int") || type.equals("bool") || type.startsWith("ivec");
         int dimension = type.startsWith("mat") ? Integer.parseInt(type.substring(3)) : 0;
@@ -55,6 +56,18 @@ public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuff
                 int offset = dimension == 0 ? index * 4 : (index / dimension) * 16 + (index % dimension) * 4;
                 target.putFloat(layout.byteOffset() + offset, source.get(index));
             }
+        }
+    }
+
+    /** Like glUniform*v, a value shorter or longer than the array fills only the elements both hold. */
+    private static void copyArray(ByteBuffer target, ProgramBindings.Uniform layout, Uniform value) {
+        int components = layout.components(), count = Math.min(value.getCount(), layout.arrayLength() * components);
+        var integers = layout.integer() ? value.getIntBuffer() : null;
+        var reals = integers == null ? value.getFloatBuffer() : null;
+        if (integers == null && reals == null) throw new IllegalArgumentException("Uniform holds no values: " + value.getName());
+        for (int index = 0; index < count; index++) {
+            int offset = layout.byteOffset() + index / components * ProgramBindings.Uniform.ARRAY_STRIDE + index % components * 4;
+            if (integers != null) target.putInt(offset, integers.get(index)); else target.putFloat(offset, reals.get(index));
         }
     }
 }

@@ -12,7 +12,7 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
         this(uniforms,uniformBytes,samplers,attributes,varyings,attributeTypes,ordinarySamplers(samplers));
     }
     public ProgramBindings {
-        uniforms = interned(uniforms, uniform -> new Uniform(uniform.type().intern(), uniform.byteOffset(), uniform.byteSize()));
+        uniforms = interned(uniforms, uniform -> new Uniform(uniform.type().intern(), uniform.byteOffset(), uniform.byteSize(), uniform.arrayLength()));
         samplers = interned(samplers, value -> value);
         attributes = Map.copyOf(attributes); varyings = Map.copyOf(varyings);
         attributeTypes = Map.copyOf(attributeTypes);
@@ -51,5 +51,13 @@ public record ProgramBindings(Map<String, Uniform> uniforms, int uniformBytes,
         source.forEach((name,entry)->result.put(name.intern(),value.apply(entry)));
         return Map.copyOf(result);
     }
-    public record Uniform(String type, int byteOffset, int byteSize) {}
+    /** {@code type} is the element type of an array uniform, whose {@code arrayLength} elements sit sixteen bytes apart as std140 lays them. */
+    public record Uniform(String type, int byteOffset, int byteSize, int arrayLength) {
+        public static final int ARRAY_STRIDE = 16;
+        public Uniform(String type, int byteOffset, int byteSize) { this(type, byteOffset, byteSize, 0); }
+        public boolean array() { return arrayLength > 0; }
+        /** Scalar components of one element: 1 for a scalar, N for a vecN. */
+        public int components() { char last = type.charAt(type.length() - 1); return type.contains("vec") ? last - '0' : 1; }
+        public boolean integer() { return type.equals("int") || type.equals("bool") || type.equals("uint") || type.startsWith("ivec") || type.startsWith("uvec") || type.startsWith("bvec"); }
+    }
 }

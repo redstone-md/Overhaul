@@ -21,6 +21,12 @@ final class BlazeRawUniforms {
         if (words == null) return;
         int offset = layout.byteOffset();
         String type = layout.type();
+        if (layout.array()) {
+            int components = layout.components();
+            for (int index = 0; index < Math.min(words.length, layout.arrayLength() * components); index++)
+                target.putInt(offset + index / components * ProgramBindings.Uniform.ARRAY_STRIDE + index % components * 4, words[index]);
+            return;
+        }
         if (type.startsWith("mat")) {
             int size = type.charAt(3) - '0';
             for (int index = 0; index < Math.min(words.length, size * size); index++) target.putInt(offset + (index / size) * 16 + (index % size) * 4, words[index]);

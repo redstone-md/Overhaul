@@ -100,7 +100,12 @@ public final class BlazePrograms implements AutoCloseable {
         var stage=((BlazeStageAccess)program).overhaul$stage();if(stage==null||stage.owner()!=this)throw new IllegalArgumentException("Foreign shader stage");return stage;
     }
     public BlazeProgramCompiler.Program compiled(int id){requireOpen();var program=entry(id).program;if(program==null)throw new IllegalStateException("Shader has not linked");return program;}
-    public int uniformLocation(int id,CharSequence name){requireOpen();return entry(id).locations.getOrDefault(name.toString(),-1);}
+    public int uniformLocation(int id,CharSequence name){
+        requireOpen();String key=name.toString();
+        // GL names an array by itself or by its first element.
+        if(key.endsWith("[0]"))key=key.substring(0,key.length()-3);
+        return entry(id).locations.getOrDefault(key,-1);
+    }
     public int attributeLocation(int id,CharSequence name){return compiled(id).bindings().attributes().getOrDefault(name.toString(),-1);}
     public void registerSnapshot(int id,Supplier<BlazeShaderSnapshot> snapshot){requireOpen();entry(id).snapshot=java.util.Objects.requireNonNull(snapshot);}
     public void use(int id){requireOpen();if(id!=0)compiled(id);active=id;unknownActive=0;}

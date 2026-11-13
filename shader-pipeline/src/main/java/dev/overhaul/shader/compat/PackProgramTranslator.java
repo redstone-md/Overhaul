@@ -16,6 +16,8 @@ import java.util.regex.Pattern;
 public final class PackProgramTranslator {
     private static final String BODY_MARKER="\n// OVERHAUL_COMPATIBILITY_BODY\n";
     private static final Pattern DECLARATION = Pattern.compile("(?:\\b(flat|smooth|noperspective|centroid)\\s+)?\\b(uniform|attribute|varying)\\s+(\\w+)\\s+(\\w+)\\s*;");
+    /** A uniform array of scalars or vectors with a constant length, as {@code uniform float weights[16];}. */
+    private static final Pattern UNIFORM_ARRAY = Pattern.compile("\\buniform\\s+(\\w+)\\s+(\\w+)\\s*\\[([^\\]]+)]\\s*;");
     private static final Set<String> ATTRIBUTE_TYPES = Set.of("float","vec2","vec3","vec4");
     private static final Set<String> INTEGER_VARYINGS = Set.of("int","ivec2","ivec3","ivec4","uint","uvec2","uvec3","uvec4");
     private static final Map<String,Integer> VARYING_SLOTS = Map.of("mat2",2,"mat3",3,"mat4",4);
@@ -183,6 +185,14 @@ public final class PackProgramTranslator {
         int offset = 0;
         for (Map.Entry<String,String> uniform : uniforms.entrySet()) {
             String type = uniform.getValue();
+            int bracket = type.indexOf('[');
+            if (bracket >= 0) {
+                int length = Integer.parseInt(type.substring(bracket+1,type.length()-1)), size = length*ProgramBindings.Uniform.ARRAY_STRIDE;
+                offset = align(offset,16);
+                layout.put(uniform.getKey(), new ProgramBindings.Uniform(type.substring(0,bracket), offset, size, length));
+                offset += size;
+                continue;
+            }
             int size = SIZES.get(type), alignment = alignment(type);
             offset = align(offset, alignment);
             layout.put(uniform.getKey(), new ProgramBindings.Uniform(type, offset, size));
@@ -238,7 +248,15 @@ public final class PackProgramTranslator {
                 }
             }
         }
-        String remaining = DECLARATION.matcher(source).replaceAll("");
+        Matcher arrays = UNIFORM_ARRAY.matcher(source);
+        while (arrays.find()) {
+            String type = arrays.group(1), name = arrays.group(2);
+            if (!SIZES.containsKey(type) || type.startsWith("mat")) throw unsupported("Unsupported uniform array type: " + type);
+            int length = ConstantExpression.evaluate(arrays.group(3));
+            if (length < 1) throw unsupported("Uniform array length must be positive: " + name);
+            put(uniforms,name,type+"["+length+"]");
+        }
+        String remaining = UNIFORM_ARRAY.matcher(DECLARATION.matcher(source).replaceAll("")).replaceAll("");
         if (Pattern.compile("\\b(uniform|attribute|varying)\\b").matcher(remaining).find()) {
             throw unsupported("Unsupported declaration syntax: arrays, blocks and multi-declarations need explicit lowering");
         }
@@ -275,7 +293,7 @@ public final class PackProgramTranslator {
     private String rewrite(String source, boolean vertex, Map<String,String> uniforms,
                                   Map<String,String> samplers, Map<String,String> attributes,
                                   Map<String,String> varyings, Map<String,Integer> locations, ProgramBindings bindings, Map<String,PackStorageImages.Storage> storage, Set<Integer> buffers) {
-        String body = DECLARATION.matcher(source).replaceAll("").replaceAll("(?m)^\\s*#version[^\\r\\n]*", "");
+        String body = UNIFORM_ARRAY.matcher(DECLARATION.matcher(source).replaceAll("")).replaceAll("").replaceAll("(?m)^\\s*#version[^\\r\\n]*", "");
         body = PackStorageBuffers.place(body,buffers,bindings.samplers());
         // Legacy packs commonly name a sampler "texture", now also a GLSL function.
         for (String sampler : samplers.keySet()) {
@@ -290,8 +308,10 @@ public final class PackProgramTranslator {
         if (!uniforms.isEmpty()) {
             prefix.append("layout(set=0,binding=0,std140) uniform OverhaulPackUniforms {\n");
             for (Map.Entry<String,String> uniform : uniforms.entrySet()) {
-                prefix.append("layout(offset=").append(bindings.uniforms().get(uniform.getKey()).byteOffset())
-                        .append(") ").append(uniform.getValue()).append(' ').append(uniform.getKey()).append(";\n");
+                var layout = bindings.uniforms().get(uniform.getKey());
+                prefix.append("layout(offset=").append(layout.byteOffset()).append(") ").append(layout.type()).append(' ').append(uniform.getKey());
+                if (layout.array()) prefix.append('[').append(layout.arrayLength()).append(']');
+                prefix.append(";\n");
             }
             prefix.append("};\n");
         }

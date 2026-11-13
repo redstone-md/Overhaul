@@ -11,7 +11,8 @@ import org.lwjgl.system.MemoryUtil;
  * location as 32-bit words, matrices column by column, for draws whose own uniform objects never hold the value.
  */
 final class BlazeGlUniforms {
-    private static final int MAX_WORDS = 16;
+    /** Enough for a uniform array of 1024 vec4 elements. */
+    private static final int MAX_WORDS = 4096;
 
     private BlazeGlUniforms() {}
 
