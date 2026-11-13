@@ -26,18 +26,18 @@ public final class BlazeSpriteInterpolation {
             ClassLoader loader=SpriteContents.class.getClassLoader();
             Class<?> data=Class.forName(CONTENTS+"$InterpolationData",false,loader),ticker=Class.forName(CONTENTS+"$Ticker",false,loader);
             Class<?> animated=Class.forName(CONTENTS+"$AnimatedTexture",false,loader),info=Class.forName(CONTENTS+"$FrameInfo",false,loader);
-            outer=contents.findVarHandle(data,"this$0",SpriteContents.class);
-            active=contents.findVarHandle(data,"activeFrame",NativeImage[].class);
-            mips=contents.findVarHandle(SpriteContents.class,"byMipLevel",NativeImage[].class);
-            frame=contents.findVarHandle(ticker,"frame",int.class);
-            subFrame=contents.findVarHandle(ticker,"subFrame",int.class);
-            animation=contents.findVarHandle(ticker,"animationInfo",animated);
-            frames=contents.findVarHandle(animated,"frames",List.class);
-            rowSize=contents.findVarHandle(animated,"frameRowSize",int.class);
-            index=contents.findVarHandle(info,"index",int.class);
-            time=contents.findVarHandle(info,"time",int.class);
-            pixels=MethodHandles.privateLookupIn(NativeImage.class,own).findVarHandle(NativeImage.class,"pixels",long.class);
-            upload=contents.findVirtual(SpriteContents.class,"upload",MethodType.methodType(void.class,int.class,int.class,int.class,int.class,NativeImage[].class));
+            outer=field(contents,data,SpriteContents.class,"this$0","f_244452_");
+            active=field(contents,data,NativeImage[].class,"activeFrame","f_244527_");
+            mips=field(contents,SpriteContents.class,NativeImage[].class,"byMipLevel","f_243731_");
+            frame=field(contents,ticker,int.class,"frame","f_244631_");
+            subFrame=field(contents,ticker,int.class,"subFrame","f_244511_");
+            animation=field(contents,ticker,animated,"animationInfo","f_243921_");
+            frames=field(contents,animated,List.class,"frames","f_243714_");
+            rowSize=field(contents,animated,int.class,"frameRowSize","f_244229_");
+            index=field(contents,info,int.class,"index","f_243751_");
+            time=field(contents,info,int.class,"time","f_244553_");
+            pixels=field(MethodHandles.privateLookupIn(NativeImage.class,own),NativeImage.class,long.class,"pixels","f_84964_");
+            upload=method(contents,SpriteContents.class,MethodType.methodType(void.class,int.class,int.class,int.class,int.class,NativeImage[].class),"upload","m_247381_");
             available=true;
         }catch(ReflectiveOperationException|RuntimeException failure){
             System.getLogger("overhaul").log(System.Logger.Level.WARNING,"Vanilla sprite interpolation stays in use",failure);
@@ -45,6 +45,18 @@ public final class BlazeSpriteInterpolation {
         OUTER=outer;ACTIVE=active;MIPS=mips;FRAME=frame;SUB_FRAME=subFrame;ANIMATION=animation;FRAMES=frames;ROW_SIZE=rowSize;INDEX=index;TIME=time;PIXELS=pixels;UPLOAD=upload;AVAILABLE=available;
     }
     private BlazeSpriteInterpolation(){}
+
+    /** Mojang names first; Forge 1.20.1 runs on SRG names, so each lookup carries its SRG name as the fallback. */
+    private static VarHandle field(MethodHandles.Lookup lookup,Class<?> owner,Class<?> type,String... names)throws ReflectiveOperationException{
+        ReflectiveOperationException missing=null;
+        for(String name:names)try{return lookup.findVarHandle(owner,name,type);}catch(NoSuchFieldException failure){missing=failure;}
+        throw missing;
+    }
+    private static MethodHandle method(MethodHandles.Lookup lookup,Class<?> owner,MethodType type,String... names)throws ReflectiveOperationException{
+        ReflectiveOperationException missing=null;
+        for(String name:names)try{return lookup.findVirtual(owner,name,type);}catch(NoSuchMethodException failure){missing=failure;}
+        throw missing;
+    }
 
     public static boolean upload(Object data,int x,int y,Object ticker){
         if(!AVAILABLE)return false;
