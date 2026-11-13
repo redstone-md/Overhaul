@@ -31,6 +31,8 @@ public final class BlazeRenderer implements AutoCloseable {
     private static final int GL_SHARED_PAGE=32*1024*1024;
     private static final int GL_LINEAR=9729;
     private static final long GL_SHARED_BUDGET=16L*1024*1024*1024;
+    /** Terrain of a heavy pack at a long view outgrows a fixed cap, so the floor grows to a quarter of video memory. */
+    private static final long GEOMETRY_FLOOR=512L*1024*1024;
     private final Set<BlazeBufferPool.Slice> glSharedBuffers=Collections.newSetFromMap(new IdentityHashMap<>());
     private final VulkanContext context;
     private final long windowHandle;
@@ -94,7 +96,7 @@ public final class BlazeRenderer implements AutoCloseable {
                 int alignment=Math.toIntExact(Math.max(4,Math.max(properties.limits().nonCoherentAtomSize(),properties.limits().minUniformBufferOffsetAlignment())));
                 maximumUniformRange=properties.limits().maxUniformBufferRange();
                 hostStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,2*1024*1024,128L*1024*1024,alignment);
-                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,512L*1024*1024,GEOMETRY_ALIGNMENT);
+                geometryStorage=new BlazeBufferPool(allocator,queue,false,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,8*1024*1024,Math.max(GEOMETRY_FLOOR,context.deviceLocalBytes()/4),GEOMETRY_ALIGNMENT);
                 uniformArena=new BlazeHostArena(hostStorage,alignment);uploadArena=new BlazeHostArena(hostStorage,Math.max(16,alignment));
                 streamStorage=new BlazeBufferPool(allocator,queue,true,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,4*1024*1024,256L*1024*1024,16);
                 streamArena=new BlazeHostArena(streamStorage,16);
