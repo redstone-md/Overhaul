@@ -7,6 +7,7 @@ import dev.overhaul.vulkan.VulkanStack;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,13 +26,34 @@ final class BlazeRawDraws implements AutoCloseable {
     private static final int[] INT_BASES = {VK_FORMAT_R32_UINT, VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32B32_UINT, VK_FORMAT_R32G32B32A32_UINT};
 
     /** @param indexType zero for a non-indexed draw; @param elements the element buffer bound to the array; @param baseVertex added to each index */
-    record Request(List<BlazeGlVertexArrays.Pointer> pointers, int mode, int first, int count, int instances, int indexType, long indexOffset, int elements, int baseVertex) {}
+    record Request(BlazeGlVertexArrays.Pointers pointers, int mode, int first, int count, int instances, int indexType, long indexOffset, int elements, int baseVertex) {}
 
-    private record Inputs(List<NativeGraphicsPipeline.Binding> bindings, List<NativeGraphicsPipeline.Attribute> attributes) {}
+    /** Hashed once: a layout hands the same instance to every draw, and the pipeline cache hashes it on each. */
+    private static final class Inputs {
+        final List<NativeGraphicsPipeline.Binding> bindings;
+        final List<NativeGraphicsPipeline.Attribute> attributes;
+        private final int hash;
+        Inputs(List<NativeGraphicsPipeline.Binding> bindings, List<NativeGraphicsPipeline.Attribute> attributes) {
+            this.bindings = bindings;
+            this.attributes = attributes;
+            hash = 31 * bindings.hashCode() + attributes.hashCode();
+        }
+        @Override public int hashCode() { return hash; }
+        @Override public boolean equals(Object other) {
+            return this == other || other instanceof Inputs inputs && hash == inputs.hash && bindings.equals(inputs.bindings) && attributes.equals(inputs.attributes);
+        }
+    }
 
     private record Source(int buffer, int stride, int stepRate) {}
 
-    private record PipelineKey(BlazeProgramCompiler.Program program, Inputs inputs, int topology, NativeGraphicsPipeline.Depth depth,
+    /**
+     * What a pointer set means to one program: the buffers it reads, where each binding starts in its buffer, and the
+     * native inputs. Only where each buffer sits in device memory is looked up per draw, since a buffer can move.
+     */
+    private record Layout(BlazeProgramCompiler.Program program, Map<Integer, BlazeGlVertexArrays.Slot> declared, Source[] sources, long[] bases, Inputs inputs) {}
+
+    /** The program is matched by identity in the outer map, not hashed with its SPIR-V. */
+    private record PipelineKey(Inputs inputs, int topology, NativeGraphicsPipeline.Depth depth,
             NativeGraphicsPipeline.Color color, NativeGraphicsPipeline.ColorLogic logic, int cull, int polygonMode, long renderPass) {}
 
     private static final class Failure extends RuntimeException {
@@ -39,7 +61,8 @@ final class BlazeRawDraws implements AutoCloseable {
     }
 
     private final BlazeRenderer owner;
-    private final Map<PipelineKey, NativeGraphicsPipeline> pipelines = new HashMap<>();
+    private final Map<BlazeProgramCompiler.Program, Map<PipelineKey, NativeGraphicsPipeline>> pipelines =
+            BlazeOptimization.RAW_DRAW_LAYOUT.on() ? new IdentityHashMap<>() : new HashMap<>();
 
     BlazeRawDraws(BlazeRenderer owner) { this.owner = owner; }
 
@@ -56,7 +79,9 @@ final class BlazeRawDraws implements AutoCloseable {
             int topology = topology(request.mode());
             List<GpuBuffer> buffers = new ArrayList<>();
             long[] offsets = new long[BlazeGlVertexArrays.SLOTS];
-            Inputs inputs = inputs(id, program, request.pointers(), buffers, offsets);
+            Layout layout = layout(id, program, request.pointers());
+            place(layout, buffers, offsets);
+            Inputs inputs = layout.inputs();
             int indexType = 0;
             GpuBuffer indices = null;
             if (request.indexType() != 0) {
@@ -103,16 +128,23 @@ final class BlazeRawDraws implements AutoCloseable {
         owner.enqueue(pass);
     }
 
+    /** The layout a pointer set last derived, while the program and its declared locations are the same. */
+    private static Layout layout(int id, BlazeProgramCompiler.Program program, BlazeGlVertexArrays.Pointers pointers) {
+        Map<Integer, BlazeGlVertexArrays.Slot> declared = BlazeGlVertexArrays.declared(id);
+        if (pointers.derived instanceof Layout last && last.program() == program && last.declared() == declared) return last;
+        Layout layout = derive(program, declared, pointers.list);
+        if (BlazeOptimization.RAW_DRAW_LAYOUT.on()) pointers.derived = layout;
+        return layout;
+    }
+
     /** Maps each enabled GL pointer to the program input its source declared at that location, grouped by buffer into bindings. */
-    private Inputs inputs(int id, BlazeProgramCompiler.Program program, List<BlazeGlVertexArrays.Pointer> pointers, List<GpuBuffer> buffers, long[] offsets) {
+    private static Layout derive(BlazeProgramCompiler.Program program, Map<Integer, BlazeGlVertexArrays.Slot> declared, List<BlazeGlVertexArrays.Pointer> pointers) {
         var bindings = program.bindings();
         Map<Integer, String> required = new HashMap<>();
         for (var entry : bindings.attributes().entrySet()) {
             String type = bindings.attributeTypes().getOrDefault(entry.getKey(), "vec4");
             for (int column = 0; column < BlazeGlVertexArrays.columns(type); column++) required.put(entry.getValue() + column, type);
         }
-        Map<Integer, BlazeGlVertexArrays.Slot> declared = BlazeGlVertexArrays.declared(id);
-        Map<Source, Integer> slots = new LinkedHashMap<>();
         Map<Source, Long> bases = new LinkedHashMap<>();
         List<BlazeGlVertexArrays.Pointer> used = new ArrayList<>();
         List<Integer> locations = new ArrayList<>();
@@ -120,33 +152,46 @@ final class BlazeRawDraws implements AutoCloseable {
             int location = location(declared, bindings.attributes(), pointer.location());
             if (location < 0 || !required.containsKey(location)) continue;
             if (pointer.divisor() > 1) throw new Failure("with instance divisor " + pointer.divisor());
-            Source source = new Source(pointer.buffer(), stride(pointer), pointer.divisor() > 0 ? 1 : 0);
-            bases.merge(source, pointer.offset(), Math::min);
+            bases.merge(source(pointer), pointer.offset(), Math::min);
             used.add(pointer);
             locations.add(location);
         }
-        var buffersByName = BlazeGlBoundary.buffers();
+        Source[] sources = bases.keySet().toArray(new Source[0]);
+        long[] starts = new long[sources.length];
+        Map<Source, Integer> slots = new HashMap<>();
         List<NativeGraphicsPipeline.Binding> bindingList = new ArrayList<>();
-        for (var entry : bases.entrySet()) {
-            Source source = entry.getKey();
-            BlazeGlBuffers.Placed placed = buffersByName.placed(owner, source.buffer(), false);
-            if (placed == null) throw new Failure("from vertex buffer " + source.buffer() + " with no storage");
-            int slot = bindingList.size();
+        for (int slot = 0; slot < sources.length; slot++) {
+            Source source = sources[slot];
             slots.put(source, slot);
+            starts[slot] = bases.get(source);
             bindingList.add(new NativeGraphicsPipeline.Binding(slot, source.stride(), source.stepRate()));
-            buffers.add(placed.buffer());
-            offsets[slot] = placed.base() + entry.getValue();
         }
         List<NativeGraphicsPipeline.Attribute> attributes = new ArrayList<>();
         for (int index = 0; index < used.size(); index++) {
             BlazeGlVertexArrays.Pointer pointer = used.get(index);
             int location = locations.get(index);
-            Source source = new Source(pointer.buffer(), stride(pointer), pointer.divisor() > 0 ? 1 : 0);
+            Source source = source(pointer);
             attributes.add(new NativeGraphicsPipeline.Attribute(location, slots.get(source), format(pointer, required.get(location)), (int) (pointer.offset() - bases.get(source))));
             required.remove(location);
         }
         if (!required.isEmpty()) throw new Failure("missing vertex input at location " + required.keySet().iterator().next() + " of " + bindings.attributes().keySet());
-        return new Inputs(List.copyOf(bindingList), List.copyOf(attributes));
+        return new Layout(program, declared, sources, starts, new Inputs(List.copyOf(bindingList), List.copyOf(attributes)));
+    }
+
+    /** Where each binding of the layout reads this draw, from its buffer's current device copy. */
+    private void place(Layout layout, List<GpuBuffer> buffers, long[] offsets) {
+        var buffersByName = BlazeGlBoundary.buffers();
+        Source[] sources = layout.sources();
+        for (int slot = 0; slot < sources.length; slot++) {
+            BlazeGlBuffers.Placed placed = buffersByName.placed(owner, sources[slot].buffer(), false);
+            if (placed == null) throw new Failure("from vertex buffer " + sources[slot].buffer() + " with no storage");
+            buffers.add(placed.buffer());
+            offsets[slot] = placed.base() + layout.bases()[slot];
+        }
+    }
+
+    private static Source source(BlazeGlVertexArrays.Pointer pointer) {
+        return new Source(pointer.buffer(), stride(pointer), pointer.divisor() > 0 ? 1 : 0);
     }
 
     /** The native location of a GL location: by the name the source gave it, or the same number when it gave none. */
@@ -217,21 +262,22 @@ final class BlazeRawDraws implements AutoCloseable {
 
     private NativeGraphicsPipeline pipeline(BlazeProgramCompiler.Program program, BlazeDrawState.Snapshot draw, BlazeTarget target, long descriptorLayout,
             Inputs inputs, int topology) {
-        var key = new PipelineKey(program, inputs, topology, draw.depth(), draw.color(), draw.logic(), draw.cull(), draw.polygonMode(), target.renderPass());
-        var existing = pipelines.get(key);
+        var key = new PipelineKey(inputs, topology, draw.depth(), draw.color(), draw.logic(), draw.cull(), draw.polygonMode(), target.renderPass());
+        var forProgram = pipelines.computeIfAbsent(program, ignored -> new HashMap<>());
+        var existing = forProgram.get(key);
         if (existing != null) return existing;
         var description = new NativeGraphicsPipeline.Description(List.of(
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_VERTEX_BIT, "main", program.vertex().directBuffer()),
                 new NativeGraphicsPipeline.Shader(VK_SHADER_STAGE_FRAGMENT_BIT, "main", program.fragment().directBuffer())),
-                inputs.bindings(), inputs.attributes(), new long[]{descriptorLayout}, 0, topology, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE,
+                inputs.bindings, inputs.attributes, new long[]{descriptorLayout}, 0, topology, draw.polygonMode(), draw.cull(), VK_FRONT_FACE_CLOCKWISE,
                 draw.depth(), java.util.Collections.nCopies(target.colorFormats().size(), draw.color()), true, 0, 0, draw.logic());
         var created = new NativeGraphicsPipeline(owner.context(), target.renderPass(), description, target.samples());
-        pipelines.put(key, created);
+        forProgram.put(key, created);
         return created;
     }
 
     @Override public void close() {
-        for (NativeGraphicsPipeline pipeline : new ArrayList<>(pipelines.values())) pipeline.close();
+        for (var forProgram : pipelines.values()) for (NativeGraphicsPipeline pipeline : new ArrayList<>(forProgram.values())) pipeline.close();
         pipelines.clear();
     }
 }

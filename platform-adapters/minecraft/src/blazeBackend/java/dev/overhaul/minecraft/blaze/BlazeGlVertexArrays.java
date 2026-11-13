@@ -29,6 +29,16 @@ final class BlazeGlVertexArrays {
     /** An enabled pointer as the draw sees it. */
     record Pointer(int location, int buffer, int size, int type, boolean normalized, boolean integer, int stride, long offset, int divisor) {}
 
+    /**
+     * The enabled pointers of one array state. An array hands out the same instance until a call changes it, so a draw
+     * keeps what it derived from them in {@link #derived} for the next draw of that array.
+     */
+    static final class Pointers {
+        final List<Pointer> list;
+        Object derived;
+        Pointers(List<Pointer> list) { this.list = list; }
+    }
+
     /** How an attribute reads its binding, as glVertexAttribFormat states it. */
     private record Format(int size, int type, boolean normalized, boolean integer, int relative) {}
 
@@ -43,6 +53,8 @@ final class BlazeGlVertexArrays {
         final int[] divisors = new int[SLOTS];
         final boolean[] enabled = new boolean[SLOTS];
         int elements;
+        /** Null after any call that changes a pointer. */
+        Pointers pointers;
         Array() { for (int slot = 0; slot < SLOTS; slot++) attributeBindings[slot] = slot; }
     }
 
@@ -109,8 +121,10 @@ final class BlazeGlVertexArrays {
         table.put("glVertexAttribDivisor", locked(arguments -> {
             int location = arguments.integer(0);
             if (!slot(location)) return 0;
-            array().attributeBindings[location] = location;
-            array().divisors[location] = arguments.integer(1);
+            Array array = array();
+            array.attributeBindings[location] = location;
+            array.divisors[location] = arguments.integer(1);
+            array.pointers = null;
             return 0;
         }));
         separate(table);
@@ -176,7 +190,14 @@ final class BlazeGlVertexArrays {
     }
 
     /** Each enabled attribute with a format and a filled binding, joined into the pointer the draw reads. */
-    private static List<Pointer> pointers(Array array) {
+    private static Pointers pointers(Array array) {
+        if (array.pointers != null) return array.pointers;
+        Pointers pointers = new Pointers(List.copyOf(collect(array)));
+        if (BlazeOptimization.RAW_DRAW_LAYOUT.on()) array.pointers = pointers;
+        return pointers;
+    }
+
+    private static List<Pointer> collect(Array array) {
         List<Pointer> result = new ArrayList<>(SLOTS);
         for (int location = 0; location < SLOTS; location++) {
             Format format = array.formats[location];
@@ -193,6 +214,7 @@ final class BlazeGlVertexArrays {
 
     private static long enable(Array array, int location, boolean on) {
         if (slot(location)) array.enabled[location] = on;
+        array.pointers = null;
         return 0;
     }
 
@@ -203,26 +225,31 @@ final class BlazeGlVertexArrays {
         array.formats[location] = new Format(size, type, normalized, integer, 0);
         array.attributeBindings[location] = location;
         array.bindings[location] = new Binding(buffers.bound(ARRAY_BUFFER), offset, stride);
+        array.pointers = null;
         return 0;
     }
 
     private static long bindBuffer(Array array, int point, int buffer, long offset, int stride) {
         if (slot(point)) array.bindings[point] = buffer == 0 ? null : new Binding(buffer, offset, stride);
+        array.pointers = null;
         return 0;
     }
 
     private static long divisor(Array array, int point, int divisor) {
         if (slot(point)) array.divisors[point] = divisor;
+        array.pointers = null;
         return 0;
     }
 
     private static long attributeBinding(Array array, int location, int point) {
         if (slot(location) && slot(point)) array.attributeBindings[location] = point;
+        array.pointers = null;
         return 0;
     }
 
     private static long format(Array array, int location, int size, int type, boolean normalized, boolean integer, int relative) {
         if (slot(location)) array.formats[location] = new Format(size, type, normalized, integer, relative);
+        array.pointers = null;
         return 0;
     }
 
