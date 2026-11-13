@@ -206,7 +206,7 @@ public final class BlazeTextures implements AutoCloseable {
         upload(current(target),level,BlazeTextureTargets.layer(target),x,y,width,height,format,type,source);
     }
     private void upload(BlazeTexture texture,int level,int layer,int x,int y,int width,int height,int format,int type,ByteBuffer source){
-        var area=region(texture,level,layer,x,y,width,height);var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
+        var area=region(texture,level,layer,x,y,width,height);if(area==null)return;var layout=pixels.layout(false,width,height,BlazePixels.bytes(format,type));
         if(source.remaining()<layout.bytes())throw new IllegalArgumentException("Pixel source is truncated");
         int storage=texture.image().format().bytesPerPixel();
         if(!BlazeTextureFormats.storage(texture.internal).convertible()||!BlazePixels.convertible(format,type)){
@@ -252,7 +252,7 @@ public final class BlazeTextures implements AutoCloseable {
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
         kind(target);if(width==0||height==0||source==null)return;var texture=current(target);
-        var from=readImage(source,GL_RGBA);if(from==null)return;var to=texture.image();var destination=region(texture,level,BlazeTextureTargets.layer(target),xOffset,yOffset,width,height);
+        var from=readImage(source,GL_RGBA);if(from==null)return;var to=texture.image();var destination=region(texture,level,BlazeTextureTargets.layer(target),xOffset,yOffset,width,height);if(destination==null)return;
         if(to.format().isDepth()||from==to)throw new UnsupportedOperationException("Framebuffer color copy cannot target depth or its own source image");
         var area=new ImageRegion(source.level(),0,x,y,width,height);
         if(from.format()==to.format()&&texture.channels==4){if(transfers!=null)transfers.copy(from,area,to,destination);else commands.copyImage(from,area,to,destination);return;}
@@ -369,7 +369,8 @@ public final class BlazeTextures implements AutoCloseable {
         return incomplete;
     }
     private ImageRegion region(BlazeTexture texture,int level,int layer,int x,int y,int width,int height){
-        if(!texture.defined(level))throw new IllegalStateException("Texture mip is not defined");
+        // GL rejects a write to an undefined mip with GL_INVALID_OPERATION and carries on; mods rely on that.
+        if(!texture.defined(level)){BlazeGlBoundary.reportOnce("undefined mip "+level,"Texture write to undefined mip "+level+" was skipped");return null;}
         var image=texture.image();int mip=texture.mip(level);
         if(x<0||y<0||width<1||height<1||x>image.width(mip)-width||y>image.height(mip)-height)throw new IllegalArgumentException("Pixel rectangle exceeds texture mip");
         if(layer<0||layer>=texture.layers())throw new IllegalArgumentException("Pixel layer exceeds texture layers");
