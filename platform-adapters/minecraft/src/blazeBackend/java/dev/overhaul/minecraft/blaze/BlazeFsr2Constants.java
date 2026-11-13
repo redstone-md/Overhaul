@@ -113,8 +113,17 @@ final class BlazeFsr2Constants {
     static void packRcas(ByteBuffer out, int at, float sharpness) {
         float stops = -2 * Math.max(0, Math.min(1, sharpness)) + 2;
         float scale = (float) Math.pow(2, -stops);
-        int half = Float.floatToFloat16(scale) & 0xFFFF;
+        int half = half(scale);
         ByteBuffer block = out.duplicate().order(out.order()).position(at);
         block.putInt(Float.floatToRawIntBits(scale)).putInt(half | half << 16).putInt(0).putInt(0);
+    }
+    /** IEEE half of a float, rounded to nearest even; Java 17 has no Float.floatToFloat16. Tiny values flush to zero. */
+    private static int half(float value) {
+        int bits = Float.floatToRawIntBits(value), sign = bits >>> 16 & 0x8000, exponent = (bits >>> 23 & 0xFF) - 112, mantissa = bits & 0x7FFFFF;
+        if (exponent <= 0) return sign;
+        if (exponent >= 31) return sign | 0x7C00;
+        int half = exponent << 10 | mantissa >>> 13, rest = mantissa & 0x1FFF;
+        if (rest > 0x1000 || rest == 0x1000 && (half & 1) != 0) half++;
+        return sign | Math.min(half, 0x7C00);
     }
 }
