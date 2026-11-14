@@ -166,11 +166,23 @@ public final class BlazeProgramCompiler implements AutoCloseable {
     private String preprocess(String name, String source, ShaderStage stage, ShadercCompiler.IncludeResolver includes) {
         if (source.length() > 4_194_304) throw new IllegalArgumentException("Blaze3D shader source exceeds budget");
         String imports = source.replaceAll("(?m)^(\\s*)#moj_import\\s+", "$1#include ");
-        String expanded = compiler.preprocess(name, imports, stage, Map.of(), includes);
+        String expanded = renameLaterKeywords(compiler.preprocess(name, imports, stage, Map.of(), includes), source);
         // These are shaderc's source-location metadata after include expansion,
         // not shader behavior. All other extensions remain rejected by translation.
         return expanded.replaceAll("(?m)^\\s*#line[^\\r\\n]*", "")
                 .replaceAll("(?m)^\\s*#extension\\s+GL_GOOGLE_(?:cpp_style_line_directive|include_directive)[^\\r\\n]*", "");
+    }
+
+    /** Words GLSL 4.x reserved that older shaders, written for 1.50 or 3.30, may use as plain names (Alex's Caves names a variable "sample"). */
+    private static final java.util.regex.Pattern LATER_KEYWORDS = java.util.regex.Pattern.compile(
+            "\\b(sample|patch|subroutine|precise|coherent|volatile|restrict|readonly|writeonly|shared|buffer)\\b");
+    private static final java.util.regex.Pattern VERSION = java.util.regex.Pattern.compile("(?m)^\\s*#version\\s+(\\d+)");
+
+    /** Shaders compile as 4.50, so a name that became a keyword after the shader's own version gets a prefix. */
+    private static String renameLaterKeywords(String expanded, String original) {
+        var version = VERSION.matcher(original);
+        if (version.find() && Integer.parseInt(version.group(1)) >= 400) return expanded;
+        return LATER_KEYWORDS.matcher(expanded).replaceAll("overhaul_$1");
     }
 
     @Override public synchronized void close() { compiler.close(); }
