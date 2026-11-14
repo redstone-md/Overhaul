@@ -178,11 +178,14 @@ public final class BlazeProgramCompiler implements AutoCloseable {
             "\\b(sample|patch|subroutine|precise|coherent|volatile|restrict|readonly|writeonly|shared|buffer)\\b");
     private static final java.util.regex.Pattern VERSION = java.util.regex.Pattern.compile("(?m)^\\s*#version\\s+(\\d+)");
 
-    /** Shaders compile as 4.50, so a name that became a keyword after the shader's own version gets a prefix. */
+    /**
+     * Shaders compile as 4.50, so a name that became a keyword after the shader's own version gets a prefix. The prefix
+     * stays outside the overhaul* names that legacy lowering reserves for itself and rejects in shader source.
+     */
     private static String renameLaterKeywords(String expanded, String original) {
         var version = VERSION.matcher(original);
         if (version.find() && Integer.parseInt(version.group(1)) >= 400) return expanded;
-        return LATER_KEYWORDS.matcher(expanded).replaceAll("overhaul_$1");
+        return LATER_KEYWORDS.matcher(expanded).replaceAll("ovkw_$1");
     }
 
     @Override public synchronized void close() { compiler.close(); }
