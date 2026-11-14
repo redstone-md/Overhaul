@@ -153,6 +153,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         if (name.startsWith("Atmosphere") && !present("com/possible_triangle/atmosphere/impl/ServerLevelWeather.class")) return false;
         // BadOptimizations caches the renderer on the entity type too and rewrites getRenderer, leaving no Map.get to wrap.
         if (OWNERS.get(name) == BlazeOptimization.ENTITY_RENDERER_CACHE && present("me/thosea/badoptimizations/config/Config.class")) return false;
+        // Lithium replaces PalettedContainer.pack with its own faster one, leaving nothing to inject into.
+        if (name.startsWith("PalettedContainer") && name.contains("Pack")
+                && present("net/caffeinemc/mods/lithium/mixin/chunk/serialization/PalettedContainerMixin.class")) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);
