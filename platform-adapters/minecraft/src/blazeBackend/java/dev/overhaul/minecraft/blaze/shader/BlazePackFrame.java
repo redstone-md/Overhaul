@@ -229,7 +229,8 @@ public final class BlazePackFrame implements AutoCloseable {
     private PackGraphRuntime.Frame frame(RenderTarget main) {
         BlazeTarget target = renderer.target(main.frameBufferId);
         float[] fog = uniforms.fog();
-        return new PackGraphRuntime.Frame(target.colorView(), target.depthView(), new PackRenderTargets.Color(fog[0], fog[1], fog[2], 1),
+        // The pack samples depth; a stencil-enabled target's attachment view has both aspects and cannot be sampled.
+        return new PackGraphRuntime.Frame(target.colorView(), target.sampledDepthView(), new PackRenderTargets.Color(fog[0], fog[1], fog[2], 1),
                 scene == null ? Map.of() : scene.distantTextures());
     }
 
