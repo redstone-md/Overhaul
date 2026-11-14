@@ -57,7 +57,9 @@ public final class ShaderPackSource implements AutoCloseable {
     }
 
     public synchronized String read(String shaderPath) throws IOException {
-        return new String(readBytes(shaderPath,MAX_SOURCE_BYTES),StandardCharsets.UTF_8);
+        String text=new String(readBytes(shaderPath,MAX_SOURCE_BYTES),StandardCharsets.UTF_8);
+        // A file that ends right after an #include line is valid for OptiFine but not for shaderc's preprocessor.
+        return text.isEmpty()||text.endsWith("\n")?text:text+"\n";
     }
 
     /** Bounded assets share exactly the source path and archive-containment rules. */
