@@ -155,6 +155,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.SHADOW_TIGHT_REUSE, "Reused shadow frustum test");
         labels.put(BlazeOptimization.SHADOW_REACH, "Shadow casters by view");
         labels.put(BlazeOptimization.ENTITY_SHADOW_REACH, "Entity shadows by view");
+        labels.put(BlazeOptimization.PLAYER_SHADOW_PACE, "Player shadow pose at 60 Hz");
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
         labels.put(BlazeOptimization.PIXEL_ROWS, "Row copies for pixel reads");
         labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");

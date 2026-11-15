@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
+import dev.overhaul.minecraft.blaze.BlazeShadowAnimation;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
@@ -76,8 +77,15 @@ final class BlazePackEntityShadows {
                 var box = entity.getBoundingBox();
                 if (bounded && !casts((float) (box.minX - x), (float) (box.minY - y), (float) (box.minZ - z),
                         (float) (box.maxX - x), (float) (box.maxY - y), (float) (box.maxZ - z))) continue;
-                dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
-                        dispatcher.getPackedLightCoords(entity, partial));
+                // In first person only this pass animates the player, so its pose may be paced.
+                boolean paced = entity == minecraft.player && minecraft.options.getCameraType().isFirstPerson()
+                        && BlazeShadowAnimation.beginLocalPlayer();
+                try {
+                    dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
+                            dispatcher.getPackedLightCoords(entity, partial));
+                } finally {
+                    if (paced) BlazeShadowAnimation.end();
+                }
             }
             if (casters.blockEntities()) blockEntities(minecraft, partial, pose, buffers, x, y, z, bounded, limit);
         } catch (RuntimeException failure) {
