@@ -164,6 +164,7 @@ public enum BlazeOptimization {
     RT_AO("rtAo", "Ray traced ambient occlusion in corners and under overhangs; needs rayTracing"),
     RT_GI("rtGi", "Ray traced global illumination: light bounces once off the terrain, so sunlit blocks brighten and colour what faces them and lit rooms glow past their corners; needs rayTracing"),
     RT_REFLECTIONS("rtReflections", "Ray traced reflections on water, glass and ice; needs rayTracing"),
+    OVERHAUL_SHADING("overhaulShading", "Overhaul lights solid and cutout terrain itself, without a shader pack: terrain writes its own colour, normal and light levels, then one pass lights it with a coloured sun and moon, a sky tinted ambient and warm block light, fogs it and maps it to the screen; sun shadows are ray traced on a card with ray queries while rayTracing and rtShadows are on, and follow the sky light elsewhere; off by default, it changes the image", false),
     UPSCALE_MIP_BIAS("upscaleMipBias", "While FSR2 or DLSS draws the world at a lower resolution, mipmapped textures sample by the window's resolution instead, so blocks stay as sharp as at full size; needs fsr2 or dlss"),
     UPSCALE_READY("upscaleReady", "Loads what FSR2, DLSS and ray tracing need at startup, the world pass hook, Streamline on Windows and the device's ray queries, so the upscaling page turns them on and off without a restart; off, they need fsr2, dlss or rayTracing on at launch"),
     GPU_PRESET("gpuPreset", "Picks what the card can afford from its class: FSR2 on GTX 10 and 16, integrated graphics and ray tracing cards, ray traced lighting where the card has ray queries; the quality settings follow the class either way unless set here; off by default, it changes the image", false);
@@ -205,7 +206,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler, ray tracing and entity shadows read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_SHADOW_SLOW_PACE, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, MOD_CLASS_CACHE, HUD_LAYER_MEMO, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_SHADOW_SLOW_PACE, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, MOD_CLASS_CACHE, HUD_LAYER_MEMO, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, OVERHAUL_SHADING, GPU_PRESET -> true;
             default -> false;
         };
     }

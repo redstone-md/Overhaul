@@ -6,13 +6,20 @@ import java.util.ArrayList;
 import java.util.List;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32_SFLOAT;
 
-/** A terrain program whose section offset arrives per instance: slot 0 is the mesh, slot 1 holds one offset per draw. */
-record BlazeSectionShape(ProgramBindings program) implements BlazeProgramShape {
+/**
+ * A terrain program whose section offset arrives per instance: slot 0 is the mesh, slot 1 holds one offset per draw.
+ * It writes {@code outputs} colour locations, each blended as the draw blends its colour.
+ */
+record BlazeSectionShape(ProgramBindings program, int outputs) implements BlazeProgramShape {
     static final String OFFSET_ATTRIBUTE = "OverhaulChunkOffset";
     static final int OFFSET_BYTES = 12;
 
+    BlazeSectionShape(ProgramBindings program) {
+        this(program, 1);
+    }
+
     @Override public List<NativeGraphicsPipeline.Color> colors(NativeGraphicsPipeline.Color inherited) {
-        return List.of(inherited);
+        return java.util.Collections.nCopies(outputs, inherited);
     }
 
     @Override public List<NativeGraphicsPipeline.Binding> bindings(BlazeMeshState.Layout layout) {

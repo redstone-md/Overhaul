@@ -35,11 +35,12 @@ public final class BlazePrograms implements AutoCloseable {
         String name="unlinked";
         boolean foreign;
         String vertexName,fragmentName,vertexSource,fragmentSource;
-        BlazeProgramCompiler.Program sections,compact,compactSections;
-        boolean sectionsTried,compactTried,compactSectionsTried;
+        BlazeProgramCompiler.Program sections,compact,compactSections,shaded,shadedCompact;
+        boolean sectionsTried,compactTried,compactSectionsTried,shadedTried,shadedCompactTried;
         void releaseAll(Consumer<BlazeProgramCompiler.Program> released){
             if(program!=null)released.accept(program);if(sections!=null)released.accept(sections);
             if(compact!=null)released.accept(compact);if(compactSections!=null)released.accept(compactSections);
+            if(shaded!=null)released.accept(shaded);if(shadedCompact!=null)released.accept(shadedCompact);
         }
     }
     private final Thread owner=Thread.currentThread();
@@ -132,8 +133,9 @@ public final class BlazePrograms implements AutoCloseable {
         return entry.sections;
     }
     private static String sectionSource(Entry entry){return SECTION_OFFSET.matcher(entry.vertexSource).replaceFirst("in vec3 "+BlazeSectionShape.OFFSET_ATTRIBUTE+";").replaceAll("\\bChunkOffset\\b",BlazeSectionShape.OFFSET_ATTRIBUTE);}
-    private BlazeProgramCompiler.Program variant(Entry entry,String vertex){
-        return compiler.compile(entry.vertexName,entry.fragmentName,vertex,entry.fragmentSource,(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
+    private BlazeProgramCompiler.Program variant(Entry entry,String vertex){return variant(entry,vertex,entry.fragmentSource);}
+    private BlazeProgramCompiler.Program variant(Entry entry,String vertex,String fragment){
+        return compiler.compile(entry.vertexName,entry.fragmentName,vertex,fragment,(requested,requester,relative)->{throw new IllegalArgumentException("Unresolved vanilla shader import: "+requested);});
     }
     /** The shader as written, reading compact vertices, for code that draws section buffers itself with the section offset uniform. */
     BlazeProgramCompiler.Program compactProgram(int id){
@@ -160,6 +162,36 @@ public final class BlazePrograms implements AutoCloseable {
             }
         }catch(RuntimeException failure){why=failure.getMessage();}
         BlazeGlBoundary.reportOnce("compact program "+entry.name,"Terrain shader "+entry.name+" cannot read compact vertices, so terrain stays in full vertices: "+why);
+        return null;
+    }
+    /** The section program leaving its lighting to {@link BlazeShading}; null for shaders other than solid and cutout terrain, or when it cannot. */
+    public BlazeProgramCompiler.Program shadedSectionProgram(int id){
+        var sections=sectionProgram(id);var entry=entry(id);if(entry.shadedTried||sections==null)return entry.shaded;
+        entry.shadedTried=true;
+        entry.shaded=shadedVariant(entry,sectionSource(entry),sections);
+        return entry.shaded;
+    }
+    /** That program reading compact vertices; null when it cannot. */
+    public BlazeProgramCompiler.Program shadedCompactSectionProgram(int id){
+        var compactSections=compactSectionProgram(id);var entry=entry(id);if(entry.shadedCompactTried||compactSections==null)return entry.shadedCompact;
+        entry.shadedCompactTried=true;
+        String vertex=BlazeCompactSection.vertexSource(sectionSource(entry));
+        entry.shadedCompact=vertex==null?null:shadedVariant(entry,vertex,compactSections);
+        return entry.shadedCompact;
+    }
+    private BlazeProgramCompiler.Program shadedVariant(Entry entry,String vertex,BlazeProgramCompiler.Program original){
+        if(!BlazeShadingSource.terrain(entry.name))return null;
+        String why;
+        try{
+            String shadedVertex=BlazeShadingSource.vertex(vertex),shadedFragment=BlazeShadingSource.fragment(entry.fragmentSource);
+            if(shadedVertex==null||shadedFragment==null)why="it does not light and fog terrain the way the game's shader does";
+            else{
+                var program=variant(entry,shadedVertex,shadedFragment);
+                if(BlazeShadingSource.replaces(program,original))return program;
+                released.accept(program);why="its uniforms change";
+            }
+        }catch(RuntimeException failure){why=failure.getMessage();}
+        BlazeGlBoundary.reportOnce("shaded program "+entry.name,"Terrain shader "+entry.name+" keeps the game's lighting under Overhaul shading: "+why);
         return null;
     }
     public BlazeShaderSnapshot sectionSnapshot(int id,Map<String,Uniform> uniforms){return BlazeShaderSnapshot.capture(entry(id).sections,uniforms,boundTextures(id));}

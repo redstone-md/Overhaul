@@ -21,7 +21,7 @@ final class UpscalingPage extends SettingsPage {
     /** The options this page owns, which the optimisation page leaves out. */
     static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
-            BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
+            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
             ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
     private static final List<Integer> ANISOTROPY_LEVELS = List.of(1, 2, 4, 8, 16);
@@ -132,6 +132,9 @@ final class UpscalingPage extends SettingsPage {
                         return shown == null ? "Full resolution" : shown;
                     }));
         }
+        rows.add(new SettingsRow.Header("Shading"));
+        rows.add(toggle(BlazeOptimization.OVERHAUL_SHADING, "Overhaul shading",
+                "Sunlight, sky light and warm torch light on terrain without a shader pack; shadows traced with ray tracing on"));
         rows.add(new SettingsRow.Header("Ray tracing"));
         rows.add(toggle(BlazeOptimization.RAY_TRACING, "Ray traced lighting",
                 "Traced shadows, occlusion and reflections; replaces a shader pack and waits while one is on")

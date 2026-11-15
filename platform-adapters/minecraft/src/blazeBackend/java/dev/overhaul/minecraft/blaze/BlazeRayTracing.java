@@ -39,7 +39,7 @@ public final class BlazeRayTracing {
 
     /** Lights the world just drawn into the main target, with the camera matrices it was drawn with. */
     public void worldDrawn(Minecraft client, ViewArea area, Camera camera, float partialTick, Matrix4f view, Matrix4f projection) {
-        if (paused || !BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
+        if (paused || BlazeShading.get().litThisFrame() || !BlazeOptimization.RAY_TRACING.on() || failed && revision == BlazeOptimization.revision() || area == null) return;
         int flags = (BlazeOptimization.RT_SHADOWS.on() ? BlazeRayShader.SHADOWS : 0) | (BlazeOptimization.RT_AO.on() ? BlazeRayShader.AMBIENT_OCCLUSION : 0)
                 | (BlazeOptimization.RT_LIGHTING.on() ? BlazeRayShader.LIGHTING : 0)
                 | (BlazeOptimization.RT_GI.on() ? BlazeRayShader.GLOBAL_ILLUMINATION : 0)
@@ -55,18 +55,7 @@ public final class BlazeRayTracing {
         packNoted = false;
         if (Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) return;
         try {
-            if (renderer != owner) adopt(renderer);
-            if (revision != BlazeOptimization.revision()) {
-                revision = BlazeOptimization.revision();
-                distance = distance(BlazeOptimization.value("rtDistance", "64"));
-                failed = false;
-            }
-            if (world != level) {
-                level = world;
-                if (scene != null) owner.retire(scene);
-                scene = null;
-            }
-            if (scene == null) scene = new BlazeRayScene(renderer);
+            prepare(renderer, world);
             if (pass == null) pass = new BlazeRayPass(renderer);
             BlazeTextures.Sampled atlas = renderer.textures().resolve(client.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS));
             if (atlas == null) return;
@@ -89,8 +78,38 @@ public final class BlazeRayTracing {
         }
     }
 
+    /**
+     * The terrain around the camera as acceleration structures, for {@link BlazeShading}'s sun shadows, reaching as
+     * far as {@link #reach}; null where the scene cannot be built this frame.
+     */
+    BlazeRayScene.Frame shadowScene(BlazeRenderer renderer, ClientLevel world, ViewArea area, Vec3 position) {
+        prepare(renderer, world);
+        return scene.prepare(area, position.x, position.y, position.z, distance, new float[BlazeRayShader.TRAILER_FLOATS]);
+    }
+
+    /** How far rays reach, in blocks. */
+    int reach() {
+        return distance;
+    }
+
+    /** Follows the renderer, the settings and the level, and makes the scene for them. */
+    private void prepare(BlazeRenderer renderer, ClientLevel world) {
+        if (renderer != owner) adopt(renderer);
+        if (revision != BlazeOptimization.revision()) {
+            revision = BlazeOptimization.revision();
+            distance = distance(BlazeOptimization.value("rtDistance", "64"));
+            failed = false;
+        }
+        if (world != level) {
+            level = world;
+            if (scene != null) owner.retire(scene);
+            scene = null;
+        }
+        if (scene == null) scene = new BlazeRayScene(renderer);
+    }
+
     /** The direction toward the sun, or the moon once the sun has set, and how strongly it lights the world. */
-    private static float[] light(ClientLevel world, float partialTick) {
+    static float[] light(ClientLevel world, float partialTick) {
         double angle = world.getTimeOfDay(partialTick) * Math.PI * 2;
         float x = (float) -Math.sin(angle), y = (float) Math.cos(angle);
         float weather = SHOW_LIGHT ? 1 : 1 - 0.85f * world.getRainLevel(partialTick);
@@ -98,7 +117,7 @@ public final class BlazeRayTracing {
         return new float[]{-x, -y, 0, 0.35f * Math.min(1, -y * 4) * weather};
     }
 
-    private static float[] sky(ClientLevel world, Vec3 position, float partialTick) {
+    static float[] sky(ClientLevel world, Vec3 position, float partialTick) {
         Vec3 color = world.getSkyColor(position, partialTick);
         return new float[]{(float) color.x, (float) color.y, (float) color.z, world.getSkyDarken(partialTick)};
     }

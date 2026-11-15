@@ -181,7 +181,10 @@ public final class BlazeRenderer implements AutoCloseable {
         BlazeShaderSnapshot game=shader.overhaul$sectionSnapshot();
         BlazePackScene.Sections pack=packScene!=null&&packScene.routes(currentTarget())?packScene.sections(game):null;
         if(pack!=null)return sections.begin(pack.shader(),null,ordered,pack.target(),state.snapshot(),pack.failed());
-        return sections.begin(game,compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram(),ordered,currentTarget(),state.snapshot(),null);
+        BlazeProgramCompiler.Program compact=compactFailed||!BlazeOptimization.COMPACT_SECTIONS.on()?null:shader.overhaul$compactSectionProgram();
+        BlazeShading.Route shaded=BlazeShading.get().route(this,shader,game,compact);
+        if(shaded!=null)return sections.begin(shaded.shader(),shaded.compact(),ordered,shaded.target(),state.snapshot(),null);
+        return sections.begin(game,compact,ordered,currentTarget(),state.snapshot(),null);
     }
     /** The one batch every terrain layer reuses, light camera included. */
     BlazeSectionBatch sectionBatch(){
