@@ -27,6 +27,8 @@ final class BlazeShadingGlow implements AutoCloseable {
     private static final int LEVELS = 6;
     /** How fast the exposure follows the picture, per second. */
     private static final float PACE = 1.5f;
+    /** Nanoseconds between two runs of the glow and the measure: a frame at 250 a second. */
+    private static final long EVERY = 4_000_000;
 
     private final BlazeRenderer owner;
     private final VulkanContext context;
@@ -37,7 +39,7 @@ final class BlazeShadingGlow implements AutoCloseable {
     private GpuImage measured;
     private GpuImageView measuredView;
     private Binding binding;
-    private long measuredAt;
+    private long measuredAt, finishedAt;
     /** Whether the glow and the measure hold something a frame made. */
     private boolean glowing, adapting;
 
@@ -120,9 +122,14 @@ final class BlazeShadingGlow implements AutoCloseable {
         return new Light(levelViews[0], levelViews[1], measuredView, smooth.handle());
     }
 
-    /** Queues the glow and the measure over the light the pass left in the images {@link #light} gave out. */
+    /**
+     * Queues the glow and the measure over the light the pass left in the images {@link #light} gave out. The eye
+     * cannot follow either faster than {@link #EVERY}, so frames that come sooner keep what the last one made.
+     */
     void finish(boolean bloom, boolean adapt) {
         long now = System.nanoTime();
+        if (finishedAt != 0 && now - finishedAt < EVERY) return;
+        finishedAt = now;
         float blend = measuredAt == 0 ? 1 : 1 - (float) Math.exp(-(now - measuredAt) * 1e-9 * PACE);
         if (adapt) measuredAt = now;
         owner.enqueue(new Finish(binding, bloom, adapt, blend));
