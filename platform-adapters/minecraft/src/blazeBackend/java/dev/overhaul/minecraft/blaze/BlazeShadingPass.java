@@ -90,7 +90,7 @@ final class BlazeShadingPass implements AutoCloseable {
 
     /**
      * What one frame's lighting reads beyond the target: the sun or moon and the sky as {@link BlazeRayTracing} gives
-     * them, the fog's colour, start and end, and where traced shadows reach.
+     * them, the fog's colour, start and end, and how far shadows are looked for: traced, or walked on screen by the plain variant.
      */
     record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
 

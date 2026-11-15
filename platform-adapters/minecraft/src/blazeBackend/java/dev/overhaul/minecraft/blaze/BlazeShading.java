@@ -24,11 +24,14 @@ import static org.lwjgl.vulkan.VK10.*;
  * and light levels. Once cutout is drawn, {@link BlazeShadingPass} lights those pixels in place, before translucent
  * terrain, entities and particles draw over them as the game lights them. With {@link BlazeOptimization#SHADING_BLOOM}
  * or {@link BlazeOptimization#SHADING_EXPOSURE} on, the pass leaves linear light and {@link BlazeShadingGlow} brings it
- * to the screen. It only runs where no shader pack or
+ * to the screen. Without traced shadows, {@link BlazeOptimization#SHADING_SCREEN_SHADOWS} has the pass find the
+ * shadows of what is on screen. It only runs where no shader pack or
  * Fabulous graphics owns the frame; any failure turns it off until the settings change. Render thread only.
  */
 public final class BlazeShading {
     private static final BlazeShading INSTANCE = new BlazeShading();
+    /** How far, in blocks, the plain variant walks the screen toward the sun at middle distance. */
+    private static final float SCREEN_SHADOW_REACH = 16;
 
     private BlazeRenderer owner;
     /** The main target as the frame started, and the target over its colour and the surfaces drawn terrain writes. */
@@ -118,7 +121,7 @@ public final class BlazeShading {
             if (linear && glow == null) glow = new BlazeShadingGlow(owner);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), BlazeRayTracing.light(world, partialTick),
                     BlazeRayTracing.sky(world, position, partialTick), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
-                    RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : 0);
+                    RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.into(main.width(), main.height()) : null);
             if (linear) glow.finish(main, lighting, bloom, adapt);
             lit = true;

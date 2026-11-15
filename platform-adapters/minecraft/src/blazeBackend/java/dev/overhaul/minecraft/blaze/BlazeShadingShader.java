@@ -6,7 +6,8 @@ package dev.overhaul.minecraft.blaze;
  * it in linear light with a coloured sun or moon, an ambient the sky tints and that the sky light level lets in, and
  * warm block light, then maps it to the screen with a filmic curve and fogs it the way the game does. Pixels terrain
  * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera
- * and fades to the sky light level's guess beyond; the plain one only guesses, so it runs on any card. The lit
+ * and fades to the sky light level's guess beyond; the plain one guesses, and can walk the depth it already has
+ * toward the sun for the shadows of what is on screen, so it runs on any card. The lit
  * variant stops before the screen: it writes the linear light for {@link BlazeShadingGlow} to finish.
  */
 final class BlazeShadingShader {
@@ -24,7 +25,8 @@ final class BlazeShadingShader {
             layout(binding = 3) uniform sampler2D atlas;
             """;
     // light: direction to the sun or moon, then its strength; sky: the sky colour, then daylight; size: pixels, then
-    // the hit table's address; options: the fog's colour, its start's bits, the traced reach's bits, its end's bits.
+    // the hit table's address; options: the fog's colour, its start's bits, the shadow reach's bits, its end's bits.
+    // The reach is how far rays are traced in the traced variant, how far depth is walked in the plain one, 0 for none.
     static final String FRAME = """
             layout(push_constant) uniform Frame { mat4 inverseViewProjection; vec4 light; vec4 sky; uvec4 size; uvec4 options; };
             """;
@@ -73,16 +75,48 @@ final class BlazeShadingShader {
             }
             """;
     private static final String BODY = """
+            #ifndef TRACED
+            // The share of the sun left after walking the depth on screen toward it: steps grow with the distance
+            // walked and start at a place that differs per pixel, so the few steps do not band. A step is in shadow
+            // when what the screen shows there is nearer than the step, by less than a block and a half: anything
+            // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
+            float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel) {
+                mat4 viewProjection = inverse(inverseViewProjection);
+                vec3 origin = position + normal * (0.02 + distance * 0.004);
+                float far = reach * clamp(distance / 24.0, 0.2, 1.5);
+                float offset = fract(52.9829189 * fract(dot(vec2(pixel), vec2(0.06711056, 0.00583715))));
+                for (int i = 0; i < 14; i++) {
+                    float along = (float(i) + offset) / 14.0;
+                    vec3 point = origin + light.xyz * (far * along * along);
+                    vec4 clip = viewProjection * vec4(point, 1.0);
+                    if (clip.w <= 0.0) break;
+                    vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+                    if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) break;
+                    ivec2 at = ivec2(uv * vec2(size.xy));
+                    if (at == pixel) continue;
+                    float gap = length(point) - length(positionOf(at));
+                    float slack = 0.05 + length(point) * 0.004;
+                    if (gap > slack && gap < 1.5 + slack) {
+                        vec2 edge = min(uv, 1.0 - uv);
+                        return 1.0 - smoothstep(0.0, 0.03, min(edge.x, edge.y));
+                    }
+                }
+                return 1.0;
+            }
+            #endif
+
             // The share of the sun a surface sees: open sky makes a good guess; near the camera, rays know.
-            float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance) {
+            float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance, ivec2 pixel) {
                 float guess = smoothstep(0.8, 0.97, skyLevel);
-            #ifdef TRACED
                 float reach = uintBitsToFloat(options.z);
+            #ifdef TRACED
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
                     float traced = blocked(origin, light.xyz, 256.0) ? 0.0 : transmitted(origin, light.xyz, 256.0);
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
+            #else
+                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel);
             #endif
                 return guess;
             }
@@ -105,7 +139,7 @@ final class BlazeShadingShader {
                 vec3 position = positionOf(pixel);
                 float distance = length(position);
                 float facing = max(dot(normal, light.xyz), 0.0);
-                float shadow = facing > 0.0 && light.w > 0.0 ? shadowAt(position, normal, skyLevel, distance) : 0.0;
+                float shadow = facing > 0.0 && light.w > 0.0 ? shadowAt(position, normal, skyLevel, distance, pixel) : 0.0;
                 vec3 sun = sunColor() * light.w * facing * shadow * 2.0;
                 vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(blockLevel) * 1.6;
