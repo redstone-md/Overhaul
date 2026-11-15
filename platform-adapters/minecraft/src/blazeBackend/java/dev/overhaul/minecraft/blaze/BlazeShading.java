@@ -22,7 +22,9 @@ import static org.lwjgl.vulkan.VK10.*;
  * beside the main colour is cleared; solid and cutout terrain then draws with the programs {@link BlazeShadingSource}
  * makes, into a target over both, so the colour holds each surface's own colour and the surfaces image its normal
  * and light levels. Once cutout is drawn, {@link BlazeShadingPass} lights those pixels in place, before translucent
- * terrain, entities and particles draw over them as the game lights them. It only runs where no shader pack or
+ * terrain, entities and particles draw over them as the game lights them. With {@link BlazeOptimization#SHADING_BLOOM}
+ * or {@link BlazeOptimization#SHADING_EXPOSURE} on, the pass leaves linear light and {@link BlazeShadingGlow} brings it
+ * to the screen. It only runs where no shader pack or
  * Fabulous graphics owns the frame; any failure turns it off until the settings change. Render thread only.
  */
 public final class BlazeShading {
@@ -33,7 +35,9 @@ public final class BlazeShading {
     private BlazeTarget main, target;
     private GpuImage surfaces;
     private GpuImageView surfacesView, forColor, forDepth;
-    private final BlazeShadingPass[] passes = new BlazeShadingPass[2];
+    /** The lighting passes made so far: traced ones at odd places, ones leaving linear light in the upper half. */
+    private final BlazeShadingPass[] passes = new BlazeShadingPass[4];
+    private BlazeShadingGlow glow;
     private int revision = -1;
     private boolean collecting, lit, failed;
     /** What the log last said: 0 nothing, 1 shadows from sky light, 2 traced shadows. */
@@ -108,12 +112,15 @@ public final class BlazeShading {
             BlazeTextures.Sampled atlas = traced ? owner.textures().resolve(client.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)) : null;
             BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position) : null;
             traced = scene != null;
-            int variant = traced ? 1 : 0;
-            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced);
+            boolean bloom = BlazeOptimization.SHADING_BLOOM.on(), adapt = BlazeOptimization.SHADING_EXPOSURE.on(), linear = bloom || adapt;
+            int variant = (traced ? 1 : 0) | (linear ? 2 : 0);
+            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear);
+            if (linear && glow == null) glow = new BlazeShadingGlow(owner);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), BlazeRayTracing.light(world, partialTick),
                     BlazeRayTracing.sky(world, position, partialTick), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : 0);
-            passes[variant].shade(main, surfacesView, atlas, scene, lighting);
+            passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.into(main.width(), main.height()) : null);
+            if (linear) glow.finish(main, lighting, bloom, adapt);
             lit = true;
             int shown = traced ? 2 : 1;
             if (logged != shown) LoggerFactory.getLogger(BlazeShading.class).info("Overhaul shading on, sun shadows {}", traced ? "traced" : "from sky light");
@@ -156,13 +163,16 @@ public final class BlazeShading {
         main = target = null;
         surfaces = null;
         surfacesView = forColor = forDepth = null;
-        passes[0] = passes[1] = null;
+        java.util.Arrays.fill(passes, null);
+        glow = null;
         renderer.closeWith(() -> {
             if (owner != renderer) return;
-            for (int i = 0; i < 2; i++) if (passes[i] != null) passes[i].close();
+            for (BlazeShadingPass pass : passes) if (pass != null) pass.close();
+            if (glow != null) glow.close();
             if (target != null) target.close();
             if (surfaces != null) surfaces.close();
-            passes[0] = passes[1] = null;
+            java.util.Arrays.fill(passes, null);
+            glow = null;
             target = null;
             surfaces = null;
         });

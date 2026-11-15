@@ -24,22 +24,24 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Runs {@link BlazeShadingShader} over the main target once terrain is drawn: it reads the target's colour and depth
  * and the surfaces beside them, writes the lit picture to an image of its own, since colour targets cannot be written
- * as storage, and copies it back over the colour. One pass is one variant, traced or plain; the pipeline lives as long
- * as the pass, the output follows the target's size.
+ * as storage, and copies it back over the colour. One pass is one variant, traced or plain, finishing the picture or
+ * leaving linear light in an image {@link BlazeShadingGlow} gives it; the pipeline lives as long as the pass, the
+ * output follows the target's size.
  */
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
-    private final boolean traced;
+    private final boolean traced, linear;
     private final GpuSampler sampler;
     private long setLayout, pipelineLayout, pipeline;
     private GpuImage output;
     private GpuImageView outputView;
     private Binding binding;
 
-    BlazeShadingPass(BlazeRenderer owner, boolean traced) {
+    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear) {
         this.owner = owner;
         this.traced = traced;
+        this.linear = linear;
         context = owner.context();
         sampler = owner.allocator().createSampler(new SamplerSettings(SamplerSettings.Filter.NEAREST,
                 SamplerSettings.Filter.NEAREST, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
@@ -50,10 +52,6 @@ final class BlazeShadingPass implements AutoCloseable {
             close();
             throw failure;
         }
-    }
-
-    boolean traced() {
-        return traced;
     }
 
     private int[] sampled() {
@@ -76,7 +74,7 @@ final class BlazeShadingPass implements AutoCloseable {
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "shading pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile(traced ? "overhaul_shading_traced" : "overhaul_shading", BlazeShadingShader.source(traced), ShaderStage.COMPUTE).directBuffer();
+            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : ""), BlazeShadingShader.source(traced, linear), ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "shading module");
             long module = pointer.get(0);
             try {
@@ -96,10 +94,13 @@ final class BlazeShadingPass implements AutoCloseable {
      */
     record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
 
-    /** Queues the lighting of {@code target} from {@code surfaces}, then the copy of the result over its colour. */
-    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting) {
+    /**
+     * Queues the lighting of {@code target} from {@code surfaces}. A finishing pass then copies the result over the
+     * target's colour; a linear one writes {@code into} and leaves the colour as it is.
+     */
+    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, GpuImageView into) {
         int width = target.width(), height = target.height();
-        if (output == null || output.width(0) != width || output.height(0) != height) {
+        if (!linear && (output == null || output.width(0) != width || output.height(0) != height)) {
             if (binding != null) owner.retire(binding);
             if (output != null) owner.retire(output);
             binding = null;
@@ -113,13 +114,25 @@ final class BlazeShadingPass implements AutoCloseable {
         long[] samplers = traced ? new long[]{sampler.handle(), sampler.handle(), atlas.sampler(), sampler.handle()}
                 : new long[]{sampler.handle(), sampler.handle(), sampler.handle()};
         BlazeRayStructures.Structure top = traced ? scene.top() : null;
-        if (binding == null || !binding.reads(top, views, samplers)) {
+        GpuImageView written = linear ? into : outputView;
+        if (binding == null || !binding.reads(top, views, samplers, written)) {
             if (binding != null) owner.retire(binding);
             binding = null;
-            binding = new Binding(top, views, samplers, traced && atlas.general());
+            binding = new Binding(top, views, samplers, traced && atlas.general(), written);
         }
         owner.enqueue(new Dispatch(binding, traced ? scene.table() : 0, lighting, width, height));
-        owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
+        if (!linear) owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
+    }
+
+    /** Fills the shaders' {@code Frame}: the camera, the lights, the size and two more words, then the fog and the reach. */
+    static void frame(java.nio.ByteBuffer push, Lighting lighting, int width, int height, long words) {
+        lighting.inverseViewProjection().get(0, push);
+        for (int i = 0; i < 4; i++) push.putFloat(64 + i * 4, lighting.light()[i]).putFloat(80 + i * 4, lighting.sky()[i]);
+        push.putInt(96, width).putInt(100, height).putLong(104, words);
+        float[] fog = lighting.fogColor();
+        int packed = 0;
+        for (int i = 0; i < 4; i++) packed |= Math.round(Math.max(0, Math.min(1, fog[i])) * 255) << (i * 8);
+        push.putInt(112, packed).putFloat(116, lighting.fogStart()).putFloat(120, lighting.reach()).putFloat(124, lighting.fogEnd());
     }
 
     /** One descriptor set over a target's views, the surfaces, and for the traced variant the scene and the atlas. */
@@ -131,11 +144,11 @@ final class BlazeShadingPass implements AutoCloseable {
         private final GpuImageView written;
         private long pool, set;
 
-        Binding(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers, boolean atlasGeneral) {
+        Binding(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers, boolean atlasGeneral, GpuImageView written) {
             this.top = top;
             this.views = views;
             this.samplers = samplers;
-            written = outputView;
+            this.written = written;
             int[] slots = sampled();
             VkDevice device = context.device();
             try (MemoryStack stack = VulkanStack.push()) {
@@ -167,8 +180,8 @@ final class BlazeShadingPass implements AutoCloseable {
             }
         }
 
-        boolean reads(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers) {
-            return this.top == top && java.util.Arrays.equals(this.views, views) && java.util.Arrays.equals(this.samplers, samplers) && written == outputView;
+        boolean reads(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers, GpuImageView written) {
+            return this.top == top && java.util.Arrays.equals(this.views, views) && java.util.Arrays.equals(this.samplers, samplers) && this.written == written;
         }
 
         void transition(VkCommandBuffer command, BlazeImageUse images) {
@@ -201,13 +214,7 @@ final class BlazeShadingPass implements AutoCloseable {
             binding.transition(command, images);
             try (MemoryStack stack = VulkanStack.push()) {
                 var push = stack.malloc(BlazeShadingShader.PUSH_BYTES);
-                lighting.inverseViewProjection().get(0, push);
-                for (int i = 0; i < 4; i++) push.putFloat(64 + i * 4, lighting.light()[i]).putFloat(80 + i * 4, lighting.sky()[i]);
-                push.putInt(96, width).putInt(100, height).putLong(104, table);
-                float[] fog = lighting.fogColor();
-                int packed = 0;
-                for (int i = 0; i < 4; i++) packed |= Math.round(Math.max(0, Math.min(1, fog[i])) * 255) << (i * 8);
-                push.putInt(112, packed).putFloat(116, lighting.fogStart()).putFloat(120, lighting.reach()).putFloat(124, lighting.fogEnd());
+                frame(push, lighting, width, height, table);
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(binding.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);

@@ -6,7 +6,8 @@ package dev.overhaul.minecraft.blaze;
  * it in linear light with a coloured sun or moon, an ambient the sky tints and that the sky light level lets in, and
  * warm block light, then maps it to the screen with a filmic curve and fogs it the way the game does. Pixels terrain
  * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera
- * and fades to the sky light level's guess beyond; the plain one only guesses, so it runs on any card.
+ * and fades to the sky light level's guess beyond; the plain one only guesses, so it runs on any card. The lit
+ * variant stops before the screen: it writes the linear light for {@link BlazeShadingGlow} to finish.
  */
 final class BlazeShadingShader {
     static final int PUSH_BYTES = 128;
@@ -24,15 +25,22 @@ final class BlazeShadingShader {
             """;
     // light: direction to the sun or moon, then its strength; sky: the sky colour, then daylight; size: pixels, then
     // the hit table's address; options: the fog's colour, its start's bits, the traced reach's bits, its end's bits.
+    static final String FRAME = """
+            layout(push_constant) uniform Frame { mat4 inverseViewProjection; vec4 light; vec4 sky; uvec4 size; uvec4 options; };
+            """;
     private static final String BINDINGS = """
             layout(local_size_x = 8, local_size_y = 8) in;
             layout(binding = 1) uniform sampler2D sceneColor;
             layout(binding = 2) uniform sampler2D sceneDepth;
+            #ifdef LINEAR
+            layout(binding = 4, rgba16f) writeonly uniform image2D lit;
+            #else
             layout(binding = 4, rgba8) writeonly uniform image2D lit;
+            #endif
             layout(binding = 5) uniform sampler2D surfaces;
-            layout(push_constant) uniform Frame { mat4 inverseViewProjection; vec4 light; vec4 sky; uvec4 size; uvec4 options; };
-            """;
-    private static final String BODY = """
+            """ + FRAME;
+    /** From linear light to the screen: the filmic curve, then the game's fog; needs {@link #FRAME} and {@code sceneDepth}. */
+    static final String SCREEN = """
             vec3 linear(vec3 color) { return mix(color / 12.92, pow((color + 0.055) / 1.055, vec3(2.4)), step(0.04045, color)); }
             vec3 display(vec3 color) { return mix(color * 12.92, 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, color)); }
 
@@ -53,6 +61,18 @@ final class BlazeShadingShader {
                 return position.xyz / position.w;
             }
 
+            // Linear light at an exposure to screen colour, under the game's own fog: a cylinder around the camera,
+            // linear from start to end.
+            vec3 screened(vec3 shaded, vec3 position, float exposure) {
+                vec3 result = display(filmic(shaded * 0.6 * exposure));
+                float start = uintBitsToFloat(options.y), end = uintBitsToFloat(options.w);
+                vec4 fog = unpackUnorm4x8(options.x);
+                float around = max(length(position.xz), abs(position.y));
+                float fogged = end > start ? clamp((around - start) / (end - start), 0.0, 1.0) : 0.0;
+                return mix(result, fog.rgb, fogged * fog.a);
+            }
+            """;
+    private static final String BODY = """
             // The share of the sun a surface sees: open sky makes a good guess; near the camera, rays know.
             float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance) {
                 float guess = smoothstep(0.8, 0.97, skyLevel);
@@ -73,7 +93,11 @@ final class BlazeShadingShader {
                 vec4 color = texelFetch(sceneColor, pixel, 0);
                 vec4 surface = texelFetch(surfaces, pixel, 0);
                 if (surface.a == 0.0) {
+            #ifdef LINEAR
+                    imageStore(lit, pixel, vec4(0.0));
+            #else
                     imageStore(lit, pixel, color);
+            #endif
                     return;
                 }
                 vec3 normal = unfold(surface.xy * 2.0 - 1.0);
@@ -86,21 +110,22 @@ final class BlazeShadingShader {
                 vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(blockLevel) * 1.6;
                 vec3 shaded = linear(color.rgb) * (sun + ambient + torch + 0.012);
-                vec3 result = display(filmic(shaded * 0.6));
-                // The game's own fog: a cylinder around the camera, linear from start to end, in screen colour.
-                float start = uintBitsToFloat(options.y), end = uintBitsToFloat(options.w);
-                vec4 fog = unpackUnorm4x8(options.x);
-                float around = max(length(position.xz), abs(position.y));
-                float fogged = end > start ? clamp((around - start) / (end - start), 0.0, 1.0) : 0.0;
-                result = mix(result, fog.rgb, fogged * fog.a);
-                imageStore(lit, pixel, vec4(result, color.a));
+            #ifdef LINEAR
+                imageStore(lit, pixel, vec4(shaded, 1.0));
+            #else
+                imageStore(lit, pixel, vec4(screened(shaded, position, 1.0), color.a));
+            #endif
             }
             """;
 
-    /** The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries. */
-    static String source(boolean traced) {
-        if (!traced) return HEAD + BINDINGS + BlazeRayShader.LIGHTS + BODY;
-        return HEAD + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + BODY;
+    /**
+     * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
+     * {@code linear} it writes linear light and a mark where terrain is, instead of the finished screen colour.
+     */
+    static String source(boolean traced, boolean linear) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "");
+        if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY;
+        return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY;
     }
 
     private BlazeShadingShader() {}
