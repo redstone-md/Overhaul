@@ -7,8 +7,10 @@ package dev.overhaul.minecraft.blaze;
  * warm block light, then maps it to the screen with a filmic curve and fogs it the way the game does. Pixels terrain
  * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera
  * and fades to the sky light level's guess beyond; the plain one guesses, and can walk the depth it already has
- * toward the sun for the shadows of what is on screen, so it runs on any card. The lit
- * variant stops before the screen: it writes the linear light for {@link BlazeShadingGlow} to finish.
+ * toward the sun for the shadows of what is on screen, so it runs on any card. The linear
+ * variant lights two by two pixels at a time and also leaves their mean linear light at half size, for
+ * {@link BlazeShadingGlow} to blur and measure; it mixes in the glow and the exposure that made of the frame before,
+ * so the whole picture is still one pass over the screen.
  */
 final class BlazeShadingShader {
     static final int PUSH_BYTES = 128;
@@ -34,12 +36,14 @@ final class BlazeShadingShader {
             layout(local_size_x = 8, local_size_y = 8) in;
             layout(binding = 1) uniform sampler2D sceneColor;
             layout(binding = 2) uniform sampler2D sceneDepth;
-            #ifdef LINEAR
-            layout(binding = 4, rgba16f) writeonly uniform image2D lit;
-            #else
             layout(binding = 4, rgba8) writeonly uniform image2D lit;
-            #endif
             layout(binding = 5) uniform sampler2D surfaces;
+            #ifdef LINEAR
+            // The glow and the measured brightness of the frame before, and this frame's light at half size.
+            layout(binding = 6) uniform sampler2D glow;
+            layout(binding = 7) uniform sampler2D measured;
+            layout(binding = 8, rgba16f) writeonly uniform image2D spread;
+            #endif
             """ + FRAME;
     /** From linear light to the screen: the filmic curve, then the game's fog; needs {@link #FRAME} and {@code sceneDepth}. */
     static final String SCREEN = """
@@ -121,18 +125,14 @@ final class BlazeShadingShader {
                 return guess;
             }
 
-            void main() {
-                ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-                if (any(greaterThanEqual(uvec2(pixel), size.xy))) return;
+            // Lights one pixel onto the screen; gives its linear light back, with 1 beside it where terrain is.
+            vec4 lightOf(ivec2 pixel) {
+                if (any(greaterThanEqual(uvec2(pixel), size.xy))) return vec4(0.0);
                 vec4 color = texelFetch(sceneColor, pixel, 0);
                 vec4 surface = texelFetch(surfaces, pixel, 0);
                 if (surface.a == 0.0) {
-            #ifdef LINEAR
-                    imageStore(lit, pixel, vec4(0.0));
-            #else
                     imageStore(lit, pixel, color);
-            #endif
-                    return;
+                    return vec4(0.0);
                 }
                 vec3 normal = unfold(surface.xy * 2.0 - 1.0);
                 float blockLevel = surface.z, skyLevel = clamp((surface.a * 255.0 - 1.0) / 254.0, 0.0, 1.0);
@@ -144,17 +144,33 @@ final class BlazeShadingShader {
                 vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(blockLevel) * 1.6;
                 vec3 shaded = linear(color.rgb) * (sun + ambient + torch + 0.012);
+                vec3 shown = shaded;
+                float exposure = 1.0;
             #ifdef LINEAR
-                imageStore(lit, pixel, vec4(shaded, 1.0));
+                // An empty glow or measure is one switched off, or the first frame's.
+                vec4 around = textureLod(glow, (vec2(pixel) + 0.5) / vec2(size.xy), 0.0);
+                if (around.a > 0.0) shown = mix(shaded, around.rgb / around.a, 0.12);
+                float average = texelFetch(measured, ivec2(0), 0).r;
+                if (average > 0.0) exposure = clamp(sqrt(0.35 / average), 0.7, 2.0);
+            #endif
+                imageStore(lit, pixel, vec4(screened(shown, position, exposure), color.a));
+                return vec4(shaded, 1.0);
+            }
+
+            void main() {
+            #ifdef LINEAR
+                ivec2 cell = ivec2(gl_GlobalInvocationID.xy), pixel = cell * 2;
+                vec4 sum = lightOf(pixel) + lightOf(pixel + ivec2(1, 0)) + lightOf(pixel + ivec2(0, 1)) + lightOf(pixel + ivec2(1, 1));
+                if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
             #else
-                imageStore(lit, pixel, vec4(screened(shaded, position, 1.0), color.a));
+                lightOf(ivec2(gl_GlobalInvocationID.xy));
             #endif
             }
             """;
 
     /**
      * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
-     * {@code linear} it writes linear light and a mark where terrain is, instead of the finished screen colour.
+     * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before.
      */
     static String source(boolean traced, boolean linear) {
         String head = HEAD + (linear ? "#define LINEAR\n" : "");

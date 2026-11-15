@@ -7,7 +7,6 @@ import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.GpuSampler;
 import dev.overhaul.vulkan.ImageFormat;
-import dev.overhaul.vulkan.ImageRegion;
 import dev.overhaul.vulkan.SamplerSettings;
 import dev.overhaul.vulkan.VulkanContext;
 import dev.overhaul.vulkan.VulkanStack;
@@ -17,11 +16,12 @@ import org.lwjgl.vulkan.*;
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
- * Finishes the linear light a {@link BlazeShadingPass} left: bright terrain glows over what is around it and the
- * picture's exposure follows its brightness, the way an eye adapts. The light is halved level by level, the levels
- * are added back up into a soft glow, the smallest one is measured into one pixel that moves towards it over time,
- * and one last pass brings the light to the screen. Every level is an image of its own, so each step reads one and
- * writes another. Either effect can be left out; the levels the other one needs are still made.
+ * Makes the glow and the exposure of Overhaul shading from the linear light a {@link BlazeShadingPass} leaves at half
+ * size. The light is halved level by level, the levels are added back up into a soft glow, and the smallest one is
+ * measured into one pixel that moves towards it over time, the way an eye adapts. The pass that lights the next frame
+ * reads both, so they trail the picture by one frame and cost no pass over the whole screen. Every level is an image
+ * of its own, so each step reads one and writes another. Either effect can be left out: its image is then empty,
+ * which the lighting pass takes as none; the levels the other one needs are still made.
  */
 final class BlazeShadingGlow implements AutoCloseable {
     private static final int LEVELS = 6;
@@ -31,13 +31,15 @@ final class BlazeShadingGlow implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
     private final GpuSampler nearest, smooth;
-    private final long[] setLayouts = new long[2], pipelineLayouts = new long[2], pipelines = new long[2];
+    private final long[] setLayouts = new long[1], pipelineLayouts = new long[1], pipelines = new long[1];
     private final GpuImage[] levels = new GpuImage[LEVELS];
     private final GpuImageView[] levelViews = new GpuImageView[LEVELS];
-    private GpuImage measured, output;
-    private GpuImageView measuredView, outputView;
+    private GpuImage measured;
+    private GpuImageView measuredView;
     private Binding binding;
     private long measuredAt;
+    /** Whether the glow and the measure hold something a frame made. */
+    private boolean glowing, adapting;
 
     BlazeShadingGlow(BlazeRenderer owner) {
         this.owner = owner;
@@ -46,7 +48,6 @@ final class BlazeShadingGlow implements AutoCloseable {
         smooth = sampler(SamplerSettings.Filter.LINEAR);
         try {
             create(0, "overhaul_shading_glow", BlazeShadingGlowShader.STEP, 1, BlazeShadingGlowShader.STEP_BYTES);
-            create(1, "overhaul_shading_screen", BlazeShadingGlowShader.COMPOSE, 5, BlazeShadingShader.PUSH_BYTES);
             measured = owner.allocator().createImage(ImageFormat.RGBA16_SFLOAT, 1, 1, 1, 1,
                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             measuredView = measured.view(0, 1, 0, 1);
@@ -90,34 +91,41 @@ final class BlazeShadingGlow implements AutoCloseable {
         }
     }
 
-    /** The image the lighting pass writes this frame's linear light to, at the target's size. */
-    GpuImageView into(int width, int height) {
-        if (levels[0] == null || levels[0].width(0) != width || levels[0].height(0) != height) {
+    /** What the lighting pass works with: the half size image it writes, and the glow and the measure it reads. */
+    record Light(GpuImageView spread, GpuImageView glow, GpuImageView measured, long smooth) {}
+
+    /**
+     * The images for a frame of this size. An effect that is off, or whose images are new, shows as an empty image.
+     */
+    Light light(int width, int height, boolean bloom, boolean adapt) {
+        int wide = Math.max(1, width / 2), high = Math.max(1, height / 2);
+        if (levels[0] == null || levels[0].width(0) != wide || levels[0].height(0) != high) {
             release();
             for (int i = 0; i < LEVELS; i++) {
-                levels[i] = owner.allocator().createImage(ImageFormat.RGBA16_SFLOAT, Math.max(1, width >> i), Math.max(1, height >> i), 1, 1,
-                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+                levels[i] = owner.allocator().createImage(ImageFormat.RGBA16_SFLOAT, Math.max(1, wide >> i), Math.max(1, high >> i), 1, 1,
+                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
                 levelViews[i] = levels[i].view(0, 1, 0, 1);
             }
-            output = owner.allocator().createImage(ImageFormat.RGBA8_UNORM, width, height, 1, 1,
-                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-            outputView = output.view(0, 1, 0, 1);
+            binding = new Binding();
+            owner.clearImage(levels[1], 0, 0, 0, 0, 0, 0);
+            glowing = false;
         }
-        return levelViews[0];
+        if (glowing && !bloom) owner.clearImage(levels[1], 0, 0, 0, 0, 0, 0);
+        if (adapting && !adapt) {
+            owner.clearImage(measured, 0, 0, 0, 0, 0, 0);
+            measuredAt = 0;
+        }
+        glowing = bloom;
+        adapting = adapt;
+        return new Light(levelViews[0], levelViews[1], measuredView, smooth.handle());
     }
 
-    /** Queues the glow and the measure over the light {@link #into} gave out, then the finished picture over the target's colour. */
-    void finish(BlazeTarget target, BlazeShadingPass.Lighting lighting, boolean bloom, boolean adapt) {
-        if (binding == null || binding.color != target.colorView() || binding.depth != target.sampledDepthView()) {
-            if (binding != null) owner.retire(binding);
-            binding = null;
-            binding = new Binding(target.colorView(), target.sampledDepthView());
-        }
+    /** Queues the glow and the measure over the light the pass left in the images {@link #light} gave out. */
+    void finish(boolean bloom, boolean adapt) {
         long now = System.nanoTime();
         float blend = measuredAt == 0 ? 1 : 1 - (float) Math.exp(-(now - measuredAt) * 1e-9 * PACE);
-        measuredAt = now;
-        owner.enqueue(new Finish(binding, lighting, target.width(), target.height(), bloom, adapt, blend));
-        owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
+        if (adapt) measuredAt = now;
+        owner.enqueue(new Finish(binding, bloom, adapt, blend));
     }
 
     private void release() {
@@ -128,54 +136,41 @@ final class BlazeShadingGlow implements AutoCloseable {
             levels[i] = null;
             levelViews[i] = null;
         }
-        if (output != null) owner.retire(output);
-        output = null;
-        outputView = null;
     }
 
-    /**
-     * The descriptor sets over this size's images and one target: a set per halving, one per doubling, the measure
-     * and the compose, in the order they run.
-     */
+    /** The descriptor sets over this size's images: a set per halving, one per doubling and the measure. */
     private final class Binding implements AutoCloseable {
-        private final GpuImageView color, depth;
         private final long[] down = new long[LEVELS], up = new long[LEVELS];
-        private long pool, measure, compose;
+        private long pool, measure;
 
-        Binding(GpuImageView color, GpuImageView depth) {
-            this.color = color;
-            this.depth = depth;
+        Binding() {
             VkDevice device = context.device();
             int steps = 2 * LEVELS - 2;
             try (MemoryStack stack = VulkanStack.push()) {
                 var pointer = stack.mallocLong(1);
                 var sizes = VkDescriptorPoolSize.calloc(2, stack);
-                sizes.get(0).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(steps + 5);
-                sizes.get(1).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(steps + 1);
-                BlazeFsr2Pipelines.check(vkCreateDescriptorPool(device, VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(steps + 1).pPoolSizes(sizes), null, pointer),
+                sizes.get(0).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(steps);
+                sizes.get(1).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(steps);
+                BlazeFsr2Pipelines.check(vkCreateDescriptorPool(device, VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(steps).pPoolSizes(sizes), null, pointer),
                         "shading glow pool");
                 pool = pointer.get(0);
-                for (int i = 1; i < LEVELS; i++) down[i] = set(stack, 0, levelViews[i], levelViews[i - 1]);
-                for (int i = LEVELS - 2; i >= 1; i--) up[i] = set(stack, 0, levelViews[i], levelViews[i + 1]);
-                measure = set(stack, 0, measuredView, levelViews[LEVELS - 1]);
-                compose = set(stack, 1, outputView, levelViews[0], levelViews[1], measuredView, color, depth);
+                for (int i = 1; i < LEVELS; i++) down[i] = set(stack, levelViews[i], levelViews[i - 1]);
+                for (int i = LEVELS - 2; i >= 1; i--) up[i] = set(stack, levelViews[i], levelViews[i + 1]);
+                measure = set(stack, measuredView, levelViews[LEVELS - 1]);
             }
         }
 
-        /** A set of the pipeline at {@code index} writing {@code written} and reading the rest; the second texture of the compose is smoothed. */
-        private long set(MemoryStack stack, int index, GpuImageView written, GpuImageView... read) {
+        /** A set writing {@code written} from {@code read}, smoothed unless it is the measure, which reads each pixel. */
+        private long set(MemoryStack stack, GpuImageView written, GpuImageView read) {
             var pointer = stack.mallocLong(1);
             BlazeFsr2Pipelines.check(vkAllocateDescriptorSets(context.device(), VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool)
-                    .pSetLayouts(stack.longs(setLayouts[index])), pointer), "shading glow set");
+                    .pSetLayouts(stack.longs(setLayouts[0])), pointer), "shading glow set");
             long set = pointer.get(0);
-            var writes = VkWriteDescriptorSet.calloc(read.length + 1, stack);
-            for (int i = 0; i < read.length; i++) {
-                boolean smoothed = index == 0 ? written != measuredView : i == 1;
-                writes.get(i).sType$Default().dstSet(set).dstBinding(i).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                        .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).sampler((smoothed ? smooth : nearest).handle()).imageView(read[i].handle())
-                                .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-            }
-            writes.get(read.length).sType$Default().dstSet(set).dstBinding(read.length).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            var writes = VkWriteDescriptorSet.calloc(2, stack);
+            writes.get(0).sType$Default().dstSet(set).dstBinding(0).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).sampler((written != measuredView ? smooth : nearest).handle()).imageView(read.handle())
+                            .imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+            writes.get(1).sType$Default().dstSet(set).dstBinding(1).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                     .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).imageView(written.handle()).imageLayout(VK_IMAGE_LAYOUT_GENERAL));
             vkUpdateDescriptorSets(context.device(), writes, null);
             return set;
@@ -189,19 +184,14 @@ final class BlazeShadingGlow implements AutoCloseable {
 
     private final class Finish implements BlazeQueue.Operation {
         private final Binding binding;
-        private final BlazeShadingPass.Lighting lighting;
-        private final int width, height;
         private final boolean bloom, adapt;
         private final float blend;
         private final GpuImageView[] views = levelViews.clone();
-        private final GpuImageView measuredView = BlazeShadingGlow.this.measuredView, outputView = BlazeShadingGlow.this.outputView;
+        private final GpuImageView measuredView = BlazeShadingGlow.this.measuredView;
         private final BlazeImageUse images = new BlazeImageUse();
 
-        Finish(Binding binding, BlazeShadingPass.Lighting lighting, int width, int height, boolean bloom, boolean adapt, float blend) {
+        Finish(Binding binding, boolean bloom, boolean adapt, float blend) {
             this.binding = binding;
-            this.lighting = lighting;
-            this.width = width;
-            this.height = height;
             this.bloom = bloom;
             this.adapt = adapt;
             this.blend = blend;
@@ -210,20 +200,11 @@ final class BlazeShadingGlow implements AutoCloseable {
         @Override public void record(VkCommandBuffer command) {
             try (MemoryStack stack = VulkanStack.push()) {
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[0]);
-                // The glow comes from the second level down; the measure reads the last one.
+                // The glow ends in the second level; the measure reads the last one.
                 int deepest = LEVELS - 1;
                 for (int i = 1; i <= deepest; i++) step(command, stack, binding.down[i], views[i - 1], views[i], BlazeShadingGlowShader.HALVE, 1);
                 if (adapt) step(command, stack, binding.measure, views[LEVELS - 1], measuredView, BlazeShadingGlowShader.MEASURE, blend);
                 if (bloom) for (int i = LEVELS - 2; i >= 1; i--) step(command, stack, binding.up[i], views[i + 1], views[i], BlazeShadingGlowShader.DOUBLE, 0.5f);
-                for (GpuImageView read : new GpuImageView[]{views[0], views[1], measuredView, binding.color, binding.depth})
-                    images.transition(command, read, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                images.transition(command, outputView, VK_IMAGE_LAYOUT_GENERAL);
-                var push = stack.malloc(BlazeShadingShader.PUSH_BYTES);
-                BlazeShadingPass.frame(push, lighting, width, height, (bloom ? BlazeShadingGlowShader.BLOOM : 0) | (adapt ? BlazeShadingGlowShader.EXPOSURE : 0));
-                vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayouts[1], 0, stack.longs(binding.compose), null);
-                vkCmdPushConstants(command, pipelineLayouts[1], VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
-                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[1]);
-                vkCmdDispatch(command, (width + 7) / 8, (height + 7) / 8, 1);
             }
         }
 
@@ -254,11 +235,10 @@ final class BlazeShadingGlow implements AutoCloseable {
             if (levels[i] != null) levels[i].close();
             levels[i] = null;
         }
-        if (output != null) output.close();
         if (measured != null) measured.close();
-        output = measured = null;
+        measured = null;
         VkDevice device = context.device();
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < pipelines.length; i++) {
             if (pipelines[i] != 0) vkDestroyPipeline(device, pipelines[i], null);
             if (pipelineLayouts[i] != 0) vkDestroyPipelineLayout(device, pipelineLayouts[i], null);
             if (setLayouts[i] != 0) vkDestroyDescriptorSetLayout(device, setLayouts[i], null);

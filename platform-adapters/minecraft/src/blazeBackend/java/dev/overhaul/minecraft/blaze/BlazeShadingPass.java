@@ -24,9 +24,9 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Runs {@link BlazeShadingShader} over the main target once terrain is drawn: it reads the target's colour and depth
  * and the surfaces beside them, writes the lit picture to an image of its own, since colour targets cannot be written
- * as storage, and copies it back over the colour. One pass is one variant, traced or plain, finishing the picture or
- * leaving linear light in an image {@link BlazeShadingGlow} gives it; the pipeline lives as long as the pass, the
- * output follows the target's size.
+ * as storage, and copies it back over the colour. One pass is one variant, traced or plain, alone or working with a
+ * {@link BlazeShadingGlow}: then it also leaves linear light at half size and reads the glow and the measure made of
+ * the frame before. The pipeline lives as long as the pass, the output follows the target's size.
  */
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
@@ -55,18 +55,24 @@ final class BlazeShadingPass implements AutoCloseable {
     }
 
     private int[] sampled() {
+        if (linear) return traced ? new int[]{1, 2, 3, 5, 6, 7} : new int[]{1, 2, 5, 6, 7};
         return traced ? new int[]{1, 2, 3, 5} : new int[]{1, 2, 5};
+    }
+
+    /** The images written: the screen colour, then with a glow the half size light. */
+    private int[] stored() {
+        return linear ? new int[]{4, 8} : new int[]{4};
     }
 
     private void create() {
         VkDevice device = context.device();
         try (MemoryStack stack = VulkanStack.push(); ShadercCompiler compiler = new ShadercCompiler(true)) {
             var pointer = stack.mallocLong(1);
-            int[] sampled = sampled();
-            var bindings = VkDescriptorSetLayoutBinding.calloc(sampled.length + (traced ? 2 : 1), stack);
+            int[] sampled = sampled(), stored = stored();
+            var bindings = VkDescriptorSetLayoutBinding.calloc(sampled.length + stored.length + (traced ? 1 : 0), stack);
             int at = 0;
             for (int slot : sampled) bindings.get(at++).binding(slot).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            bindings.get(at++).binding(4).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
+            for (int slot : stored) bindings.get(at++).binding(slot).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
             if (traced) bindings.get(at).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
             BlazeFsr2Pipelines.check(vkCreateDescriptorSetLayout(device, VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(bindings), null, pointer), "shading layout");
             setLayout = pointer.get(0);
@@ -95,12 +101,12 @@ final class BlazeShadingPass implements AutoCloseable {
     record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
 
     /**
-     * Queues the lighting of {@code target} from {@code surfaces}. A finishing pass then copies the result over the
-     * target's colour; a linear one writes {@code into} and leaves the colour as it is.
+     * Queues the lighting of {@code target} from {@code surfaces} and the copy of the result over the target's colour.
+     * A linear pass reads and writes the images {@code glow} gives it.
      */
-    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, GpuImageView into) {
+    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, BlazeShadingGlow.Light glow) {
         int width = target.width(), height = target.height();
-        if (!linear && (output == null || output.width(0) != width || output.height(0) != height)) {
+        if (output == null || output.width(0) != width || output.height(0) != height) {
             if (binding != null) owner.retire(binding);
             if (output != null) owner.retire(output);
             binding = null;
@@ -109,19 +115,29 @@ final class BlazeShadingPass implements AutoCloseable {
                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
             outputView = output.view(0, 1, 0, 1);
         }
-        GpuImageView[] views = traced ? new GpuImageView[]{target.colorView(), target.sampledDepthView(), atlas.view(), surfaces}
-                : new GpuImageView[]{target.colorView(), target.sampledDepthView(), surfaces};
-        long[] samplers = traced ? new long[]{sampler.handle(), sampler.handle(), atlas.sampler(), sampler.handle()}
-                : new long[]{sampler.handle(), sampler.handle(), sampler.handle()};
+        List<GpuImageView> views = new ArrayList<>(List.of(target.colorView(), target.sampledDepthView()));
+        List<Long> samplers = new ArrayList<>(List.of(sampler.handle(), sampler.handle()));
+        if (traced) {
+            views.add(atlas.view());
+            samplers.add(atlas.sampler());
+        }
+        views.add(surfaces);
+        samplers.add(sampler.handle());
+        if (linear) {
+            views.add(glow.glow());
+            samplers.add(glow.smooth());
+            views.add(glow.measured());
+            samplers.add(sampler.handle());
+        }
+        List<GpuImageView> written = linear ? List.of(outputView, glow.spread()) : List.of(outputView);
         BlazeRayStructures.Structure top = traced ? scene.top() : null;
-        GpuImageView written = linear ? into : outputView;
         if (binding == null || !binding.reads(top, views, samplers, written)) {
             if (binding != null) owner.retire(binding);
             binding = null;
             binding = new Binding(top, views, samplers, traced && atlas.general(), written);
         }
         owner.enqueue(new Dispatch(binding, traced ? scene.table() : 0, lighting, width, height));
-        if (!linear) owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
+        owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
     }
 
     /** Fills the shaders' {@code Frame}: the camera, the lights, the size and two more words, then the fog and the reach. */
@@ -135,58 +151,59 @@ final class BlazeShadingPass implements AutoCloseable {
         push.putInt(112, packed).putFloat(116, lighting.fogStart()).putFloat(120, lighting.reach()).putFloat(124, lighting.fogEnd());
     }
 
-    /** One descriptor set over a target's views, the surfaces, and for the traced variant the scene and the atlas. */
+    /** One descriptor set over a target's views, the surfaces, the images written, and for the traced variant the scene and the atlas. */
     private final class Binding implements AutoCloseable {
         private final BlazeRayStructures.Structure top;
-        private final GpuImageView[] views;
-        private final long[] samplers;
+        private final List<GpuImageView> views, written;
+        private final List<Long> samplers;
         private final List<Integer> layouts = new ArrayList<>();
-        private final GpuImageView written;
         private long pool, set;
 
-        Binding(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers, boolean atlasGeneral, GpuImageView written) {
+        Binding(BlazeRayStructures.Structure top, List<GpuImageView> views, List<Long> samplers, boolean atlasGeneral, List<GpuImageView> written) {
             this.top = top;
             this.views = views;
             this.samplers = samplers;
             this.written = written;
-            int[] slots = sampled();
+            int[] slots = sampled(), stored = stored();
             VkDevice device = context.device();
             try (MemoryStack stack = VulkanStack.push()) {
                 var pointer = stack.mallocLong(1);
                 var sizes = VkDescriptorPoolSize.calloc(traced ? 3 : 2, stack);
                 sizes.get(0).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(slots.length);
-                sizes.get(1).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(1);
+                sizes.get(1).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(stored.length);
                 if (traced) sizes.get(2).type(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1);
                 BlazeFsr2Pipelines.check(vkCreateDescriptorPool(device, VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(1).pPoolSizes(sizes), null, pointer), "shading pool");
                 pool = pointer.get(0);
                 BlazeFsr2Pipelines.check(vkAllocateDescriptorSets(device, VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool).pSetLayouts(stack.longs(setLayout)), pointer),
                         "shading set");
                 set = pointer.get(0);
-                var writes = VkWriteDescriptorSet.calloc(slots.length + (traced ? 2 : 1), stack);
+                var writes = VkWriteDescriptorSet.calloc(slots.length + stored.length + (traced ? 1 : 0), stack);
+                int at = 0;
                 for (int i = 0; i < slots.length; i++) {
                     int layout = slots[i] == 3 && atlasGeneral ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                     layouts.add(layout);
-                    writes.get(i).sType$Default().dstSet(set).dstBinding(slots[i]).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                            .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).sampler(samplers[i]).imageView(views[i].handle()).imageLayout(layout));
+                    writes.get(at++).sType$Default().dstSet(set).dstBinding(slots[i]).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                            .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).sampler(samplers.get(i)).imageView(views.get(i).handle()).imageLayout(layout));
                 }
-                writes.get(slots.length).sType$Default().dstSet(set).dstBinding(4).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-                        .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).imageView(written.handle()).imageLayout(VK_IMAGE_LAYOUT_GENERAL));
+                for (int i = 0; i < stored.length; i++) writes.get(at++).sType$Default().dstSet(set).dstBinding(stored[i]).descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                        .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).imageView(written.get(i).handle()).imageLayout(VK_IMAGE_LAYOUT_GENERAL));
                 if (traced) {
                     var structure = VkWriteDescriptorSetAccelerationStructureKHR.calloc(stack).sType$Default().pAccelerationStructures(stack.longs(top.handle()));
-                    writes.get(slots.length + 1).sType$Default().pNext(structure.address()).dstSet(set).dstBinding(0).descriptorCount(1)
+                    writes.get(at).sType$Default().pNext(structure.address()).dstSet(set).dstBinding(0).descriptorCount(1)
                             .descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR);
                 }
                 vkUpdateDescriptorSets(device, writes, null);
             }
         }
 
-        boolean reads(BlazeRayStructures.Structure top, GpuImageView[] views, long[] samplers, GpuImageView written) {
-            return this.top == top && java.util.Arrays.equals(this.views, views) && java.util.Arrays.equals(this.samplers, samplers) && this.written == written;
+        boolean reads(BlazeRayStructures.Structure top, List<GpuImageView> views, List<Long> samplers, List<GpuImageView> written) {
+            return this.top == top && this.views.equals(views) && this.samplers.equals(samplers) && this.written.equals(written);
         }
 
         void transition(VkCommandBuffer command, BlazeImageUse images) {
-            for (int i = 0; i < views.length; i++) images.transition(command, views[i], layouts.get(i));
-            images.transition(command, written, VK_IMAGE_LAYOUT_GENERAL);
+            for (int i = 0; i < views.size(); i++) images.transition(command, views.get(i), layouts.get(i));
+            for (GpuImageView view : written) images.transition(command, view, VK_IMAGE_LAYOUT_GENERAL);
         }
 
         @Override public void close() {
@@ -218,7 +235,8 @@ final class BlazeShadingPass implements AutoCloseable {
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(binding.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-                vkCmdDispatch(command, (width + 7) / 8, (height + 7) / 8, 1);
+                int cell = linear ? 16 : 8;
+                vkCmdDispatch(command, (width + cell - 1) / cell, (height + cell - 1) / cell, 1);
             }
         }
 

@@ -23,8 +23,8 @@ import static org.lwjgl.vulkan.VK10.*;
  * makes, into a target over both, so the colour holds each surface's own colour and the surfaces image its normal
  * and light levels. Once cutout is drawn, {@link BlazeShadingPass} lights those pixels in place, before translucent
  * terrain, entities and particles draw over them as the game lights them. With {@link BlazeOptimization#SHADING_BLOOM}
- * or {@link BlazeOptimization#SHADING_EXPOSURE} on, the pass leaves linear light and {@link BlazeShadingGlow} brings it
- * to the screen. Without traced shadows, {@link BlazeOptimization#SHADING_SCREEN_SHADOWS} has the pass find the
+ * or {@link BlazeOptimization#SHADING_EXPOSURE} on, the pass also leaves linear light at half size, which
+ * {@link BlazeShadingGlow} turns into the glow and the exposure the next frame shows. Without traced shadows, {@link BlazeOptimization#SHADING_SCREEN_SHADOWS} has the pass find the
  * shadows of what is on screen. It only runs where no shader pack or
  * Fabulous graphics owns the frame; any failure turns it off until the settings change. Render thread only.
  */
@@ -109,6 +109,7 @@ public final class BlazeShading {
         if (world == null) return;
         try {
             owner.flushCapturedDraws();
+            owner.gpuMark("shadedTerrain");
             Matrix4f viewProjection = new Matrix4f(projection).mul(view);
             var position = camera.getPosition();
             boolean traced = area != null && owner.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on();
@@ -122,8 +123,9 @@ public final class BlazeShading {
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), BlazeRayTracing.light(world, partialTick),
                     BlazeRayTracing.sky(world, position, partialTick), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
-            passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.into(main.width(), main.height()) : null);
-            if (linear) glow.finish(main, lighting, bloom, adapt);
+            passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
+            if (linear) glow.finish(bloom, adapt);
+            owner.gpuMark("shading");
             lit = true;
             int shown = traced ? 2 : 1;
             if (logged != shown) LoggerFactory.getLogger(BlazeShading.class).info("Overhaul shading on, sun shadows {}", traced ? "traced" : "from sky light");
