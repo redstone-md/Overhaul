@@ -134,7 +134,8 @@ public final class GpuImage implements AutoCloseable {
         private final int mip,count,layer,layerCount;private final int[] old;private boolean committed,closed;
         private LayoutChange(int mip,int count,int layer,int layerCount,int[] old){this.mip=mip;this.count=count;this.layer=layer;this.layerCount=layerCount;this.old=old;}
         public void commit(){requireOpen();if(closed)throw new IllegalStateException("layout transaction closed");committed=true;}
-        @Override public void close(){if(closed)return;requireOpen();if(!committed){int cursor=0;for(int l=layer;l<layer+layerCount;l++)for(int m=mip;m<mip+count;m++)layouts[l*mips+m]=old[cursor++];}closed=true;}
+        // A frame retired while its images are torn down may close this after the image itself; nothing is left to roll back.
+        @Override public void close(){if(closed)return;if(handle==0){closed=true;return;}requireOpen();if(!committed){int cursor=0;for(int l=layer;l<layer+layerCount;l++)for(int m=mip;m<mip+count;m++)layouts[l*mips+m]=old[cursor++];}closed=true;}
     }
     @Override public void close(){
         if(handle==0)return;requireOpen();awaitUsage();for(GpuImageView view:views.toArray(new GpuImageView[0]))view.close();
