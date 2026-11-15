@@ -157,6 +157,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.ENTITY_SHADOW_REACH, "Entity shadows by view");
         labels.put(BlazeOptimization.PLAYER_SHADOW_PACE, "Player shadow pose at 60 Hz");
         labels.put(BlazeOptimization.PLAYER_SHADOW_REPLAY, "Replayed player shadow");
+        labels.put(BlazeOptimization.PLAYER_HAND_PACE, "Hand pose at 120 Hz");
         labels.put(BlazeOptimization.ENTITY_NBT_TICK, "Entity NBT once per tick");
         labels.put(BlazeOptimization.ENTITY_NBT_RULES, "Entity NBT rules once per tick");
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");

@@ -2,9 +2,6 @@ package dev.overhaul.minecraft.blaze;
 
 import net.minecraft.nbt.CompoundTag;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -20,8 +17,6 @@ import java.util.function.Supplier;
 public final class BlazeEntityNbt {
     private static final BlazeTickMemo<UUID, CompoundTag> saved = new BlazeTickMemo<>(512);
     private static final BlazeTickMemo<Rule, Boolean> rules = new BlazeTickMemo<>(4096);
-    private static MethodHandle animatedEntity;
-    private static boolean unresolved;
 
     private record Rule(Object entity, String path, String test) {
     }
@@ -38,15 +33,7 @@ public final class BlazeEntityNbt {
     /** The entity Entity Model Features is animating, which keys its rule answers; null when the cache is off. */
     public static Object ruleEntity() {
         if (!BlazeOptimization.ENTITY_NBT_TICK.on() || !BlazeOptimization.ENTITY_NBT_RULES.on()) return null;
-        MethodHandle handle = animatedEntity();
-        if (handle == null) return null;
-        try {
-            return handle.invoke();
-        } catch (Throwable failure) {
-            unresolved = true;
-            animatedEntity = null;
-            return null;
-        }
+        return BlazeEmfEntity.current();
     }
 
     /** This tick's answer of rule {@code path}/{@code test} for {@code entity}, or null before it is known. */
@@ -57,19 +44,5 @@ public final class BlazeEntityNbt {
     /** Records the rule's answer for the rest of the tick. */
     public static void remember(Object entity, String path, String test, boolean answer) {
         rules.get(new Rule(entity, path, test), key -> answer);
-    }
-
-    private static MethodHandle animatedEntity() {
-        if (animatedEntity != null || unresolved) return animatedEntity;
-        try {
-            Class<?> context = Class.forName("traben.entity_model_features.models.animation.EMFAnimationEntityContext",
-                    false, BlazeEntityNbt.class.getClassLoader());
-            Class<?> entity = Class.forName("traben.entity_model_features.utils.EMFEntity", false, context.getClassLoader());
-            animatedEntity = MethodHandles.publicLookup().findStatic(context, "getEMFEntity", MethodType.methodType(entity))
-                    .asType(MethodType.methodType(Object.class));
-        } catch (ReflectiveOperationException | LinkageError failure) {
-            unresolved = true;
-        }
-        return animatedEntity;
     }
 }

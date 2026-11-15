@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.shader;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import dev.overhaul.minecraft.blaze.BlazeHandAnimation;
 import dev.overhaul.minecraft.blaze.mixin.GameRendererHand121Access;
 import dev.overhaul.shader.pack.PackBuiltinMacros;
 import net.minecraft.client.Camera;
@@ -59,8 +60,13 @@ public final class BlazePackHand {
             access.overhaul$bobHurt(pose, partial);
             if (minecraft.options.bobView().get()) access.overhaul$bobView(pose, partial);
             game.lightTexture().turnOnLightLayer();
-            game.itemInHandRenderer.renderHandsWithItems(partial, pose, minecraft.renderBuffers().bufferSource(), minecraft.player,
-                    minecraft.getEntityRenderDispatcher().getPackedLightCoords(minecraft.player, partial));
+            BlazeHandAnimation.begin();
+            try {
+                game.itemInHandRenderer.renderHandsWithItems(partial, pose, minecraft.renderBuffers().bufferSource(), minecraft.player,
+                        minecraft.getEntityRenderDispatcher().getPackedLightCoords(minecraft.player, partial));
+            } finally {
+                BlazeHandAnimation.end();
+            }
             game.lightTexture().turnOffLightLayer();
             drawn = true;
         } finally {
