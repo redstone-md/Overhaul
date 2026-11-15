@@ -1,0 +1,20 @@
+package dev.overhaul.minecraft.mixin;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.overhaul.minecraft.hud.HudLiveLayers;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.GameRenderer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+
+/** Wraps the HUD call outside ImmediatelyFast's batching, whose deferred draws must land in the cache buffer. */
+@Mixin(value = GameRenderer.class, priority = 1100)
+abstract class HudCacheGameRendererMixin {
+    @WrapOperation(method = "render", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/Gui;render(Lnet/minecraft/client/gui/GuiGraphics;F)V"))
+    private void overhaul$cacheHud(Gui gui, GuiGraphics graphics, float partialTick, Operation<Void> original) {
+        HudLiveLayers.render(graphics, partialTick, () -> original.call(gui, graphics, partialTick));
+    }
+}

@@ -3,29 +3,16 @@ package dev.overhaul.minecraft.hud;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import dev.overhaul.minecraft.mixin.HudCacheGuiAccessor;
-import dev.overhaul.minecraft.mixin.HudCacheGuiLayerManagerAccessor;
 import dev.overhaul.minecraft.mixin.HudCacheMinecraftAccessor;
-import java.util.List;
-import java.util.Set;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.GuiLayerManager;
-import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
-import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.opengl.GL11;
 
 /**
  * Redraws the HUD at a fixed rate into its own framebuffer and composites that image every frame.
  *
  * <p>Layers that blend against the world (vignette, inverted crosshair) cannot live in a transparent buffer,
- * so they are drawn directly each frame. They are the first layers, so drawing them before the composite keeps the order.
+ * so each loader's adapter draws them directly every frame and keeps them out of the cached pass.
  */
 public final class HudFrameCache {
     /** Read each frame so a running client can be compared with and without the cache. */
@@ -33,13 +20,7 @@ public final class HudFrameCache {
 
     private static final long REFRESH_NANOS = 1_000_000_000L / Math.max(1L, Long.getLong("overhaul.hudCache.hz", 30L));
     private static final boolean CACHES_DEBUG = Boolean.getBoolean("overhaul.hudCache.debug");
-    private static final Set<ResourceLocation> LIVE_LAYERS = Set.of(VanillaGuiLayers.CAMERA_OVERLAYS, VanillaGuiLayers.CROSSHAIR);
 
-    private static List<GuiLayerManager.NamedLayer> liveSource;
-    private static int liveSourceSize;
-    private static GuiLayerManager.NamedLayer[] live;
-
-    private static boolean listening;
     private static boolean cachedPass;
     private static TextureTarget target;
     private static long lastRefresh;
@@ -47,19 +28,22 @@ public final class HudFrameCache {
     private HudFrameCache() {
     }
 
-    public static void render(Gui gui, GuiGraphics graphics, DeltaTracker delta, Runnable original) {
+    /** The debug overlay is read as a live measurement, so it stays live unless its text refreshes slower than the cache. */
+    public static boolean applies(boolean debugShown) {
+        return enabled && (CACHES_DEBUG || !debugShown);
+    }
+
+    /** True while the HUD draws into the cache, when the adapter must skip the layers it draws live. */
+    public static boolean cachedPass() {
+        return cachedPass;
+    }
+
+    /** Draws the live layers, refreshes the cache when due, and composites it over the frame. */
+    public static void render(GuiGraphics graphics, Runnable liveLayers, Runnable original) {
         Minecraft minecraft = Minecraft.getInstance();
-        // The debug overlay is read as a live measurement, so it stays live unless its text refreshes slower than the cache.
-        if (!enabled || !CACHES_DEBUG && minecraft.getDebugOverlay().showDebugScreen()) {
-            original.run();
-            return;
-        }
-        if (!listening) {
-            NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, false, RenderGuiLayerEvent.Pre.class, HudFrameCache::skipLiveLayer);
-            listening = true;
-        }
         graphics.flush();
-        renderLiveLayers(gui, graphics, delta);
+        liveLayers.run();
+        graphics.flush();
         RenderTarget main = minecraft.getMainRenderTarget();
         boolean sizeChanged = target == null || target.width != main.width || target.height != main.height;
         long now = System.nanoTime();
@@ -68,38 +52,6 @@ public final class HudFrameCache {
             lastRefresh = now;
         }
         composite(main);
-    }
-
-    private static void skipLiveLayer(RenderGuiLayerEvent.Pre event) {
-        if (cachedPass && LIVE_LAYERS.contains(event.getName())) {
-            event.setCanceled(true);
-        }
-    }
-
-    private static GuiLayerManager.NamedLayer[] liveLayers(List<GuiLayerManager.NamedLayer> layers) {
-        if (layers != liveSource || layers.size() != liveSourceSize) {
-            live = layers.stream().filter(layer -> LIVE_LAYERS.contains(layer.name())).toArray(GuiLayerManager.NamedLayer[]::new);
-            liveSource = layers;
-            liveSourceSize = layers.size();
-        }
-        return live;
-    }
-
-    private static void renderLiveLayers(Gui gui, GuiGraphics graphics, DeltaTracker delta) {
-        GuiLayerManager manager = ((HudCacheGuiAccessor) gui).overhaul$layerManager();
-        PoseStack pose = graphics.pose();
-        RenderSystem.enableDepthTest();
-        pose.pushPose();
-        for (GuiLayerManager.NamedLayer layer : liveLayers(((HudCacheGuiLayerManagerAccessor) manager).overhaul$layers())) {
-            if (!NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Pre(graphics, delta, layer.name(), layer.layer())).isCanceled()) {
-                layer.layer().render(graphics, delta);
-                NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Post(graphics, delta, layer.name(), layer.layer()));
-            }
-            pose.translate(0.0F, 0.0F, GuiLayerManager.Z_SEPARATION);
-        }
-        pose.popPose();
-        graphics.flush();
-        RenderSystem.disableDepthTest();
     }
 
     private static void refresh(Minecraft minecraft, RenderTarget main, GuiGraphics graphics, boolean sizeChanged, Runnable original) {

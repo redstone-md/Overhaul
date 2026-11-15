@@ -17,7 +17,10 @@ def modelSmoke = providers.gradleProperty('modelSmoke').isPresent()
 def overhaulBackend = providers.gradleProperty('overhaulBackend').isPresent()
 def blazeBackend = providers.gradleProperty('blazeBackend').isPresent()
 if (blazeBackend && overhaulBackend) throw new GradleException('Select one owned renderer frontend')
-def hudCache = target.loader == 'neoforge' && target.minecraft == '1.21.1' && !overhaulBackend
+def packFixes = target.loader == 'neoforge' && target.minecraft == '1.21.1' && !overhaulBackend
+// Each loader draws its HUD through its own layer list, so each has its own adapter around the shared cache.
+def hudCacheAdapter = overhaulBackend ? null : ['neoforge-1.21.1': 'hudCacheNeoforge121', 'forge-1.20.1': 'hudCacheForge120']["${target.loader}-${target.minecraft}".toString()]
+def hudCache = hudCacheAdapter != null
 def querySmoke = providers.gradleProperty('querySmoke').isPresent()
 if (modelSmoke && !worldSmoke) throw new GradleException('Model smoke requires -PworldSmoke')
 if (querySmoke && (!worldSmoke || modelSmoke || overhaulBackend)) throw new GradleException('Query smoke requires only -PworldSmoke -PquerySmoke')
@@ -53,8 +56,8 @@ if (target.tier != 'legacy') {
     if (target.minecraft == '1.20.1') sourceSets.main.java.srcDir 'src/generation120/java'
     if (target.minecraft == '1.21.1') sourceSets.main.java.srcDir 'src/generation121/java'
     if (['1.21.1', '26.3'].contains(target.minecraft)) sourceSets.main.java.srcDir 'src/chunkLookup/java'
-    if (hudCache) sourceSets.main.java.srcDir 'src/hudCache/java'
-    if (hudCache) {
+    if (hudCache) sourceSets.main.java.srcDirs 'src/hudCache/java', "src/${hudCacheAdapter}/java"
+    if (packFixes) {
         sourceSets.main.java.srcDir 'src/packFixes/java'
         sourceSets.create('packFixesStubs') { java.srcDirs = ['src/packFixesStubs/java'] }
         dependencies.add('compileOnly', sourceSets.packFixesStubs.output)
@@ -207,9 +210,11 @@ tasks.named('processResources') {
     if (hudCache) doLast {
         def config = new File(destinationDir, 'overhaul.mixins.json')
         def json = new groovy.json.JsonSlurper().parse(config)
-        json.client = (json.client + ['HudCacheGameRendererMixin', 'HudCacheGuiAccessor', 'HudCacheGuiLayerManagerAccessor',
-                'HudCacheMinecraftAccessor', 'InventoryParticlesSpawnPosMixin']).unique()
-        json.mixins = (json.mixins + ['KubeJsWebServerMixin']).unique()
+        def client = ['HudCacheGameRendererMixin', 'HudCacheMinecraftAccessor']
+        if (hudCacheAdapter == 'hudCacheNeoforge121') client += ['HudCacheGuiAccessor', 'HudCacheGuiLayerManagerAccessor']
+        if (packFixes) client += 'InventoryParticlesSpawnPosMixin'
+        json.client = ((json.client ?: []) + client).unique()
+        if (packFixes) json.mixins = (json.mixins + ['KubeJsWebServerMixin']).unique()
         config.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
     }
     if (modelSmoke) doLast {
