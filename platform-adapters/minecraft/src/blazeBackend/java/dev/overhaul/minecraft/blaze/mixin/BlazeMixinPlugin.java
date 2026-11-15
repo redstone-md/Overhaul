@@ -30,6 +30,8 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
             Map.entry("ClientLevelBiomes121Mixin", BlazeOptimization.BIOME_CACHE),
             Map.entry("FogRendererBiomes121Mixin", BlazeOptimization.BIOME_CACHE),
             Map.entry("SpriteInterpolationBlazeMixin", BlazeOptimization.SPRITE_INTERPOLATION),
+            Map.entry("MipmapBlendBlazeMixin", BlazeOptimization.MIP_BLEND),
+            Map.entry("SpriteMipFillBlazeMixin", BlazeOptimization.MIP_BLEND),
             Map.entry("DebugTextBlazeMixin", BlazeOptimization.DEBUG_TEXT),
             Map.entry("RenderSectionBuffers121Mixin", BlazeOptimization.SECTION_BATCH),
             Map.entry("XaeroMapWriter121Mixin", BlazeOptimization.XAERO_LIMITS),
@@ -156,6 +158,9 @@ public final class BlazeMixinPlugin implements IMixinConfigPlugin {
         // Lithium replaces PalettedContainer.pack with its own faster one, leaving nothing to inject into.
         if (name.startsWith("PalettedContainer") && name.contains("Pack")
                 && present("net/caffeinemc/mods/lithium/mixin/chunk/serialization/PalettedContainerMixin.class")) return false;
+        // Sodium and Embeddium already build mip levels this way.
+        if (OWNERS.get(name) == BlazeOptimization.MIP_BLEND && (present("me/jellysquid/mods/sodium/client/util/color/ColorSRGB.class")
+                || present("net/caffeinemc/mods/sodium/api/util/ColorSRGB.class"))) return false;
         List<BlazeOptimization> shared = SHARED.get(name);
         if (shared != null) return shared.stream().anyMatch(BlazeOptimization::on);
         BlazeOptimization owner = OWNERS.get(name);

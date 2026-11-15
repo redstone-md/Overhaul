@@ -22,7 +22,7 @@ final class OptimizationPage extends SettingsPage {
                     BlazeOptimization.CUBE_MESH, BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ITEM_AXES, BlazeOptimization.ENTITY_RENDERER_CACHE,
                     BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS, BlazeOptimization.SELECTOR_ORDER, BlazeOptimization.SERVER_CLASS_SCANS,
                     BlazeOptimization.SECTION_LOOKUP, BlazeOptimization.COLLISION_SCANS)),
-            new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION,
+            new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION, BlazeOptimization.MIP_BLEND,
                     BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
                     BlazeOptimization.MERGED_BARRIERS)),
             new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS, BlazeOptimization.HEAD_CURIOS,
@@ -125,6 +125,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.ENTITY_RENDERER_CACHE, "Entity renderer cache");
         labels.put(BlazeOptimization.BIOME_CACHE, "Sky and fog biome cache");
         labels.put(BlazeOptimization.SPRITE_INTERPOLATION, "Fast texture animation");
+        labels.put(BlazeOptimization.MIP_BLEND, "Clean distant textures");
         labels.put(BlazeOptimization.XAERO_LIMITS, "Xaero's map limits");
         labels.put(BlazeOptimization.CROSSHAIR_LIMIT, "Shoulder Surfing crosshair limit");
         labels.put(BlazeOptimization.SECTION_TABLE, "Terrain draw tables");

@@ -35,6 +35,7 @@ public enum BlazeOptimization {
     ENTITY_RENDERER_CACHE("entityRendererCache", "Entity renderer lookup stored on the entity type"),
     BIOME_CACHE("biomeCache", "Sky and fog biome samples cached per tick"),
     SPRITE_INTERPOLATION("spriteInterpolation", "Interpolated texture animation blended on raw memory"),
+    MIP_BLEND("mipBlend", "Mip levels averaged in linear light and weighted by alpha, with transparent sprite pixels filled first, as Sodium builds them, so distant blocks keep their brightness and do not shimmer"),
     XAERO_LIMITS("xaeroLimits", "Xaero map processing limited to 60 Hz, map writing and radar updates limited per frame"),
     CROSSHAIR_LIMIT("crosshairLimit", "Shoulder Surfing's crosshair raycast limited to 60 Hz"),
     SECTION_TABLE("sectionTable", "Terrain draws read flat per-layer tables of meshes and positions built by the section scan"),
