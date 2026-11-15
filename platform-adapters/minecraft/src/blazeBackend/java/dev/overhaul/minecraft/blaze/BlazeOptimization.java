@@ -70,6 +70,7 @@ public enum BlazeOptimization {
     SHADOW_COLUMNS("shadowColumns", "Kept shadow casters tested against each frame's light frustum a column at a time, section by section only where the frustum cuts the column"),
     SHADOW_TIGHT_REUSE("shadowTightReuse", "The light frustum test of kept shadow casters widened by four blocks and reused while the camera moves less than half a block and the sun turns less than a quarter degree"),
     SHADOW_REACH("shadowReach", "Shadow casters whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map; needs packShadowReuse"),
+    ENTITY_SHADOW_REACH("entityShadowReach", "Entities and block entities whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map, so mobs behind the camera or past the view's sides skip their shadow model and animation"),
     SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable"),
     PIXEL_ROWS("pixelRows", "Screenshot and other RGBA pixel reads copied a row at a time instead of a byte at a time, so the GPU waits less"),
     STRIDE_OFFSETS("strideOffsets", "Section vertices placed on a multiple of their stride, so a shader pack's wider vertices share one draw per buffer page instead of one per leftover offset"),
@@ -191,10 +192,10 @@ public enum BlazeOptimization {
         return description;
     }
 
-    /** Takes effect as soon as it is saved, with no restart; the upscaler and ray tracing read it every frame. */
+    /** Takes effect as soon as it is saved, with no restart; the upscaler, ray tracing and entity shadows read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
             default -> false;
         };
     }

@@ -3,6 +3,7 @@ package dev.overhaul.minecraft.blaze.shader;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazePackScene;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -14,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,18 +27,27 @@ import org.slf4j.LoggerFactory;
  */
 final class BlazePackEntityShadows {
     private static final Logger LOG = LoggerFactory.getLogger(BlazePackEntityShadows.class);
+    /** Room around a caster for shadow filtering, view bobbing and a pack's soft shadow spread when testing its reach. */
+    private static final float REACH_PAD = 4;
     private final FrustumIntersection frustum = new FrustumIntersection();
+    private final BlazeShadowReach reach = new BlazeShadowReach();
+    private boolean reaching;
     private final Matrix4f combined = new Matrix4f();
     private boolean failed;
 
-    /** Casts every entity and block entity within {@code limit} blocks of the camera, tested against the light's frustum when it has one. */
-    void cast(Minecraft minecraft, BlazePackScene scene, Camera camera, float partial, Matrix4f view, Matrix4f projection,
+    /**
+     * Casts every entity and block entity within {@code limit} blocks of the camera, tested against the light's frustum
+     * when it has one and, with {@link BlazeOptimization#ENTITY_SHADOW_REACH}, against where its shadow can fall in
+     * {@code player}'s view.
+     */
+    void cast(Minecraft minecraft, BlazePackScene scene, Camera camera, float partial, Matrix4f view, Matrix4f projection, Matrix4fc player,
               dev.overhaul.shader.pack.PackShadowSettings casters, boolean bounded, double limit) {
         if (!casters.entities() && !casters.player() && !casters.blockEntities()) return;
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         // The game points the dispatcher at its camera only once it draws entities, after the first shadow pass.
         if (failed || minecraft.level == null || dispatcher.camera == null) return;
         if (bounded) frustum.set(projection.mul(view, combined));
+        reaching = bounded && BlazeOptimization.ENTITY_SHADOW_REACH.on() && reach.aim(player, view, projection);
         var position = camera.getPosition();
         double x = position.x, y = position.y, z = position.z;
         Matrix4f savedProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
@@ -63,7 +74,7 @@ final class BlazePackEntityShadows {
                         ez = Mth.lerp(partial, entity.zOld, entity.getZ()) - z;
                 if (Math.abs(ex) > limit || Math.abs(ey) > limit || Math.abs(ez) > limit) continue;
                 var box = entity.getBoundingBox();
-                if (bounded && !frustum.testAab((float) (box.minX - x), (float) (box.minY - y), (float) (box.minZ - z),
+                if (bounded && !casts((float) (box.minX - x), (float) (box.minY - y), (float) (box.minZ - z),
                         (float) (box.maxX - x), (float) (box.maxY - y), (float) (box.maxZ - z))) continue;
                 dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
                         dispatcher.getPackedLightCoords(entity, partial));
@@ -82,6 +93,12 @@ final class BlazePackEntityShadows {
         }
     }
 
+    /** Whether a camera-relative box lies in the light's frustum and, while reaching, its shadow can land in view. */
+    private boolean casts(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
+        return frustum.testAab(minX, minY, minZ, maxX, maxY, maxZ) && (!reaching
+                || reach.reaches(minX - REACH_PAD, minY - REACH_PAD, minZ - REACH_PAD, maxX + REACH_PAD, maxY + REACH_PAD, maxZ + REACH_PAD));
+    }
+
     /** The loaded chunks around the camera hold every block entity that could cast; each draws as the game's pass does. */
     private void blockEntities(Minecraft minecraft, float partial, PoseStack pose, net.minecraft.client.renderer.MultiBufferSource buffers,
                                double x, double y, double z, boolean bounded, double limit) {
@@ -98,7 +115,7 @@ final class BlazePackEntityShadows {
                 var at = entity.getBlockPos();
                 double bx = at.getX() - x, by = at.getY() - y, bz = at.getZ() - z;
                 if (Math.abs(bx) > limit || Math.abs(by) > limit || Math.abs(bz) > limit) continue;
-                if (bounded && !renderer.shouldRenderOffScreen(entity) && !frustum.testAab((float) bx - 1, (float) by - 1, (float) bz - 1,
+                if (bounded && !renderer.shouldRenderOffScreen(entity) && !casts((float) bx - 1, (float) by - 1, (float) bz - 1,
                         (float) bx + 2, (float) by + 2, (float) bz + 2)) continue;
                 pose.pushPose();
                 pose.translate(bx, by, bz);

@@ -15,6 +15,17 @@ final class BlazeShadowReach {
     private final float[] pushes = new float[4];
 
     /**
+     * Aims the test along an orthographic light frustum: light travels down the light view's z axis for the frustum's
+     * depth, 2 / m22 whichever depth range it maps to. False, leaving the test unset, for a perspective light.
+     */
+    boolean aim(Matrix4fc viewProjection, Matrix4fc lightView, Matrix4fc lightProjection) {
+        if (lightProjection.m22() == 0) return false;
+        float x = -lightView.m02(), y = -lightView.m12(), z = -lightView.m22();
+        set(viewProjection, x, y, z, 2 / Math.abs(lightProjection.m22()) / (float) Math.sqrt(x * x + y * y + z * z));
+        return true;
+    }
+
+    /**
      * @param viewProjection the player's projection times its camera-relative view
      * @param lightX the direction light travels, any length
      * @param length how far along that direction a shadow can fall, in units of the direction's length

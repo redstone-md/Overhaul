@@ -112,7 +112,7 @@ final class BlazePackShadows {
         cast(2, "shadow_cutout", position.x, position.y, position.z);
         scene.shadowLayer("shadow_entities");
         float multiplier = settings.renderMultiplier();
-        entities.cast(minecraft, scene, camera, partial, view, projection, settings, settings.fov() == null, multiplier > 0 ? settings.distance() * multiplier : settings.distance());
+        entities.cast(minecraft, scene, camera, partial, view, projection, player, settings, settings.fov() == null, multiplier > 0 ? settings.distance() * multiplier : settings.distance());
         renderer.gpuMark("shadowOpaque");
         runtime.snapshotOpaqueShadow(renderer.packCommands());
         cast(3, "shadow_water", position.x, position.y, position.z);
@@ -238,11 +238,8 @@ final class BlazePackShadows {
         frustum.set(projection.mul(view, combined));
         float multiplier = settings.renderMultiplier();
         double limit = multiplier > 0 ? settings.distance() * multiplier + 16 + margin : Double.MAX_VALUE;
-        // The light's frustum is orthographic here, so its depth is 2 / m22 at most whichever depth range it maps to.
-        boolean reaching = BlazeOptimization.SHADOW_REACH.on() && projection.m22() != 0;
+        boolean reaching = BlazeOptimization.SHADOW_REACH.on() && reach.aim(player, view, projection);
         float pad = margin + REACH_PAD;
-        if (reaching) reach.set(player, -view.m02(), -view.m12(), -view.m22(), 2 / Math.abs(projection.m22())
-                / (float) Math.sqrt(view.m02() * view.m02() + view.m12() * view.m12() + view.m22() * view.m22()));
         if (inside.length != indexed.length) inside = new boolean[indexed.length];
         int[] origins = this.origins;
         boolean columns = BlazeOptimization.SHADOW_COLUMNS.on();
