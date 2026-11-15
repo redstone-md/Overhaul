@@ -80,18 +80,20 @@ final class BlazeShadingShader {
             """;
     private static final String BODY = """
             #ifndef TRACED
+            // From the world around the camera back to the screen; main works it out once for its four pixels.
+            mat4 viewProjection;
+
             // The share of the sun left after walking the depth on screen toward it: steps grow with the distance
             // walked and start at a place that differs per pixel, part being its quarter of a step, so the few steps
             // do not band. A step is in shadow
             // when what the screen shows there is nearer than the step, by less than a block and a half: anything
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
             float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
-                mat4 viewProjection = inverse(inverseViewProjection);
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
                 float far = reach * clamp(distance / 24.0, 0.2, 1.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
-                for (int i = 0; i < 14; i++) {
-                    float along = (float(i) + offset) / 14.0;
+                for (int i = 0; i < 8; i++) {
+                    float along = (float(i) + offset) / 8.0;
                     vec3 point = origin + light.xyz * (far * along * along);
                     vec4 clip = viewProjection * vec4(point, 1.0);
                     if (clip.w <= 0.0) break;
@@ -180,6 +182,9 @@ final class BlazeShadingShader {
             // on one surface share the mean, which is as good as four times the steps.
             void main() {
                 ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
+            #ifndef TRACED
+                if (uintBitsToFloat(options.z) > 0.0) viewProjection = inverse(inverseViewProjection);
+            #endif
                 Seen seen[4];
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 vec4 sum = vec4(0.0);
