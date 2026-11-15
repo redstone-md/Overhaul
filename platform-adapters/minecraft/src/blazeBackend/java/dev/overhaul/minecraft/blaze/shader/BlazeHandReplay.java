@@ -19,18 +19,18 @@ import java.util.function.Function;
 
 /**
  * Keeps the first-person hand's geometry between the frames that animate it. With
- * {@link BlazeOptimization#PLAYER_HAND_REPLAY}, a frame that animates the hand draws it from an empty pose into buffers
- * that record every vertex and pass it on to the game's buffers moved by the view's pose; the frames that
- * {@link BlazeHandAnimation} paces draw those vertices again moved by their own pose, so bobbing and turning stay
- * smooth, without running the renderers. A recording that sees a draw or a buffer past the recording buffers is not
+ * {@link BlazeOptimization#PLAYER_HAND_REPLAY}, a frame that animates the hand draws it with the view's pose into buffers
+ * that record every vertex as they pass it on to the game's buffers; the frames that {@link BlazeHandAnimation} paces
+ * draw those vertices again moved by their pose relative to the recorded one, so bobbing and turning stay smooth,
+ * without running the renderers. A recording that sees a draw or a buffer past the recording buffers is not
  * replayed. Render thread only.
  */
 public final class BlazeHandReplay {
     private static final Logger LOG = LoggerFactory.getLogger(BlazeHandReplay.class);
     private static BlazeHandReplay recording;
     private final Map<RenderType, BlazeVertexLog> logs = new LinkedHashMap<>();
-    private final Matrix4f transform = new Matrix4f();
-    private final Matrix3f normals = new Matrix3f();
+    private final Matrix4f transform = new Matrix4f(), recordedInverse = new Matrix4f();
+    private final Matrix3f normals = new Matrix3f(), recordedNormalInverse = new Matrix3f();
     private final Function<BlazeHandReplay, MultiBufferSource.BufferSource> recorders;
     private MultiBufferSource.BufferSource recorder, game;
     private int inside;
@@ -51,23 +51,26 @@ public final class BlazeHandReplay {
         }
         PoseStack.Pose view = pose.last();
         if (ready && game == buffers && BlazeHandAnimation.reusing()) {
+            // The log holds the vertices as the recorded pose placed them; move them by this pose relative to that one.
+            view.pose().mul(recordedInverse, transform);
+            view.normal().mul(recordedNormalInverse, normals);
             for (Map.Entry<RenderType, BlazeVertexLog> entry : logs.entrySet())
-                if (entry.getValue().vertices() > 0) BlazeVertexRecorder.replay(buffers.getBuffer(entry.getKey()), entry.getValue(), view.pose(), view.normal());
+                if (entry.getValue().vertices() > 0) BlazeVertexRecorder.replay(buffers.getBuffer(entry.getKey()), entry.getValue(), transform, normals);
             buffers.endBatch();
             BlazeHandAnimation.replayed();
             return;
         }
         for (BlazeVertexLog log : logs.values()) log.clear();
-        transform.set(view.pose());
-        normals.set(view.normal());
         if (recorder == null) recorder = recorders.apply(this);
         game = buffers;
+        // Renderers that draw past the buffers they are given (TacZ guns) still need the real pose to land in view.
+        boolean invertible = view.pose().invert(recordedInverse).isFinite() && view.normal().invert(recordedNormalInverse).isFinite();
         ready = leaked = false;
         inside = 0;
         recording = this;
         try {
-            renderer.accept(new PoseStack(), recorder);
-            ready = !leaked;
+            renderer.accept(pose, recorder);
+            ready = !leaked && invertible;
         } finally {
             recording = null;
         }
@@ -81,7 +84,7 @@ public final class BlazeHandReplay {
     VertexConsumer buffer(RenderType type) {
         inside++;
         try {
-            return new BlazeVertexRecorder(game.getBuffer(type), logs.computeIfAbsent(type, key -> new BlazeVertexLog()), transform, normals);
+            return new BlazeVertexRecorder(game.getBuffer(type), logs.computeIfAbsent(type, key -> new BlazeVertexLog()));
         } finally {
             inside--;
         }

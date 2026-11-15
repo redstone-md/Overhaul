@@ -12,34 +12,19 @@ import org.joml.Vector3f;
 final class BlazeVertexRecorder implements VertexConsumer {
     private final VertexConsumer target;
     private final BlazeVertexLog log;
-    /** Applied to what is passed on, never to what is kept; null passes vertices on as given. */
-    private final Matrix4fc transform;
-    private final Matrix3fc normals;
-    private final Vector3f moved = new Vector3f();
     private int slot = -1;
     private boolean defaulted;
     private int defaultColor;
 
     BlazeVertexRecorder(VertexConsumer target, BlazeVertexLog log) {
-        this(target, log, null, null);
-    }
-
-    /** Keeps vertices as given and passes them on moved by {@code transform}, normals turned by {@code normals}. */
-    BlazeVertexRecorder(VertexConsumer target, BlazeVertexLog log, Matrix4fc transform, Matrix3fc normals) {
         this.target = target;
         this.log = log;
-        this.transform = transform;
-        this.normals = normals;
     }
 
     @Override
     public VertexConsumer vertex(double x, double y, double z) {
         slot = log.begin((float) x, (float) y, (float) z);
-        if (transform == null) target.vertex(x, y, z);
-        else {
-            transform.transformPosition((float) x, (float) y, (float) z, moved);
-            target.vertex(moved.x, moved.y, moved.z);
-        }
+        target.vertex(x, y, z);
         return this;
     }
 
@@ -75,11 +60,7 @@ final class BlazeVertexRecorder implements VertexConsumer {
     @Override
     public VertexConsumer normal(float x, float y, float z) {
         log.normal(slot, x, y, z);
-        if (normals == null) target.normal(x, y, z);
-        else {
-            normals.transform(x, y, z, moved);
-            target.normal(moved.x, moved.y, moved.z);
-        }
+        target.normal(x, y, z);
         return this;
     }
 
