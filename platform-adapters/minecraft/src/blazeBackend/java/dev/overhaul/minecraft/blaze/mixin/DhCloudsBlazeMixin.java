@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Pseudo
 @Mixin(targets = "com.seibel.distanthorizons.core.render.renderer.CloudRenderHandler", remap = false)
-abstract class DhClouds121Mixin {
+abstract class DhCloudsBlazeMixin {
     @Unique private static final long PERIOD_NANOS = 16_000_000L;
     @Unique private static long overhaul$frame, overhaul$updatedAt;
     @Unique private static boolean overhaul$updating;

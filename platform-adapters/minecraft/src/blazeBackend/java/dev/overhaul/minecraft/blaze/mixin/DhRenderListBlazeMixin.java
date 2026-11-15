@@ -13,7 +13,7 @@ import java.util.HashSet;
  */
 @Pseudo
 @Mixin(targets = "com.seibel.distanthorizons.core.util.objects.SortedArraySet", remap = false)
-abstract class DhRenderList121Mixin {
+abstract class DhRenderListBlazeMixin {
     @Redirect(method = "add", at = @At(value = "INVOKE", target = "Ljava/util/HashSet;add(Ljava/lang/Object;)Z"), require = 0)
     private boolean overhaul$alwaysNew(HashSet<Object> set, Object element) {
         return true;
