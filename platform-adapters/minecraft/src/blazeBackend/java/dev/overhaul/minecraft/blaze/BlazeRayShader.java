@@ -19,32 +19,14 @@ final class BlazeRayShader {
     static final int TRAILER_FLOATS = 20;
     static final int PUSH_BYTES = 128;
 
-    static final String SOURCE = """
-            #version 460
-            #extension GL_EXT_ray_query : require
-            #extension GL_EXT_buffer_reference : require
-            #extension GL_EXT_buffer_reference_uvec2 : require
-            layout(local_size_x = 8, local_size_y = 8) in;
-            layout(binding = 0) uniform accelerationStructureEXT scene;
-            layout(binding = 1) uniform sampler2D sceneColor;
-            layout(binding = 2) uniform sampler2D sceneDepth;
-            layout(binding = 3) uniform sampler2D atlas;
-            layout(binding = 4, rgba8) writeonly uniform image2D lit;
-            layout(binding = 5) uniform sampler2D history;
-            // Half resolution: the factor on colour, then the distance it was found at, negative where a reflection waits.
-            #ifdef COMPOSITE
-            layout(binding = 6, rgba16f) readonly uniform image2D accumulated;
-            #else
-            layout(binding = 6, rgba16f) writeonly uniform image2D accumulated;
-            #endif
+    /** The vertex and hit table views a traced scene reads; needs the buffer reference extensions. */
+    static final String BUFFERS = """
             layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words { uint w[]; };
             layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Table { uvec4 e[]; };
-            // Last frame's view projection; motion: where the camera was relative to now, then 1 while a history exists.
-            layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Previous { mat4 viewProjection; vec4 motion; };
-            // light: direction to the sun or moon, then its strength; sky: the sky colour, then daylight;
-            // size: pixels, then the hit table's address; options: flags, frame, traced distance's bits, instances.
-            layout(push_constant) uniform Frame { mat4 inverseViewProjection; vec4 light; vec4 sky; uvec4 size; uvec4 options; };
+            """;
 
+    /** Fetching a hit's surface and the shadow rays; needs {@link #BUFFERS}, {@code scene}, {@code atlas}, {@code light} and the hit table's address in {@code size.zw}. */
+    static final String SCENE = """
             const uint SOLID_AND_CUTOUT = 3u, TRANSLUCENT = 4u;
 
             struct Surface { vec2 uv; vec4 color; vec2 lightmap; vec3 normal; };
@@ -141,6 +123,49 @@ final class BlazeRayShader {
                 return seen > 0.0 ? seen * transmitted(origin, light.xyz, 256.0) : 0.0;
             }
 
+            """;
+
+    /** The game's brightness curve and the sky's and the sun's colours; needs {@code light} and {@code sky}. */
+    static final String LIGHTS = """
+            // The game's own brightness curve for a light level from 0 to 1.
+            float brightness(float level) { return level / (4.0 - 3.0 * level); }
+
+            vec3 skyTint() { return sky.rgb / max(dot(sky.rgb, vec3(0.3, 0.59, 0.11)), 0.05); }
+
+            // The sun warms toward the horizon; the moon is a cool, faint blue.
+            vec3 sunColor() {
+                if (sky.w < 0.5) return vec3(0.55, 0.65, 1.0) * 0.5;
+                return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
+            }
+
+            """;
+
+    static final String SOURCE = """
+            #version 460
+            #extension GL_EXT_ray_query : require
+            #extension GL_EXT_buffer_reference : require
+            #extension GL_EXT_buffer_reference_uvec2 : require
+            layout(local_size_x = 8, local_size_y = 8) in;
+            layout(binding = 0) uniform accelerationStructureEXT scene;
+            layout(binding = 1) uniform sampler2D sceneColor;
+            layout(binding = 2) uniform sampler2D sceneDepth;
+            layout(binding = 3) uniform sampler2D atlas;
+            layout(binding = 4, rgba8) writeonly uniform image2D lit;
+            layout(binding = 5) uniform sampler2D history;
+            // Half resolution: the factor on colour, then the distance it was found at, negative where a reflection waits.
+            #ifdef COMPOSITE
+            layout(binding = 6, rgba16f) readonly uniform image2D accumulated;
+            #else
+            layout(binding = 6, rgba16f) writeonly uniform image2D accumulated;
+            #endif
+            """ + BUFFERS + """
+            // Last frame's view projection; motion: where the camera was relative to now, then 1 while a history exists.
+            layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Previous { mat4 viewProjection; vec4 motion; };
+            // light: direction to the sun or moon, then its strength; sky: the sky colour, then daylight;
+            // size: pixels, then the hit table's address; options: flags, frame, traced distance's bits, instances.
+            layout(push_constant) uniform Frame { mat4 inverseViewProjection; vec4 light; vec4 sky; uvec4 size; uvec4 options; };
+
+            """ + SCENE + """
             // The baked block and sky light of the terrain a pixel shows, when the camera ray meets terrain at the
             // depth's distance; anything else there, an entity, a hand or a particle, has none to read.
             bool terrainLight(vec3 position, float distance, out vec2 levels) {
@@ -154,19 +179,9 @@ final class BlazeRayShader {
                 return true;
             }
 
-            // The game's own brightness curve for a light level from 0 to 1.
-            float brightness(float level) { return level / (4.0 - 3.0 * level); }
-
+            """ + LIGHTS + """
             // The light the game itself gives these levels, which the colour on screen already carries.
             float plainLight(vec2 levels) { return max(brightness(levels.x), brightness(levels.y) * sky.w) + 0.03; }
-
-            vec3 skyTint() { return sky.rgb / max(dot(sky.rgb, vec3(0.3, 0.59, 0.11)), 0.05); }
-
-            // The sun warms toward the horizon; the moon is a cool, faint blue.
-            vec3 sunColor() {
-                if (sky.w < 0.5) return vec3(0.55, 0.65, 1.0) * 0.5;
-                return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
-            }
 
             // How much brighter or darker, and in what colour, this light makes a pixel than the game's flat lighting:
             // the sun where rays reach it and the surface faces it, the sky through what occludes it, and blocks
