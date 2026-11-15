@@ -61,9 +61,7 @@ public final class HudFrameCache {
         } else if (sizeChanged) {
             target.resize(main.width, main.height, Minecraft.ON_OSX);
         }
-        if (main.isStencilEnabled() && !target.isStencilEnabled()) {
-            target.enableStencil();
-        }
+        HudStencil.match(main, target);
         target.clear(Minecraft.ON_OSX);
         target.bindWrite(true);
         // Mods rebind the main target after drawing to their own buffers, so that name must point here during the pass.
