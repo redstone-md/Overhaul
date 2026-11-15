@@ -115,23 +115,40 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         var vertexStage=BlazeSourceLowering.lower(vs,true);
         var fragmentStage=BlazeSourceLowering.lower(fs,false);
         // Translation assigns one stable location schema; linking uses the optimized interfaces below.
-        // Temporary declarations are removed before compilation, never given invented vertex values.
         String vertexSchema=varyingSchema(vertexStage),fragmentSchema=varyingSchema(fragmentStage);
         for(var entry:fragmentStage.varyings().entrySet())if(!vertexStage.varyings().containsKey(entry.getKey()))
             vertexSchema+="\nvarying "+BlazeSourceLowering.schemaType(entry.getValue())+" "+entry.getKey()+";\n";
         var lowered = translator.translate(vertexSchema,fragmentSchema, CoordinateConvention.OPENGL_RENDER_TARGET);
         String vertexText=declarations(lowered.vertex(),lowered.bindings().attributes(),vertexStage.attributes(),"in",java.util.Set.of(),false);
         vertexText=declarations(vertexText,lowered.bindings().varyings(),vertexStage.varyings(),"out",vertexStage.flatVaryings(),true);
-        for(var entry:fragmentStage.varyings().entrySet())if(!vertexStage.varyings().containsKey(entry.getKey()))
-            vertexText=vertexText.replace("layout(location="+lowered.bindings().varyings().get(entry.getKey())+") out "+BlazeSourceLowering.schemaType(entry.getValue())+" "+entry.getKey()+";","");
+        Map<String,String> zeroed=new java.util.HashMap<>();
+        for(var entry:fragmentStage.varyings().entrySet())if(!vertexStage.varyings().containsKey(entry.getKey())){
+            String name=entry.getKey(),type=entry.getValue();int location=lowered.bindings().varyings().get(name);
+            String temporary="layout(location="+location+") out "+BlazeSourceLowering.schemaType(type)+" "+name+";";
+            String filled=zeroOutput(vertexText.replace(temporary,"layout(location="+location+") "+(fragmentStage.flatVaryings().contains(name)?"flat ":"")+"out "+type+" "+name+";"),name,type);
+            if(filled==null)vertexText=vertexText.replace(temporary,"");
+            else{vertexText=filled;zeroed.put(name,type);}
+        }
         String fragmentText=declarations(lowered.fragment(),lowered.bindings().varyings(),fragmentStage.varyings(),"in",fragmentStage.flatVaryings(),true);
         var declared=lowered.bindings();
         var bindings=new ProgramBindings(declared.uniforms(),declared.uniformBytes(),declared.samplers(),declared.attributes(),
                 declared.varyings(),vertexStage.attributes(),declared.samplerTypes());
         SpirvBinary vertexCode=compiler.compile(vertexName, vertexText, ShaderStage.VERTEX);
         SpirvBinary fragmentCode=compiler.compile(fragmentName, fragmentText, ShaderStage.FRAGMENT);
-        validateVaryings(vertexStage,fragmentStage,lowered.bindings().varyings(),vertexCode,fragmentCode);
+        validateVaryings(vertexStage,fragmentStage,zeroed,lowered.bindings().varyings(),vertexCode,fragmentCode);
         return new Program(vertexCode, fragmentCode, SpirvInterface.active(bindings,vertexCode,fragmentCode));
+    }
+
+    private static final java.util.regex.Pattern MAIN=java.util.regex.Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void\\s*)?\\)\\s*\\{");
+
+    /**
+     * A fragment input its vertex shader never writes links under OpenGL and reads an undefined value, so mods ship
+     * such programs. Vulkan gets the same program with that output written as zero; null when it cannot be written.
+     */
+    private static String zeroOutput(String source,String name,String type){
+        var main=MAIN.matcher(source);
+        if(type.indexOf('[')>=0||!main.find())return null;
+        return source.substring(0,main.end())+"\n    "+name+"="+type+"(0);"+source.substring(main.end());
     }
 
     private static String varyingSchema(BlazeSourceLowering.Stage stage){
@@ -140,13 +157,14 @@ public final class BlazeProgramCompiler implements AutoCloseable {
         return source;
     }
 
-    private static void validateVaryings(BlazeSourceLowering.Stage vertex,BlazeSourceLowering.Stage fragment,Map<String,Integer> locations,SpirvBinary vertexCode,SpirvBinary fragmentCode){
+    private static void validateVaryings(BlazeSourceLowering.Stage vertex,BlazeSourceLowering.Stage fragment,Map<String,String> zeroed,Map<String,Integer> locations,SpirvBinary vertexCode,SpirvBinary fragmentCode){
         var inputs=SpirvInterface.inputLocations(fragmentCode);var outputs=SpirvInterface.outputLocations(vertexCode);
         for(var entry:fragment.varyings().entrySet()){
             String name=entry.getKey();int location=locations.get(name);if(!inputs.contains(location))continue;
-            if(!entry.getValue().equals(vertex.varyings().get(name))||!outputs.contains(location))
+            String written=vertex.varyings().getOrDefault(name,zeroed.get(name));
+            if(!entry.getValue().equals(written)||!outputs.contains(location))
                 throw new UnsupportedShaderException("Blaze3D active fragment input has no matching vertex output: "+name);
-            if(vertex.flatVaryings().contains(name)!=fragment.flatVaryings().contains(name))
+            if(!zeroed.containsKey(name)&&vertex.flatVaryings().contains(name)!=fragment.flatVaryings().contains(name))
                 throw new UnsupportedShaderException("Blaze3D active interpolation qualifiers do not match: "+name);
         }
     }
