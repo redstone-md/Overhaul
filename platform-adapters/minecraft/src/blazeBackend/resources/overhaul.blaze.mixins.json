@@ -38,7 +38,7 @@
     "VeilShaderCompilerBlazeMixin",
     "VeilScreenShaderBlazeMixin",
     "DefaultChunkRendererBlazeMixin",
-    "FlywheelBackendBlazeMixin","FlywheelCompatBlazeMixin","DhTerrainBlazeMixin","DhVertexBufferBlazeMixin","DhGenericBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhVanillaFadeBlazeMixin","DhPostProcessBlazeMixin","DhSsaoBlazeMixin","DhTaaBlazeMixin","DhWireframeBlazeMixin","DhCloudsBlazeMixin","DhRenderListBlazeMixin","EmfShadowPoseBlazeMixin","EtfEntityNbtBlazeMixin","EmfNbtRuleBlazeMixin","PunchyClassLookupBlazeMixin","BufferSourceShadowReplayBlazeMixin","BufferSourceHandReplayBlazeMixin","BatchedBufferSourceHandReplayBlazeMixin"
+    "FlywheelBackendBlazeMixin","FlywheelCompatBlazeMixin","DhTerrainBlazeMixin","DhVertexBufferBlazeMixin","DhGenericBlazeMixin","DhFogBlazeMixin","DhCompositeBlazeMixin","DhVanillaFadeBlazeMixin","DhPostProcessBlazeMixin","DhSsaoBlazeMixin","DhTaaBlazeMixin","DhWireframeBlazeMixin","DhCloudsBlazeMixin","DhRenderListBlazeMixin","EmfShadowPoseBlazeMixin","EtfEntityNbtBlazeMixin","EmfNbtRuleBlazeMixin","PunchyClassLookupBlazeMixin","RaisedLayerBlazeMixin","BufferSourceShadowReplayBlazeMixin","BufferSourceHandReplayBlazeMixin","BatchedBufferSourceHandReplayBlazeMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }

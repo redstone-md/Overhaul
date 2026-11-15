@@ -163,6 +163,7 @@ final class OptimizationPage extends SettingsPage {
         labels.put(BlazeOptimization.ENTITY_NBT_TICK, "Entity NBT once per tick");
         labels.put(BlazeOptimization.ENTITY_NBT_RULES, "Entity NBT rules once per tick");
         labels.put(BlazeOptimization.MOD_CLASS_CACHE, "Cached mod class lookups");
+        labels.put(BlazeOptimization.HUD_LAYER_MEMO, "Raised HUD layers by exact name");
         labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
         labels.put(BlazeOptimization.PIXEL_ROWS, "Row copies for pixel reads");
         labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");
