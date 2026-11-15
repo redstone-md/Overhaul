@@ -21,6 +21,7 @@ import org.joml.Matrix4fStack;
  */
 public final class BlazePackHand {
     private static final float DEPTH = Float.parseFloat(PackBuiltinMacros.HAND_DEPTH);
+    private static final BlazeHandReplay REPLAY = new BlazeHandReplay(BlazeHandBuffers::new);
     private static boolean drawn;
 
     private BlazePackHand() {}
@@ -62,8 +63,9 @@ public final class BlazePackHand {
             game.lightTexture().turnOnLightLayer();
             BlazeHandAnimation.begin();
             try {
-                game.itemInHandRenderer.renderHandsWithItems(partial, pose, minecraft.renderBuffers().bufferSource(), minecraft.player,
-                        minecraft.getEntityRenderDispatcher().getPackedLightCoords(minecraft.player, partial));
+                var buffers = minecraft.renderBuffers().bufferSource();
+                int light = minecraft.getEntityRenderDispatcher().getPackedLightCoords(minecraft.player, partial);
+                REPLAY.draw(pose, buffers, (posed, into) -> game.itemInHandRenderer.renderHandsWithItems(partial, posed, into, minecraft.player, light));
             } finally {
                 BlazeHandAnimation.end();
             }

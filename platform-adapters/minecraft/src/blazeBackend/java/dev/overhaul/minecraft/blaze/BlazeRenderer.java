@@ -274,6 +274,7 @@ public final class BlazeRenderer implements AutoCloseable {
     boolean readingNowhere(){return readTarget()==null;}
 
     public void draw(BlazeMesh mesh){
+        dev.overhaul.minecraft.blaze.shader.BlazeHandReplay.drew();
         if(drawingNowhere())return;
         String missing=programs.incompleteActive();
         if(missing!=null){BlazeGlBoundary.reportOnce("incomplete program "+missing,"A draw used program "+missing+", which has no finished shader instance; it draws nothing");return;}

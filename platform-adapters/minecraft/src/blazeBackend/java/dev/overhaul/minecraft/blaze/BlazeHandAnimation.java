@@ -32,6 +32,16 @@ public final class BlazeHandAnimation {
         if (!reuse) animatedAt = now;
     }
 
+    /** Whether the hand being drawn keeps its last pose, so its last geometry may stand in for it. */
+    public static boolean reusing() {
+        return inHand && reuse;
+    }
+
+    /** The hand's last geometry was drawn in place of its renderers, so no animation saw this frame's time. */
+    public static void replayed() {
+        BlazeEmfEntity.oweFrame();
+    }
+
     /** Called once the hand is drawn. */
     public static void end() {
         inHand = false;
