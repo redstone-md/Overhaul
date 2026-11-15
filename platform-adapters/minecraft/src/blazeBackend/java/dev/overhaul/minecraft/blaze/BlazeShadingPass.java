@@ -235,8 +235,7 @@ final class BlazeShadingPass implements AutoCloseable {
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(binding.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-                int cell = linear ? 16 : 8;
-                vkCmdDispatch(command, (width + cell - 1) / cell, (height + cell - 1) / cell, 1);
+                vkCmdDispatch(command, (width + 15) / 16, (height + 15) / 16, 1);
             }
         }
 

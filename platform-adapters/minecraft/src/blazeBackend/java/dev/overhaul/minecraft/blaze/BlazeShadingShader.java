@@ -7,8 +7,8 @@ package dev.overhaul.minecraft.blaze;
  * warm block light, then maps it to the screen with a filmic curve and fogs it the way the game does. Pixels terrain
  * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera
  * and fades to the sky light level's guess beyond; the plain one guesses, and can walk the depth it already has
- * toward the sun for the shadows of what is on screen, so it runs on any card. The linear
- * variant lights two by two pixels at a time and also leaves their mean linear light at half size, for
+ * toward the sun for the shadows of what is on screen, so it runs on any card. Pixels are lit two by two, sharing
+ * what they found of the sun. The linear variant also leaves their mean linear light at half size, for
  * {@link BlazeShadingGlow} to blur and measure; it mixes in the glow and the exposure that made of the frame before,
  * so the whole picture is still one pass over the screen.
  */
@@ -81,14 +81,15 @@ final class BlazeShadingShader {
     private static final String BODY = """
             #ifndef TRACED
             // The share of the sun left after walking the depth on screen toward it: steps grow with the distance
-            // walked and start at a place that differs per pixel, so the few steps do not band. A step is in shadow
+            // walked and start at a place that differs per pixel, part being its quarter of a step, so the few steps
+            // do not band. A step is in shadow
             // when what the screen shows there is nearer than the step, by less than a block and a half: anything
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
-            float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel) {
+            float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
                 mat4 viewProjection = inverse(inverseViewProjection);
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
                 float far = reach * clamp(distance / 24.0, 0.2, 1.5);
-                float offset = fract(52.9829189 * fract(dot(vec2(pixel), vec2(0.06711056, 0.00583715))));
+                float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
                 for (int i = 0; i < 14; i++) {
                     float along = (float(i) + offset) / 14.0;
                     vec3 point = origin + light.xyz * (far * along * along);
@@ -110,7 +111,7 @@ final class BlazeShadingShader {
             #endif
 
             // The share of the sun a surface sees: open sky makes a good guess; near the camera, rays know.
-            float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance, ivec2 pixel) {
+            float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance, ivec2 pixel, float part) {
                 float guess = smoothstep(0.8, 0.97, skyLevel);
                 float reach = uintBitsToFloat(options.z);
             #ifdef TRACED
@@ -120,30 +121,47 @@ final class BlazeShadingShader {
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
             #else
-                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel);
+                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel, part);
             #endif
                 return guess;
             }
 
-            // Lights one pixel onto the screen; gives its linear light back, with 1 beside it where terrain is.
-            vec4 lightOf(ivec2 pixel) {
-                if (any(greaterThanEqual(uvec2(pixel), size.xy))) return vec4(0.0);
-                vec4 color = texelFetch(sceneColor, pixel, 0);
+            // What one pixel holds before it is lit; shadow is the share of the sun it found for itself.
+            struct Seen { vec4 color; vec3 normal; vec3 position; float blockLevel; float skyLevel; float shadow; bool inside; bool terrain; };
+
+            // Reads one pixel; part is its place among the four that share what they found of the sun.
+            Seen seenAt(ivec2 pixel, float part) {
+                Seen seen;
+                seen.inside = all(lessThan(uvec2(pixel), size.xy));
+                seen.terrain = false;
+                seen.shadow = 0.0;
+                if (!seen.inside) return seen;
+                seen.color = texelFetch(sceneColor, pixel, 0);
                 vec4 surface = texelFetch(surfaces, pixel, 0);
-                if (surface.a == 0.0) {
-                    imageStore(lit, pixel, color);
+                if (surface.a == 0.0) return seen;
+                seen.terrain = true;
+                seen.normal = unfold(surface.xy * 2.0 - 1.0);
+                seen.blockLevel = surface.z;
+                seen.skyLevel = clamp((surface.a * 255.0 - 1.0) / 254.0, 0.0, 1.0);
+                seen.position = positionOf(pixel);
+                if (dot(seen.normal, light.xyz) > 0.0 && light.w > 0.0)
+                    seen.shadow = shadowAt(seen.position, seen.normal, seen.skyLevel, length(seen.position), pixel, part);
+                return seen;
+            }
+
+            // Lights one pixel onto the screen with its share of the sun; gives its linear light back, with 1 beside
+            // it where terrain is.
+            vec4 lightOf(Seen seen, float shadow, ivec2 pixel) {
+                if (!seen.inside) return vec4(0.0);
+                if (!seen.terrain) {
+                    imageStore(lit, pixel, seen.color);
                     return vec4(0.0);
                 }
-                vec3 normal = unfold(surface.xy * 2.0 - 1.0);
-                float blockLevel = surface.z, skyLevel = clamp((surface.a * 255.0 - 1.0) / 254.0, 0.0, 1.0);
-                vec3 position = positionOf(pixel);
-                float distance = length(position);
-                float facing = max(dot(normal, light.xyz), 0.0);
-                float shadow = facing > 0.0 && light.w > 0.0 ? shadowAt(position, normal, skyLevel, distance, pixel) : 0.0;
-                vec3 sun = sunColor() * light.w * facing * shadow * 2.0;
-                vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
-                vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(blockLevel) * 1.6;
-                vec3 shaded = linear(color.rgb) * (sun + ambient + torch + 0.012);
+                vec3 normal = seen.normal;
+                vec3 sun = sunColor() * light.w * max(dot(normal, light.xyz), 0.0) * shadow * 2.0;
+                vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(seen.skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
+                vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(seen.blockLevel) * 1.6;
+                vec3 shaded = linear(seen.color.rgb) * (sun + ambient + torch + 0.012);
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR
@@ -153,17 +171,29 @@ final class BlazeShadingShader {
                 float average = texelFetch(measured, ivec2(0), 0).r;
                 if (average > 0.0) exposure = clamp(sqrt(0.35 / average), 0.7, 2.0);
             #endif
-                imageStore(lit, pixel, vec4(screened(shown, position, exposure), color.a));
+                imageStore(lit, pixel, vec4(screened(shown, seen.position, exposure), seen.color.a));
                 return vec4(shaded, 1.0);
             }
 
+            // Two by two pixels at a time: each finds its share of the sun at its own place along the way, and those
+            // on one surface share the mean, which is as good as four times the steps.
             void main() {
+                ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
+                Seen seen[4];
+                for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
+                vec4 sum = vec4(0.0);
+                for (int i = 0; i < 4; i++) {
+                    float shadow = 0.0, weight = 0.0, distance = length(seen[i].position);
+                    if (seen[i].terrain) for (int j = 0; j < 4; j++) {
+                        if (!seen[j].terrain || dot(seen[i].normal, seen[j].normal) < 0.9) continue;
+                        if (abs(length(seen[j].position) - distance) > 0.1 + 0.02 * distance) continue;
+                        shadow += seen[j].shadow;
+                        weight += 1.0;
+                    }
+                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, cell * 2 + ivec2(i & 1, i >> 1));
+                }
             #ifdef LINEAR
-                ivec2 cell = ivec2(gl_GlobalInvocationID.xy), pixel = cell * 2;
-                vec4 sum = lightOf(pixel) + lightOf(pixel + ivec2(1, 0)) + lightOf(pixel + ivec2(0, 1)) + lightOf(pixel + ivec2(1, 1));
                 if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
-            #else
-                lightOf(ivec2(gl_GlobalInvocationID.xy));
             #endif
             }
             """;
