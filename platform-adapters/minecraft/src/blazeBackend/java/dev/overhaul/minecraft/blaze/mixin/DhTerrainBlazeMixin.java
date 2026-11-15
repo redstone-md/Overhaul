@@ -12,11 +12,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** DH ships one copy of its renderers per loader; only the one for the running loader ever loads. */
+/** DH ships one copy of its renderers per loader (none for Fabric); only the one for the running loader ever loads. */
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.terrain.GlDhTerrainShaderProgram",
-        "com.seibel.distanthorizons.common.render.openGl.terrain.GlDhTerrainShaderProgram_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.terrain.GlDhTerrainShaderProgram_forge", "com.seibel.distanthorizons.common.render.openGl.terrain.GlDhTerrainShaderProgram_neoforge"}, remap = false)
 abstract class DhTerrainBlazeMixin {
     @Inject(method = "render(Lcom/seibel/distanthorizons/core/render/RenderParams;ZLcom/seibel/distanthorizons/core/util/objects/SortedArraySet;Lcom/seibel/distanthorizons/core/wrapperInterfaces/minecraft/IProfilerWrapper;)V",
             at = @At("HEAD"), cancellable = true, require = 0)

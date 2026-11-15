@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** DH's own fade draws a raw screen quad, which reaches nothing on Vulkan; its config still decides when this runs. */
 @Pseudo
 @Mixin(targets = {"com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_neoforge"}, remap = false)
 abstract class DhVanillaFadeBlazeMixin {
     @Inject(method = "render", at = @At("HEAD"), cancellable = true, require = 0)
     private void overhaul$fade(RenderParams params, CallbackInfo callback) {

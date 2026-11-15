@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.postProcessing.antialiasing.GlDhTaaRenderer_neoforge"}, remap = false)
 abstract class DhTaaBlazeMixin {
     @Inject(method = "render(Lcom/seibel/distanthorizons/core/render/RenderParams;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void overhaul$native(RenderParams params, CallbackInfo callback) {

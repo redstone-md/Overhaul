@@ -15,9 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlDhFarFadeRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlDhFarFadeRenderer_neoforge",
+        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlDhFarFadeRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlDhFarFadeRenderer_neoforge",
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.postProcessing.fade.GlVanillaFadeRenderer_neoforge"}, remap = false)
 abstract class DhPostProcessBlazeMixin {
     @Inject(method = "render(Lcom/seibel/distanthorizons/core/render/RenderParams;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void overhaul$skip(RenderParams params, CallbackInfo callback) {

@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.postProcessing.fog.GlDhFogRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fog.GlDhFogRenderer_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.postProcessing.fog.GlDhFogRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.postProcessing.fog.GlDhFogRenderer_neoforge"}, remap = false)
 abstract class DhFogBlazeMixin {
     @Inject(method = "render(Lcom/seibel/distanthorizons/core/render/RenderParams;Lcom/seibel/distanthorizons/api/methods/events/sharedParameterObjects/DhApiFogRenderParam;)V",
             at = @At("HEAD"), cancellable = true, require = 0)

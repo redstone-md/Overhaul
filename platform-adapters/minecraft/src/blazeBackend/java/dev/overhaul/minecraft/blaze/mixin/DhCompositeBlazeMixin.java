@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.GlDhMetaRenderer",
-        "com.seibel.distanthorizons.common.render.openGl.GlDhMetaRenderer_neoforge"}, remap = false)
+        "com.seibel.distanthorizons.common.render.openGl.GlDhMetaRenderer_forge", "com.seibel.distanthorizons.common.render.openGl.GlDhMetaRenderer_neoforge"}, remap = false)
 abstract class DhCompositeBlazeMixin {
     @Shadow(remap = false) public abstract int getActiveColorTextureId();
     @Shadow(remap = false) public abstract int getActiveDepthTextureId();
