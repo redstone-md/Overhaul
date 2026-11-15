@@ -70,7 +70,7 @@ final class BlazeShadingShader {
             // Linear light at an exposure to screen colour, under the game's own fog: a cylinder around the camera,
             // linear from start to end.
             vec3 screened(vec3 shaded, vec3 position, float exposure) {
-                vec3 result = display(filmic(shaded * 0.6 * exposure));
+                vec3 result = display(filmic(shaded * 0.5 * exposure));
                 float start = uintBitsToFloat(options.y), end = uintBitsToFloat(options.w);
                 vec4 fog = unpackUnorm4x8(options.x);
                 float around = max(length(position.xz), abs(position.y));
@@ -158,8 +158,9 @@ final class BlazeShadingShader {
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
-                vec3 sun = sunColor() * light.w * max(dot(normal, light.xyz), 0.0) * shadow * 2.0;
-                vec3 ambient = mix(vec3(1.0), skyTint(), 0.5) * brightness(seen.skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
+                // A little warmer than the sun itself and a little bluer than the sky, the way film sees daylight.
+                vec3 sun = sunColor() * vec3(1.04, 0.97, 0.86) * light.w * max(dot(normal, light.xyz), 0.0) * shadow * 2.0;
+                vec3 ambient = mix(vec3(1.0), skyTint(), 0.65) * brightness(seen.skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(seen.blockLevel) * 1.6;
                 vec3 shaded = linear(seen.color.rgb) * (sun + ambient + torch + 0.012);
                 vec3 shown = shaded;
@@ -169,7 +170,7 @@ final class BlazeShadingShader {
                 vec4 around = textureLod(glow, (vec2(pixel) + 0.5) / vec2(size.xy), 0.0);
                 if (around.a > 0.0) shown = mix(shaded, around.rgb / around.a, 0.12);
                 float average = texelFetch(measured, ivec2(0), 0).r;
-                if (average > 0.0) exposure = clamp(sqrt(0.35 / average), 0.7, 2.0);
+                if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 2.0);
             #endif
                 imageStore(lit, pixel, vec4(screened(shown, seen.position, exposure), seen.color.a));
                 return vec4(shaded, 1.0);
