@@ -259,7 +259,9 @@ public final class BlazeRenderer implements AutoCloseable {
         return target;
     }
     public void bindFramebuffer(int kind,int id){
-        if(id<FOREIGN_FRAMEBUFFERS)target(id);
+        // OpenGL refuses a deleted name with INVALID_OPERATION and keeps the binding; mods such as Veil rebind stale ids after a resize.
+        if(id<FOREIGN_FRAMEBUFFERS&&id!=0&&!(LAST_TARGET&&id==foundTargetId)&&!targets.containsKey(id)){
+            BlazeGlBoundary.reportOnce("stale framebuffer bind","A mod bound framebuffer "+id+", which no longer exists; the binding stays as it was");return;}
         switch(kind){
             case 0x8D40-> {drawTarget=id;readTarget=id;}
             case 0x8CA9->drawTarget=id;
