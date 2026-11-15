@@ -10,8 +10,9 @@ import org.lwjgl.system.MemoryUtil;
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
- * Terrain vertices in 20 bytes instead of 32. Positions keep 1/2048 block over [-8, 24) and texture coordinates 1/32768
- * under 2, both dyadic so a seam shared by two sections stays shared. A mesh outside those ranges stays in its full
+ * Terrain vertices in 20 bytes instead of 32. Positions keep 1/2048 block over [-8, 24) and texture coordinates 1/65536
+ * under 1, both dyadic so a seam shared by two sections stays shared. A quad's texture coordinates round toward its
+ * middle, so its edge never reaches into the next sprite of the atlas, which would shimmer at its seams far away. A mesh outside those ranges stays in its full
  * layout, which the terrain path draws just the same. The shader's own source reads the new attributes through macros,
  * so resource packs that replace terrain shaders keep working.
  */
@@ -19,7 +20,7 @@ public final class BlazeCompactSection {
     static final String VERTEX_ATTRIBUTE = "OverhaulCompactVertex";
     private static final String UV_ATTRIBUTE = "OverhaulCompactUv";
     private static final int FULL_STRIDE = 32, STRIDE = 20;
-    private static final float POSITION_BIAS = 8f, POSITION_SCALE = 2048f, UV_SCALE = 32768f;
+    private static final float POSITION_BIAS = 8f, POSITION_SCALE = 2048f, UV_SCALE = 65536f;
     static final BlazeMeshState.Layout LAYOUT = new BlazeMeshState.Layout(STRIDE, List.of(
             new BlazeMeshState.Field(VERTEX_ATTRIBUTE, 0, VK_FORMAT_R16G16B16A16_UINT),
             new BlazeMeshState.Field("Color", 8, VK_FORMAT_R8G8B8A8_UNORM),
@@ -67,11 +68,12 @@ public final class BlazeCompactSection {
 
     private static boolean transcode(ByteBuffer vertices, ByteBuffer compact, int count) {
         long from = MemoryUtil.memAddress(vertices), to = MemoryUtil.memAddress(compact);
+        boolean quads = count % 4 == 0;
         for (int vertex = 0; vertex < count; vertex++, from += FULL_STRIDE, to += STRIDE) {
             int x = (int) ((MemoryUtil.memGetFloat(from) + POSITION_BIAS) * POSITION_SCALE + .5f);
             int y = (int) ((MemoryUtil.memGetFloat(from + 4) + POSITION_BIAS) * POSITION_SCALE + .5f);
             int z = (int) ((MemoryUtil.memGetFloat(from + 8) + POSITION_BIAS) * POSITION_SCALE + .5f);
-            int u = (int) (MemoryUtil.memGetFloat(from + 16) * UV_SCALE + .5f), v = (int) (MemoryUtil.memGetFloat(from + 20) * UV_SCALE + .5f);
+            int u = inward(from, vertex, quads, 16), v = inward(from, vertex, quads, 20);
             int block = MemoryUtil.memGetShort(from + 24), sky = MemoryUtil.memGetShort(from + 26);
             if (((x | y | z | u | v) >>> 16 | (block | sky) >>> 8) != 0) return false;
             MemoryUtil.memPutShort(to, (short) x);
@@ -84,6 +86,22 @@ public final class BlazeCompactSection {
             MemoryUtil.memPutInt(to + 16, MemoryUtil.memGetInt(from + 28));
         }
         return true;
+    }
+
+    /**
+     * One texture coordinate in 1/65536 steps, rounded toward the middle of its quad when the mesh is quads, or to the
+     * nearest step otherwise. A coordinate outside [0, 1] answers a value the caller rejects.
+     */
+    private static int inward(long vertexAddress, int vertex, boolean quads, int offset) {
+        float value = MemoryUtil.memGetFloat(vertexAddress + offset);
+        if (!(value >= 0f && value <= 1f)) return -1;
+        if (!quads) return Math.min(0xFFFF, (int) (value * UV_SCALE + .5f));
+        long first = vertexAddress - (long) (vertex & 3) * FULL_STRIDE + offset;
+        float middle = (MemoryUtil.memGetFloat(first) + MemoryUtil.memGetFloat(first + FULL_STRIDE)
+                + MemoryUtil.memGetFloat(first + 2L * FULL_STRIDE) + MemoryUtil.memGetFloat(first + 3L * FULL_STRIDE)) * .25f;
+        double scaled = (double) value * UV_SCALE;
+        int step = (int) (value > middle ? Math.floor(scaled) : value < middle ? Math.ceil(scaled) : Math.rint(scaled));
+        return Math.min(0xFFFF, step);
     }
 
     /** This vertex shader reading the compact attributes, or null when it does not declare a position the usual way. */
