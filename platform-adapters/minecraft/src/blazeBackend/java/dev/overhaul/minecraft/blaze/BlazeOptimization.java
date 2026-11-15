@@ -72,6 +72,7 @@ public enum BlazeOptimization {
     SHADOW_REACH("shadowReach", "Shadow casters whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map; needs packShadowReuse"),
     ENTITY_SHADOW_REACH("entityShadowReach", "Entities and block entities whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map, so mobs behind the camera or past the view's sides skip their shadow model and animation"),
     PLAYER_SHADOW_PACE("playerShadowPace", "In first person, the local player's model animation in a shader pack's shadow pass worked out at most every 16 ms, reusing Entity Model Features' last pose in between; turning and moving stay smooth"),
+    PLAYER_SHADOW_REPLAY("playerShadowReplay", "In first person, the local player's shadow-pass geometry recorded on the frames that animate it and drawn again on the paced frames between, without running its renderers; needs playerShadowPace"),
     ENTITY_NBT_TICK("entityNbtTick", "Entity Texture Features' NBT texture and model rules read each entity's saved NBT once per tick instead of saving the entity again for every draw"),
     ENTITY_NBT_RULES("entityNbtRules", "Entity Model Features' nbt() animation rules answered once per tick for each entity instead of reading its tags as text every frame; needs entityNbtTick"),
     SECTION_DRAWS("sectionDraws", "Each section's draw counts, offsets and buffers copied into the section scan's tables, so drawing never reads the meshes; needs sectionTable"),
@@ -198,7 +199,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler, ray tracing and entity shadows read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, ENTITY_NBT_TICK, ENTITY_NBT_RULES, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
             default -> false;
         };
     }

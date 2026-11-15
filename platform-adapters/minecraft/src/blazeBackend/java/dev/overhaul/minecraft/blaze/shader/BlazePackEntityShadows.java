@@ -8,6 +8,7 @@ import dev.overhaul.minecraft.blaze.BlazePackScene;
 import dev.overhaul.minecraft.blaze.BlazeShadowAnimation;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.util.Mth;
@@ -34,6 +35,7 @@ final class BlazePackEntityShadows {
     private final BlazeShadowReach reach = new BlazeShadowReach();
     private boolean reaching;
     private final Matrix4f combined = new Matrix4f();
+    private BlazeShadowReplay replay;
     private boolean failed;
 
     /**
@@ -77,15 +79,13 @@ final class BlazePackEntityShadows {
                 var box = entity.getBoundingBox();
                 if (bounded && !casts((float) (box.minX - x), (float) (box.minY - y), (float) (box.minZ - z),
                         (float) (box.maxX - x), (float) (box.maxY - y), (float) (box.maxZ - z))) continue;
+                float yaw = Mth.lerp(partial, entity.yRotO, entity.getYRot());
                 // In first person only this pass animates the player, so its pose may be paced.
-                boolean paced = entity == minecraft.player && minecraft.options.getCameraType().isFirstPerson()
-                        && BlazeShadowAnimation.beginLocalPlayer();
-                try {
-                    dispatcher.render(entity, ex, ey, ez, Mth.lerp(partial, entity.yRotO, entity.getYRot()), partial, pose, buffers,
-                            dispatcher.getPackedLightCoords(entity, partial));
-                } finally {
-                    if (paced) BlazeShadowAnimation.end();
+                if (entity == minecraft.player && minecraft.options.getCameraType().isFirstPerson()) {
+                    localPlayer(dispatcher, entity, ex, ey, ez, yaw, partial, buffers);
+                    continue;
                 }
+                dispatcher.render(entity, ex, ey, ez, yaw, partial, pose, buffers, dispatcher.getPackedLightCoords(entity, partial));
             }
             if (casters.blockEntities()) blockEntities(minecraft, partial, pose, buffers, x, y, z, bounded, limit);
         } catch (RuntimeException failure) {
@@ -101,6 +101,35 @@ final class BlazePackEntityShadows {
         }
     }
 
+    /**
+     * Draws the local player in first person: on a paced frame the last recorded geometry when there is one, else the
+     * renderers, recording what they draw while {@link BlazeShadowReplay} is on.
+     */
+    private void localPlayer(EntityRenderDispatcher dispatcher, Entity entity, double ex, double ey, double ez, float yaw, float partial,
+                             MultiBufferSource.BufferSource buffers) {
+        if (replay == null) replay = new BlazeShadowReplay(buffers);
+        boolean paced = BlazeShadowAnimation.beginLocalPlayer();
+        try {
+            if (paced && replay.replay(ex, ey, ez)) return;
+            if (paced || !replay.on()) {
+                dispatcher.render(entity, ex, ey, ez, yaw, partial, new PoseStack(), buffers, dispatcher.getPackedLightCoords(entity, partial));
+                return;
+            }
+            boolean drawn = false;
+            MultiBufferSource recording = replay.record(ex, ey, ez);
+            try {
+                dispatcher.render(entity, ex, ey, ez, yaw, partial, new PoseStack(), recording, dispatcher.getPackedLightCoords(entity, partial));
+                drawn = true;
+            } catch (RuntimeException failure) {
+                LOG.warn("The local player's shadow failed to record", failure);
+            } finally {
+                replay.recorded(drawn);
+            }
+        } finally {
+            if (paced) BlazeShadowAnimation.end();
+        }
+    }
+
     /** Whether a camera-relative box lies in the light's frustum and, while reaching, its shadow can land in view. */
     private boolean casts(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         return frustum.testAab(minX, minY, minZ, maxX, maxY, maxZ) && (!reaching
@@ -108,7 +137,7 @@ final class BlazePackEntityShadows {
     }
 
     /** The loaded chunks around the camera hold every block entity that could cast; each draws as the game's pass does. */
-    private void blockEntities(Minecraft minecraft, float partial, PoseStack pose, net.minecraft.client.renderer.MultiBufferSource buffers,
+    private void blockEntities(Minecraft minecraft, float partial, PoseStack pose, MultiBufferSource buffers,
                                double x, double y, double z, boolean bounded, double limit) {
         BlockEntityRenderDispatcher dispatcher = minecraft.getBlockEntityRenderDispatcher();
         if (dispatcher.camera == null) return;

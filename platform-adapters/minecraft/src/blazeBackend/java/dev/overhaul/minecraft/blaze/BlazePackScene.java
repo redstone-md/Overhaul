@@ -281,6 +281,7 @@ public final class BlazePackScene implements AutoCloseable {
     void draw(BlazeMesh mesh, BlazeShaderSnapshot game) {
         String shader = activeShader();
         if (entityShadows) {
+            dev.overhaul.minecraft.blaze.shader.BlazeShadowReplay.drew();
             castEntity(mesh, game, shader);
             return;
         }
