@@ -73,6 +73,7 @@ public enum BlazeOptimization {
     ENTITY_SHADOW_REACH("entityShadowReach", "Entities and block entities whose shadow, swept along the light, cannot land inside the player's view left out of the shadow map, so mobs behind the camera or past the view's sides skip their shadow model and animation"),
     PLAYER_SHADOW_PACE("playerShadowPace", "In first person, the local player's model animation in a shader pack's shadow pass worked out at most every 16 ms, reusing Entity Model Features' last pose in between; turning and moving stay smooth"),
     PLAYER_SHADOW_REPLAY("playerShadowReplay", "In first person, the local player's shadow-pass geometry recorded on the frames that animate it and drawn again on the paced frames between, without running its renderers; needs playerShadowPace"),
+    PLAYER_SHADOW_SLOW_PACE("playerShadowSlowPace", "In first person, the local player's shadow-pass pose worked out at most every 33 ms instead of 16 ms; its shadow is small and soft, so limbs stepping at 30 Hz go unseen while turning and moving stay smooth; needs playerShadowPace"),
     PLAYER_HAND_PACE("playerHandPace", "In first person, the local player's hand animation worked out at most every 8 ms, reusing Entity Model Features' last pose for the hand in between; the time of skipped frames goes to the next animation, so timed moves keep their speed"),
     PLAYER_HAND_REPLAY("playerHandReplay", "In first person, the hand's geometry recorded on the frames that animate it and drawn again, moved with the view's bobbing and turning, on the paced frames between, without running its renderers; needs playerHandPace"),
     ENTITY_NBT_TICK("entityNbtTick", "Entity Texture Features' NBT texture and model rules read each entity's saved NBT once per tick instead of saving the entity again for every draw"),
@@ -201,7 +202,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler, ray tracing and entity shadows read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_SHADOW_SLOW_PACE, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, GPU_PRESET -> true;
             default -> false;
         };
     }
