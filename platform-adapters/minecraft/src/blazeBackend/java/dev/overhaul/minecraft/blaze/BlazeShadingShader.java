@@ -182,10 +182,10 @@ final class BlazeShadingShader {
             #endif
             }
 
-""" + BlazeShadingClouds.SOURCE + """
             // The faint blue the air keeps at night.
             vec3 nightAir() { return vec3(0.007, 0.016, 0.028) * (1.0 - day()); }
 
+""" + BlazeShadingClouds.SOURCE + """
             // The colour a low sun gives the air.
             const vec3 DUSK = vec3(0.7, 0.22, 0.05);
 
@@ -198,16 +198,16 @@ final class BlazeShadingShader {
                 // A low sun colours the air; the night's air keeps a faint blue of its own.
                 float dusk = lowSun();
                 // Haze pales the blue toward the horizon, and takes the low sun's colour.
-                vec3 haze = mix(vec3(0.84, 0.92, 1.0), vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3;
+                vec3 haze = mix(vec3(0.7, 0.86, 1.0), vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.12;
                 float high = smoothstep(0.05, 0.8, toward.y);
-                air = mix(air, haze, mix(0.6, 0.1, smoothstep(0.0, 0.5, toward.y))) * mix(1.0, 0.6, high) * (1.0 - 0.5 * dusk);
+                air = mix(air, haze, mix(0.4, 0.05, smoothstep(0.0, 0.35, toward.y))) * mix(0.8, 0.42, high) * (1.0 - 0.5 * dusk);
                 // Overhead the blue deepens.
                 air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.6 * high), 0.0) + nightAir();
                 // A low sun turns the air along the horizon orange, strongest beneath itself.
                 float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 2.5);
                 air = mix(air, DUSK * (0.55 + 0.65 * near * near), dusk * band * 0.9);
                 vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
-                        + dusk * band * 0.1) + vec3(1.0, 0.42, 0.12) * light.w * dusk * band * (0.4 + 0.6 * near * near);
+                        + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.42, 0.12) * light.w * dusk * band * (0.4 + 0.6 * near * near);
                 vec4 cloud = cloudsAt(toward, pixel);
                 return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
@@ -271,6 +271,8 @@ final class BlazeShadingShader {
                 // The eye loses colour in the dark, away from fire.
                 float dim = 0.55 * (1.0 - day()) * (1.0 - brightness(seen.blockLevel));
                 shaded = mix(shaded, vec3(0.75, 0.95, 1.2) * dot(shaded, vec3(0.3, 0.59, 0.11)), dim);
+                // Daylight keeps colours rich.
+                shaded = max(mix(vec3(dot(shaded, vec3(0.3, 0.59, 0.11))), shaded, 1.0 + 0.06 * day()), 0.0);
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR

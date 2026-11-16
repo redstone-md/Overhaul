@@ -154,8 +154,8 @@ final class BlazeRayShader {
             vec3 daylight(vec3 normal, vec2 levels, float shadow, bool soft) {
                 float low = lowSun();
                 float facing = dot(normal, light.xyz);
-                vec3 sun = sunColor() * vec3(1.05, 0.98, 0.84) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.7 + (soft ? 0.3 : 0.6) * low);
-                vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(1.0), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.38 * sky.w) * (1.0 - 0.4 * low) * (0.75 + 0.25 * normal.y);
+                vec3 sun = sunColor() * vec3(1.0, 0.98, 0.9) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.5 - (soft ? 1.3 : 1.1) * low);
+                vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(0.9, 1.0, 1.12), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.24 * sky.w) * (1.0 - 0.6 * low) * (0.5 + 0.5 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(levels.x) * 1.6;
                 return sun + ambient + torch + 0.012;
             }
