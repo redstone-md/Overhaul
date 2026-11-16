@@ -75,7 +75,7 @@ public final class BlazeShading {
         float height = (float) Math.cos(world.getTimeOfDay(partialTick) * Math.PI * 2);
         if (height < -0.1f) return game;
         float along = Math.min(1, Math.max(0, (height + 0.1f) / 0.55f)), low = 0.3f + 0.7f * (1 - along * along * (3 - 2 * along));
-        return new net.minecraft.world.phys.Vec3(game.x * (1 + 0.25 * low), game.y * (1 - 0.14 * low), game.z * (1 - 0.42 * low));
+        return new net.minecraft.world.phys.Vec3(game.x * (1 + 0.25 * low), game.y * (1 - 0.08 * low), game.z * (1 - 0.42 * low));
     }
 
     /** Clears the surfaces when this frame's terrain is to be shaded here, or hands terrain the light to shade itself with. */
