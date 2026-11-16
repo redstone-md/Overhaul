@@ -208,16 +208,38 @@ final class BlazeShadingShader {
             #endif
             }
 
-            // Lights one pixel onto the screen with its share of the sun and of the light the air catches; gives its
-            // linear light back, with 1 beside it where terrain is.
-            vec4 lightOf(Seen seen, float shadow, float shaft, ivec2 pixel) {
+            // How open the space before a surface is: two places about a block away on screen, turned from pixel to
+            // pixel, each closing it by how squarely what lies there stands before the surface.
+            float openAt(Seen seen, ivec2 pixel, float part) {
+            #ifdef OCCLUSION
+                float far = length(seen.position);
+                if (!seen.terrain || far > 64.0) return 1.0;
+                float noise = fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))));
+                float turn = 6.2831853 * (part * 0.125 + noise), reach = clamp(0.65 * float(size.y) / far, 3.0, 80.0), closed = 0.0;
+                for (int tap = 0; tap < 2; tap++) {
+                    float angle = turn + 3.14159265 * float(tap);
+                    ivec2 place = pixel + ivec2(vec2(cos(angle), sin(angle)) * reach * (0.4 + 0.6 * fract(noise * 7.0 + 0.5 * float(tap) + 0.25 * part)));
+                    if (any(greaterThanEqual(uvec2(place), size.xy))) continue;
+                    vec3 toward = positionOf(place) - seen.position;
+                    float away = length(toward);
+                    closed += max(dot(toward / max(away, 1e-3), seen.normal) - 0.12, 0.0) * (1.0 - smoothstep(0.7, 1.8, away));
+                }
+                return 1.0 - min(closed * 0.75, 0.6);
+            #else
+                return 1.0;
+            #endif
+            }
+
+            // Lights one pixel onto the screen with its share of the sun, of the open space before it and of the light
+            // the air catches; gives its linear light back, with 1 beside it where terrain is.
+            vec4 lightOf(Seen seen, float shadow, float open, float shaft, ivec2 pixel) {
                 if (!seen.inside) return vec4(0.0);
                 if (!seen.terrain) {
                     imageStore(lit, pixel, vec4(skyOf(seen.color.rgb, pixel, shaft), seen.color.a));
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
-                vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft);
+                vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) * open;
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR
@@ -244,18 +266,21 @@ final class BlazeShadingShader {
                 }
             #endif
                 Seen seen[4];
+                float opens[4];
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 vec4 sum = vec4(0.0);
                 float shaft = shaftAt(cell * 2);
+                for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 for (int i = 0; i < 4; i++) {
-                    float shadow = 0.0, weight = 0.0, distance = length(seen[i].position);
+                    float shadow = 0.0, open = 0.0, weight = 0.0, distance = length(seen[i].position);
                     if (seen[i].terrain) for (int j = 0; j < 4; j++) {
                         if (!seen[j].terrain || dot(seen[i].normal, seen[j].normal) < 0.9) continue;
                         if (abs(length(seen[j].position) - distance) > 0.1 + 0.02 * distance) continue;
                         shadow += seen[j].shadow;
+                        open += opens[j];
                         weight += 1.0;
                     }
-                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
+                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, weight > 0.0 ? open / weight : 1.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
                 }
             #ifdef LINEAR
                 if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
@@ -266,10 +291,10 @@ final class BlazeShadingShader {
     /**
      * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
      * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before;
-     * with {@code shafts} the air catches the sun's light.
+     * with {@code shafts} the air catches the sun's light; with {@code occlusion} corners and creases darken.
      */
-    static String source(boolean traced, boolean linear, boolean shafts) {
-        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "");
+    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "");
         if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY;
         return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY;
     }

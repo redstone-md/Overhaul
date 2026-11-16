@@ -169,6 +169,7 @@ public enum BlazeOptimization {
     SHADING_BLOOM("shadingBloom", "Bright terrain under overhaulShading glows softly over what is around it: the lit picture is halved five times and added back up before it is mapped to the screen; needs overhaulShading"),
     SHADING_EXPOSURE("shadingExposure", "The picture under overhaulShading brightens in the dark and dims in full sun, following the brightness of the terrain in view over about a second, the way an eye adapts; needs overhaulShading"),
     SHADING_SHAFTS("shadingShafts", "Under overhaulShading the air between the eye and the world catches the sun: light fans out around the sun or moon and whatever stands before it on screen cuts shafts into that light, found from the depth the frame already has with eight reads for every four pixels; needs overhaulShading"),
+    SHADING_OCCLUSION("shadingOcclusion", "Under overhaulShading corners and creases darken: each pixel looks at the depth of two places about a block away on screen, four pixels sharing what they find, and darkens by how much of what lies there stands before its surface; needs overhaulShading"),
     SHADING_SCREEN_SHADOWS("shadingScreenShadows", "Without ray traced shadows, overhaulShading finds the sun shadows of what is on screen by walking the depth it already has toward the sun, fourteen steps a pixel; what is off screen casts none; needs overhaulShading"),
     UPSCALE_MIP_BIAS("upscaleMipBias", "While FSR2 or DLSS draws the world at a lower resolution, mipmapped textures sample by the window's resolution instead, so blocks stay as sharp as at full size; needs fsr2 or dlss"),
     SHADING_WATER("shadingWater", "Water and other translucent terrain under overhaulShading mirrors the sky at shallow angles and catches the glint of the sun or moon, worked out where the surface is drawn, with no second view of the world; needs overhaulShading"),
@@ -212,7 +213,7 @@ public enum BlazeOptimization {
     /** Takes effect as soon as it is saved, with no restart; the upscaler, ray tracing and entity shadows read it every frame. */
     public boolean live() {
         return switch (this) {
-            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_SHADOW_SLOW_PACE, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, MOD_CLASS_CACHE, HUD_LAYER_MEMO, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, OVERHAUL_SHADING, SHADING_BLOOM, SHADING_EXPOSURE, SHADING_SCREEN_SHADOWS, SHADING_SHAFTS, RT_SCENE_MEMORY, GPU_PRESET -> true;
+            case FSR2, DLSS, PACK_UPSCALE, UPSCALE_MIP_BIAS, ENTITY_SHADOW_REACH, PLAYER_SHADOW_PACE, PLAYER_SHADOW_REPLAY, PLAYER_SHADOW_SLOW_PACE, PLAYER_HAND_PACE, PLAYER_HAND_REPLAY, ENTITY_NBT_TICK, ENTITY_NBT_RULES, MOD_CLASS_CACHE, HUD_LAYER_MEMO, RAY_TRACING, RT_SHADOWS, RT_LIGHTING, RT_AO, RT_GI, RT_REFLECTIONS, OVERHAUL_SHADING, SHADING_BLOOM, SHADING_EXPOSURE, SHADING_SCREEN_SHADOWS, SHADING_SHAFTS, SHADING_OCCLUSION, RT_SCENE_MEMORY, GPU_PRESET -> true;
             default -> false;
         };
     }

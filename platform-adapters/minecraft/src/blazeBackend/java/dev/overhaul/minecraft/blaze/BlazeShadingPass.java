@@ -32,18 +32,19 @@ import static org.lwjgl.vulkan.VK10.*;
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
-    private final boolean traced, linear, shafts;
+    private final boolean traced, linear, shafts, occlusion;
     private final GpuSampler sampler;
     private long setLayout, pipelineLayout, pipeline;
     private GpuImage output;
     private GpuImageView outputView;
     private Binding binding;
 
-    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts) {
+    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts, boolean occlusion) {
         this.owner = owner;
         this.traced = traced;
         this.linear = linear;
         this.shafts = shafts;
+        this.occlusion = occlusion;
         context = owner.context();
         sampler = owner.allocator().createSampler(new SamplerSettings(SamplerSettings.Filter.NEAREST,
                 SamplerSettings.Filter.NEAREST, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
@@ -82,7 +83,7 @@ final class BlazeShadingPass implements AutoCloseable {
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "shading pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : ""), BlazeShadingShader.source(traced, linear, shafts), ShaderStage.COMPUTE).directBuffer();
+            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : "") + (occlusion ? "_occlusion" : ""), BlazeShadingShader.source(traced, linear, shafts, occlusion), ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "shading module");
             long module = pointer.get(0);
             try {
