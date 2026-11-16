@@ -42,7 +42,8 @@ public final class BlazeTarget implements AutoCloseable {
         if (width < 1 || height < 1) throw new IllegalArgumentException("Empty framebuffer");
         this.context=context;this.width=width;this.height=height;level=0;ownsColor=true;ownsDepth=true;borrowsViews=false;
         try {
-            color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            // Storage lets a compute pass light the colour where it lies.
+            color=allocator.createImage(ImageFormat.RGBA8_UNORM,width,height,1,1,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             colorView=color.view(0,1,0,1);commands.clearColor(color,0,0,0,0,0,0);
             if(useDepth){depth=allocator.createImage(stencil?depthStencilFormat(context):ImageFormat.D32_SFLOAT,width,height,1,1,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT);
                 depthView=depth.view(0,1,0,1);commands.clearDepthStencil(depth,0,0,1,0);

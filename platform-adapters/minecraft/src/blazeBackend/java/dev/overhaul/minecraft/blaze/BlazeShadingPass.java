@@ -23,10 +23,11 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /**
  * Runs {@link BlazeShadingShader} over the main target once terrain is drawn: it reads the target's colour and depth
- * and the surfaces beside them, writes the lit picture to an image of its own, since colour targets cannot be written
- * as storage, and copies it back over the colour. One pass is one variant, traced or plain, alone or working with a
- * {@link BlazeShadingGlow}: then it also leaves linear light at half size and reads the glow and the measure made of
- * the frame before. The pipeline lives as long as the pass, the output follows the target's size.
+ * and the surfaces beside them, and lights the colour where it lies when
+ * its image can be written as storage; otherwise it writes the lit picture to an image of its own and copies that
+ * back over the colour. One pass is one variant, traced or plain, alone or working with a {@link BlazeShadingGlow}:
+ * then it also leaves linear light at half size and reads the glow and the measure made of the frame before. The
+ * pipeline lives as long as the pass; the image of its own follows the target's size.
  */
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
@@ -101,12 +102,15 @@ final class BlazeShadingPass implements AutoCloseable {
     record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
 
     /**
-     * Queues the lighting of {@code target} from {@code surfaces} and the copy of the result over the target's colour.
+     * Queues the lighting of {@code target}'s colour from {@code surfaces}.
      * A linear pass reads and writes the images {@code glow} gives it.
      */
     void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, BlazeShadingGlow.Light glow) {
         int width = target.width(), height = target.height();
-        if (output == null || output.width(0) != width || output.height(0) != height) {
+        // Each pixel is read and written by the one invocation that lights it, so a colour image that can be stored to
+        // is lit where it lies; any other is lit into an image of this pass and copied over.
+        boolean inPlace = (target.color().usage() & VK_IMAGE_USAGE_STORAGE_BIT) != 0;
+        if (!inPlace && (output == null || output.width(0) != width || output.height(0) != height)) {
             if (binding != null) owner.retire(binding);
             if (output != null) owner.retire(output);
             binding = null;
@@ -129,15 +133,16 @@ final class BlazeShadingPass implements AutoCloseable {
             views.add(glow.measured());
             samplers.add(sampler.handle());
         }
-        List<GpuImageView> written = linear ? List.of(outputView, glow.spread()) : List.of(outputView);
+        GpuImageView lit = inPlace ? target.colorView() : outputView;
+        List<GpuImageView> written = linear ? List.of(lit, glow.spread()) : List.of(lit);
         BlazeRayStructures.Structure top = traced ? scene.top() : null;
         if (binding == null || !binding.reads(top, views, samplers, written)) {
             if (binding != null) owner.retire(binding);
             binding = null;
-            binding = new Binding(top, views, samplers, traced && atlas.general(), written);
+            binding = new Binding(top, views, samplers, traced && atlas.general(), inPlace, written);
         }
         owner.enqueue(new Dispatch(binding, traced ? scene.table() : 0, lighting, width, height));
-        owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
+        if (!inPlace) owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
     }
 
     /** Fills the shaders' {@code Frame}: the camera, the lights, the size and two more words, then the fog and the reach. */
@@ -159,7 +164,7 @@ final class BlazeShadingPass implements AutoCloseable {
         private final List<Integer> layouts = new ArrayList<>();
         private long pool, set;
 
-        Binding(BlazeRayStructures.Structure top, List<GpuImageView> views, List<Long> samplers, boolean atlasGeneral, List<GpuImageView> written) {
+        Binding(BlazeRayStructures.Structure top, List<GpuImageView> views, List<Long> samplers, boolean atlasGeneral, boolean colorGeneral, List<GpuImageView> written) {
             this.top = top;
             this.views = views;
             this.samplers = samplers;
@@ -180,7 +185,8 @@ final class BlazeShadingPass implements AutoCloseable {
                 var writes = VkWriteDescriptorSet.calloc(slots.length + stored.length + (traced ? 1 : 0), stack);
                 int at = 0;
                 for (int i = 0; i < slots.length; i++) {
-                    int layout = slots[i] == 3 && atlasGeneral ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    // An image read and written at once has one layout for both.
+                    int layout = slots[i] == 3 && atlasGeneral || slots[i] == 1 && colorGeneral ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                     layouts.add(layout);
                     writes.get(at++).sType$Default().dstSet(set).dstBinding(slots[i]).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                             .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).sampler(samplers.get(i)).imageView(views.get(i).handle()).imageLayout(layout));
