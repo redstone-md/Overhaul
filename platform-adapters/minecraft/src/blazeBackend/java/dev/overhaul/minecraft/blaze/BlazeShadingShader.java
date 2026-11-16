@@ -96,8 +96,8 @@ final class BlazeShadingShader {
                 float far = reach * clamp(distance / 24.0, 0.2, 1.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
                 vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(light.xyz * far, 0.0);
-                for (int i = 0; i < 8; i++) {
-                    float along = (float(i) + offset) / 8.0;
+                for (int i = 0; i < 4; i++) {
+                    float along = (float(i) + offset) / 4.0;
                     vec4 clip = from + toward * (along * along);
                     if (clip.w <= 0.0) break;
                     vec2 place = clip.xy / clip.w, uv = place * 0.5 + 0.5;
