@@ -134,7 +134,7 @@ final class BlazeRayShader {
 
             // The sun warms toward the horizon; the moon is a cool, faint blue.
             vec3 sunColor() {
-                if (sky.w < 0.5) return vec3(0.55, 0.65, 1.0) * 0.5;
+                if (sky.w < 0.5) return vec3(0.38, 0.6, 1.0) * 0.11;
                 return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
             }
 
@@ -146,7 +146,7 @@ final class BlazeRayShader {
                 float low = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.0, 0.45, light.y);
                 float facing = dot(normal, light.xyz);
                 vec3 sun = sunColor() * vec3(1.08, 0.97, 0.8) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.7 + (soft ? 1.0 : 2.5) * low);
-                vec3 ambient = mix(vec3(1.0), skyTint(), 0.85) * brightness(levels.y) * (0.07 + 0.36 * sky.w) * (0.75 + 0.25 * normal.y);
+                vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(1.0), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.07 + 0.36 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(levels.x) * 1.6;
                 return sun + ambient + torch + 0.012;
             }
