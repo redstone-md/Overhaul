@@ -43,9 +43,11 @@ public final class BlazeShading {
     private BlazeShadingGlow glow;
     private int revision = -1;
     private boolean collecting, lit, failed;
+    /** Whether this frame's terrain lights itself as it is drawn: nothing asked needs the depth or the light of the whole frame. */
+    private boolean direct;
     /** Whether the lighting pass left the surfaces wiped, as it does each frame it runs. */
     private boolean clean;
-    /** What the log last said: 0 nothing, 1 shadows from sky light, 2 traced shadows. */
+    /** What the log last said: 0 nothing, 1 shadows from sky light, 2 traced shadows, 3 terrain lighting itself. */
     private int logged;
     /** What mirrored translucent terrain takes this frame, under the names its program gives them. */
     private final java.util.Map<String, float[]> mirrorLight = new java.util.HashMap<>();
@@ -76,9 +78,9 @@ public final class BlazeShading {
         return new net.minecraft.world.phys.Vec3(game.x * (1 + 0.25 * low), game.y * (1 - 0.14 * low), game.z * (1 - 0.42 * low));
     }
 
-    /** Clears the surfaces when this frame's terrain is to be shaded here. */
-    public void frameStarted(Minecraft client) {
-        collecting = lit = false;
+    /** Clears the surfaces when this frame's terrain is to be shaded here, or hands terrain the light to shade itself with. */
+    public void frameStarted(Minecraft client, Camera camera, float partialTick) {
+        collecting = lit = direct = false;
         if (revision != BlazeOptimization.revision()) {
             revision = BlazeOptimization.revision();
             failed = false;
@@ -92,6 +94,13 @@ public final class BlazeShading {
             if (renderer != owner) adopt(renderer);
             main = renderer.target(client.getMainRenderTarget().frameBufferId);
             if (main == null || main.depthView() == null) return;
+            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on()
+                    && !(renderer.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on())) {
+                light(client.level, camera.getPosition(), partialTick);
+                lit = direct = true;
+                log(3);
+                return;
+            }
             fit(renderer, main);
             // The lighting pass wipes the surfaces it read; only ones it did not get to are cleared here.
             if (!clean) renderer.clearImage(surfaces, 0, 0, 0, 0, 0, 0);
@@ -109,20 +118,21 @@ public final class BlazeShading {
      */
     Route route(BlazeRenderer renderer, BlazeShaderAccess shader, BlazeShaderSnapshot game, BlazeProgramCompiler.Program compact) {
         if (!collecting && !lit || renderer != owner || renderer.currentTarget() != main) return null;
-        BlazeProgramCompiler.Program full = shader.overhaul$shadedSectionProgram(false);
+        BlazeProgramCompiler.Program full = shader.overhaul$shadedSectionProgram(false, direct);
         if (full == null) return null;
-        // Opaque layers write their surfaces while those are collected; translucent ones mirror the sky once lit.
-        boolean mirror = BlazeShadingSource.mirrored(full);
-        if (mirror ? !lit || mirrorLight.isEmpty() || !BlazeOptimization.SHADING_WATER.on() : !collecting) return null;
-        int outputs = mirror ? 1 : 2;
+        // Opaque layers write their surfaces while those are collected, or light themselves; translucent ones mirror
+        // the sky once lit.
+        boolean mirror = BlazeShadingSource.mirrored(full), widened = mirror || direct;
+        if (mirror ? !lit || mirrorLight.isEmpty() || !BlazeOptimization.SHADING_WATER.on() : !collecting && !direct) return null;
+        int outputs = widened ? 1 : 2;
         BlazeProgramCompiler.Program shadedCompact = null;
         if (compact != null) {
-            shadedCompact = shader.overhaul$shadedSectionProgram(true);
+            shadedCompact = shader.overhaul$shadedSectionProgram(true, direct);
             if (shadedCompact == null) return null;
             renderer.shape(shadedCompact, new BlazeSectionShape(shadedCompact.bindings(), outputs));
         }
         renderer.shape(full, new BlazeSectionShape(full.bindings(), outputs));
-        return mirror ? new Route(game.widened(full, mirrorLight), shadedCompact, main) : new Route(game.withProgram(full), shadedCompact, target);
+        return widened ? new Route(game.widened(full, mirrorLight), shadedCompact, main) : new Route(game.withProgram(full), shadedCompact, target);
     }
 
     /** Lights the terrain drawn since the frame started, with the camera matrices it was drawn with. */
@@ -144,27 +154,35 @@ public final class BlazeShading {
             int variant = (traced ? 1 : 0) | (linear ? 2 : 0);
             if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear);
             if (linear && glow == null) glow = new BlazeShadingGlow(owner);
-            float[] light = BlazeRayTracing.light(world, partialTick);
-            // No sun or moon where the sky gives no light.
-            if (!world.dimensionType().hasSkyLight()) light[3] = 0;
-            float[] sky = BlazeRayTracing.sky(world, position, partialTick);
-            mirrorLight.put(BlazeShadingSource.SUN, light);
-            mirrorLight.put(BlazeShadingSource.SKY, sky);
-            mirrorLight.put(BlazeShadingSource.EYE, new float[]{(float) (position.x % 1024), (float) (position.y % 1024), (float) (position.z % 1024),
-                    (world.getGameTime() % 24000 + partialTick) / 20f});
-            var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), light,
-                    sky, RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
+            light(world, position, partialTick);
+            var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), mirrorLight.get(BlazeShadingSource.SUN),
+                    mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
             lit = clean = true;
-            int shown = traced ? 2 : 1;
-            if (logged != shown) LoggerFactory.getLogger(BlazeShading.class).info("Overhaul shading on, sun shadows {}", traced ? "traced" : "from sky light");
-            logged = shown;
+            log(traced ? 2 : 1);
         } catch (RuntimeException | Error failure) {
             fail(failure);
         }
+    }
+
+    /** Works out the frame's light: the sun or moon, the sky, and where the eye is and when. */
+    private void light(ClientLevel world, net.minecraft.world.phys.Vec3 position, float partialTick) {
+        float[] light = BlazeRayTracing.light(world, partialTick);
+        // No sun or moon where the sky gives no light.
+        if (!world.dimensionType().hasSkyLight()) light[3] = 0;
+        mirrorLight.put(BlazeShadingSource.SUN, light);
+        mirrorLight.put(BlazeShadingSource.SKY, BlazeRayTracing.sky(world, position, partialTick));
+        mirrorLight.put(BlazeShadingSource.EYE, new float[]{(float) (position.x % 1024), (float) (position.y % 1024), (float) (position.z % 1024),
+                (world.getGameTime() % 24000 + partialTick) / 20f});
+    }
+
+    private void log(int shown) {
+        if (logged != shown) LoggerFactory.getLogger(BlazeShading.class).info("Overhaul shading on, sun shadows {}",
+                shown == 2 ? "traced" : shown == 3 ? "from sky light, terrain lighting itself" : "from sky light");
+        logged = shown;
     }
 
     /** Makes the surfaces and the target over them again when the main target's images changed. */

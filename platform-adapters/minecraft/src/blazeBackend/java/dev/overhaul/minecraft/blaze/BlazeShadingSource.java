@@ -121,6 +121,47 @@ final class BlazeShadingSource {
             }
             """;
 
+    private static final String DIRECT_HEAD = """
+            uniform vec4 ShadingSun;
+            uniform vec4 ShadingSky;
+            in vec4 shadingLight;
+            in vec4 shadingSurface;
+            in vec2 shadingLevels;
+            vec3 shadingFog = vec3(0.0);
+            float shadingFogged = 0.0;
+            vec4 shading_unfogged(vec4 color, float distance, float start, float end, vec4 fogColor) {
+                shadingFog = fogColor.rgb;
+                shadingFogged = (end > start ? clamp((distance - start) / (end - start), 0.0, 1.0) : 0.0) * fogColor.a;
+                return color;
+            }
+            #define linear_fog shading_unfogged
+            """;
+    // The light the lighting pass gives a surface that walks no depth, worked out where the surface is drawn.
+    private static final String DIRECT_MAIN = """
+
+            #define light ShadingSun
+            #define sky ShadingSky
+            """ + BlazeRayShader.LIGHTS + BlazeShadingShader.TONE + """
+            void main() {
+                shading_main();
+                vec3 normal = normalize(shadingSurface.xyz);
+                vec3 axes = abs(normal);
+                float shade = axes.y > 0.9 ? (normal.y > 0.0 ? 1.0 : 0.5) : axes.z > 0.9 ? 0.8 : axes.x > 0.9 ? 0.6 : 1.0;
+                vec3 own = min(fragColor.rgb / max(shadingLight.rgb * shade, vec3(0.004)), vec3(1.0));
+                vec2 levels = clamp(shadingLevels, 0.0, 1.0);
+                bool soft = SHADING_SOFT > 0.5;
+                float facing = dot(normal, light.xyz);
+                float shadow = (facing > 0.0 || soft) && light.w > 0.0 ? smoothstep(0.8, 0.97, levels.y) : 0.0;
+                if (soft) shadow = 0.4 + 0.6 * shadow;
+                float low = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.0, 0.45, light.y);
+                vec3 sun = sunColor() * vec3(1.04, 0.97, 0.86) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.0 + (soft ? 1.0 : 2.5) * low);
+                vec3 ambient = mix(vec3(1.0), skyTint(), 0.65) * brightness(levels.y) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
+                vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(levels.x) * 1.6;
+                vec3 shaded = linear(own) * (sun + ambient + torch + 0.012);
+                fragColor.rgb = mix(display(filmic(shaded * 0.5)), shadingFog, shadingFogged);
+            }
+            """;
+
     private BlazeShadingSource() {}
 
     /** Whether the program is one of the game's solid or cutout terrain shaders, the ones shaded this way. */
@@ -157,13 +198,13 @@ final class BlazeShadingSource {
             var same = uniforms.get(entry.getKey());
             if (same == null || !same.type().equals(entry.getValue().type()) || same.byteSize() != entry.getValue().byteSize()) return false;
         }
-        return mirrored(mirrored) && uniforms.containsKey(SKY) && uniforms.containsKey(EYE)
+        return uniforms.containsKey(SUN) && uniforms.containsKey(SKY)
                 && mirrored.bindings().samplers().equals(original.bindings().samplers());
     }
 
-    /** Whether the program is one {@link #widens} passed, so its snapshot needs the light. */
+    /** Whether the program is the one mirroring the sky: only it asks where the eye is. */
     static boolean mirrored(BlazeProgramCompiler.Program program) {
-        return program.bindings().uniforms().containsKey(SUN);
+        return program.bindings().uniforms().containsKey(EYE);
     }
 
     /** The vertex stage passing on the surface, or null when it does not light vertices through the game's lightmap. */
@@ -172,10 +213,10 @@ final class BlazeShadingSource {
         return wrap(source, LIGHTMAP, VERTEX_HEAD, VERTEX_MAIN);
     }
 
-    /** The fragment stage writing the surface, or null when it does not fog and write its colour the usual way. */
-    static String fragment(String source, boolean soft) {
+    /** The fragment stage writing the surface, or with {@code direct} lighting it itself with no surface written; null when it does not fog and write its colour the usual way. */
+    static String fragment(String source, boolean soft, boolean direct) {
         if (!OUTPUT.matcher(source).find()) return null;
-        return wrap(source, FOG, "#define SHADING_SOFT " + (soft ? "1.0" : "0.0") + "\n" + FRAGMENT_HEAD, FRAGMENT_MAIN);
+        return wrap(source, FOG, "#define SHADING_SOFT " + (soft ? "1.0" : "0.0") + "\n" + (direct ? DIRECT_HEAD : FRAGMENT_HEAD), direct ? DIRECT_MAIN : FRAGMENT_MAIN);
     }
 
     /** Whether the shaded program takes exactly the uniforms and samplers of the one it stands in for. */

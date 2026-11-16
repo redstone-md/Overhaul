@@ -35,12 +35,14 @@ public final class BlazePrograms implements AutoCloseable {
         String name="unlinked";
         boolean foreign;
         String vertexName,fragmentName,vertexSource,fragmentSource;
-        BlazeProgramCompiler.Program sections,compact,compactSections,shaded,shadedCompact;
-        boolean sectionsTried,compactTried,compactSectionsTried,shadedTried,shadedCompactTried;
+        BlazeProgramCompiler.Program sections,compact,compactSections;
+        final BlazeProgramCompiler.Program[] shaded=new BlazeProgramCompiler.Program[4];
+        boolean sectionsTried,compactTried,compactSectionsTried;
+        final boolean[] shadedTried=new boolean[4];
         void releaseAll(Consumer<BlazeProgramCompiler.Program> released){
             if(program!=null)released.accept(program);if(sections!=null)released.accept(sections);
             if(compact!=null)released.accept(compact);if(compactSections!=null)released.accept(compactSections);
-            if(shaded!=null)released.accept(shaded);if(shadedCompact!=null)released.accept(shadedCompact);
+            for(var program:shaded)if(program!=null)released.accept(program);
         }
     }
     private final Thread owner=Thread.currentThread();
@@ -164,32 +166,27 @@ public final class BlazePrograms implements AutoCloseable {
         BlazeGlBoundary.reportOnce("compact program "+entry.name,"Terrain shader "+entry.name+" cannot read compact vertices, so terrain stays in full vertices: "+why);
         return null;
     }
-    /** The section program leaving its lighting to {@link BlazeShading}; null for shaders other than solid and cutout terrain, or when it cannot. */
-    public BlazeProgramCompiler.Program shadedSectionProgram(int id){
-        var sections=sectionProgram(id);var entry=entry(id);if(entry.shadedTried||sections==null)return entry.shaded;
-        entry.shadedTried=true;
-        entry.shaded=shadedVariant(entry,sectionSource(entry),sections);
-        return entry.shaded;
+    /** The section program leaving its lighting to {@link BlazeShading}; with {@code compact} the one reading compact vertices, with {@code direct} the one lighting terrain itself; null for shaders that are not terrain, or when it cannot. */
+    public BlazeProgramCompiler.Program shadedSectionProgram(int id,boolean compact,boolean direct){
+        var original=compact?compactSectionProgram(id):sectionProgram(id);var entry=entry(id);
+        direct&=!BlazeShadingSource.translucent(entry.name);
+        int slot=(compact?1:0)|(direct?2:0);
+        if(entry.shadedTried[slot]||original==null)return entry.shaded[slot];
+        entry.shadedTried[slot]=true;
+        String vertex=compact?BlazeCompactSection.vertexSource(sectionSource(entry)):sectionSource(entry);
+        return entry.shaded[slot]=vertex==null?null:shadedVariant(entry,vertex,original,direct);
     }
-    /** That program reading compact vertices; null when it cannot. */
-    public BlazeProgramCompiler.Program shadedCompactSectionProgram(int id){
-        var compactSections=compactSectionProgram(id);var entry=entry(id);if(entry.shadedCompactTried||compactSections==null)return entry.shadedCompact;
-        entry.shadedCompactTried=true;
-        String vertex=BlazeCompactSection.vertexSource(sectionSource(entry));
-        entry.shadedCompact=vertex==null?null:shadedVariant(entry,vertex,compactSections);
-        return entry.shadedCompact;
-    }
-    private BlazeProgramCompiler.Program shadedVariant(Entry entry,String vertex,BlazeProgramCompiler.Program original){
+    private BlazeProgramCompiler.Program shadedVariant(Entry entry,String vertex,BlazeProgramCompiler.Program original,boolean direct){
         boolean mirror=BlazeShadingSource.translucent(entry.name);
         if(!mirror&&!BlazeShadingSource.terrain(entry.name))return null;
         String why;
         try{
             String shadedVertex=mirror?BlazeShadingSource.mirrorVertex(vertex):BlazeShadingSource.vertex(vertex);
-            String shadedFragment=mirror?BlazeShadingSource.mirrorFragment(entry.fragmentSource):BlazeShadingSource.fragment(entry.fragmentSource,BlazeShadingSource.soft(entry.name));
+            String shadedFragment=mirror?BlazeShadingSource.mirrorFragment(entry.fragmentSource):BlazeShadingSource.fragment(entry.fragmentSource,BlazeShadingSource.soft(entry.name),direct);
             if(shadedVertex==null||shadedFragment==null)why="it does not light and fog terrain the way the game's shader does";
             else{
                 var program=variant(entry,shadedVertex,shadedFragment);
-                if(mirror?BlazeShadingSource.widens(program,original):BlazeShadingSource.replaces(program,original))return program;
+                if(mirror||direct?BlazeShadingSource.widens(program,original):BlazeShadingSource.replaces(program,original))return program;
                 released.accept(program);why="its uniforms change";
             }
         }catch(RuntimeException failure){why=failure.getMessage();}

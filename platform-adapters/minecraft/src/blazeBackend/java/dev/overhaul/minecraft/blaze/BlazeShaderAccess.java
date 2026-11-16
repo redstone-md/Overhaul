@@ -11,5 +11,5 @@ public interface BlazeShaderAccess {
     /** That program reading compact vertices; null when it cannot. */
     BlazeProgramCompiler.Program overhaul$compactSectionProgram();
     /** The section program leaving its lighting to Overhaul shading, for full and for compact vertices; null when it cannot. */
-    BlazeProgramCompiler.Program overhaul$shadedSectionProgram(boolean compact);
+    BlazeProgramCompiler.Program overhaul$shadedSectionProgram(boolean compact, boolean direct);
 }

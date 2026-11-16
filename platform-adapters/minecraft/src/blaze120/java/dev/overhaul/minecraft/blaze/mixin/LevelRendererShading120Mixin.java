@@ -27,7 +27,7 @@ abstract class LevelRendererShading120Mixin {
     @Inject(method = "renderLevel", at = @At("HEAD"))
     private void overhaul$startShading(PoseStack pose, float partial, long nanos, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f projection,
                                        CallbackInfo callback) {
-        BlazeShading.get().frameStarted(Minecraft.getInstance());
+        BlazeShading.get().frameStarted(Minecraft.getInstance(), camera, partial);
     }
 
     // The third terrain layer the frame draws is cutout, the last of the opaque ones.

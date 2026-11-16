@@ -41,9 +41,9 @@ public abstract class ShaderInstanceBlazeMixin implements BlazeShaderAccess {
 
     @Override public BlazeProgramCompiler.Program overhaul$sectionProgram(){return overhaul$programs==null?null:overhaul$programs.sectionProgram(((ShaderInstance)(Object)this).getId());}
     @Override public BlazeProgramCompiler.Program overhaul$compactSectionProgram(){return overhaul$programs==null?null:overhaul$programs.compactSectionProgram(((ShaderInstance)(Object)this).getId());}
-    @Override public BlazeProgramCompiler.Program overhaul$shadedSectionProgram(boolean compact){
+    @Override public BlazeProgramCompiler.Program overhaul$shadedSectionProgram(boolean compact,boolean direct){
         if(overhaul$programs==null)return null;int id=((ShaderInstance)(Object)this).getId();
-        return compact?overhaul$programs.shadedCompactSectionProgram(id):overhaul$programs.shadedSectionProgram(id);
+        return overhaul$programs.shadedSectionProgram(id,compact,direct);
     }
     @Override public BlazeShaderSnapshot overhaul$sectionSnapshot(){return overhaul$programs.sectionSnapshot(((ShaderInstance)(Object)this).getId(),uniformMap);}
 

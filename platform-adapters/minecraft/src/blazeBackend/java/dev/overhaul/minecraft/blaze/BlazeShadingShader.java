@@ -46,14 +46,17 @@ final class BlazeShadingShader {
             layout(binding = 8, rgba16f) writeonly uniform image2D spread;
             #endif
             """ + FRAME;
-    /** From linear light to the screen: the filmic curve, then the game's fog; needs {@link #FRAME} and {@code sceneDepth}. */
-    static final String SCREEN = """
+    /** Between the colours the screen shows and linear light, and the filmic curve that brings light back to the screen. */
+    static final String TONE = """
             vec3 linear(vec3 color) { return mix(color / 12.92, pow((color + 0.055) / 1.055, vec3(2.4)), step(0.04045, color)); }
             vec3 display(vec3 color) { return mix(color * 12.92, 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, color)); }
 
             // A filmic curve fitted to ACES: soft shoulder, slight toe.
             vec3 filmic(vec3 x) { return clamp(x * (2.51 * x + 0.03) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 
+            """;
+    /** From linear light to the screen: the filmic curve, then the game's fog; needs {@link #FRAME} and {@code sceneDepth}. */
+    static final String SCREEN = TONE + """
             vec3 unfold(vec2 folded) {
                 vec3 normal = vec3(folded, 1.0 - abs(folded.x) - abs(folded.y));
                 float under = max(-normal.z, 0.0);
