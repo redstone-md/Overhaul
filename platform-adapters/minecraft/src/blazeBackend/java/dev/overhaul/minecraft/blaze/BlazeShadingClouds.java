@@ -59,8 +59,8 @@ final class BlazeShadingClouds {
             // its top: broad masses with smaller shapes on them, flat below and heaped above.
             float cloudAt(vec2 at, float height, bool fine) {
                 vec2 unit = at / 2048.0;
-                float shape = cloudNoise(unit * 14.0, 14.0) * 0.5 + cloudNoise(unit * 40.0 + 3.7, 40.0) * 0.27;
-                shape += fine ? cloudNoise(unit * 112.0 + 9.1, 112.0) * 0.15 + cloudNoise(unit * 320.0, 320.0) * 0.08 : 0.115;
+                float shape = cloudNoise(unit * 9.0, 9.0) * 0.56 + cloudNoise(unit * 26.0 + 3.7, 26.0) * 0.24;
+                shape += fine ? cloudNoise(unit * 80.0 + 9.1, 80.0) * 0.14 + cloudNoise(unit * 240.0, 240.0) * 0.06 : 0.1;
                 float edge = 0.52 + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
                 return clamp((shape - edge) * 7.0, 0.0, 1.0);
             }

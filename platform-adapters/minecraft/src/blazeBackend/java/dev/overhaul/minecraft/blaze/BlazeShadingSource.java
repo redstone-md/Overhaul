@@ -76,7 +76,7 @@ final class BlazeShadingSource {
                 fragColor.a = max(fragColor.a, mirror * clear);
                 // Far water sinks into the air's colour the way far land does.
                 float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
-                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.84, 0.92, 1.0), sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.45);
+                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.6, 0.86, 1.0) * 1.2, sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.45);
                 float sunk = min(1.0 - exp(-far / 280.0), 0.75) * clear;
                 fragColor.rgb = mix(fragColor.rgb, air, sunk);
                 fragColor.a = max(fragColor.a, sunk);
