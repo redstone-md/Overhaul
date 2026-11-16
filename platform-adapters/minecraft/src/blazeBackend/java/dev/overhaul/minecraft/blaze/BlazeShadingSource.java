@@ -21,6 +21,62 @@ final class BlazeShadingSource {
             FOG = Pattern.compile("\\blinear_fog\\s*\\("),
             OUTPUT = Pattern.compile("\\bout\\s+vec4\\s+fragColor\\s*;");
 
+    private static final Pattern TRANSLUCENT = Pattern.compile("\\brendertype_translucent\\.vsh\\b");
+    /** The uniforms a mirrored program takes beyond the game's: the light's direction and strength, the sky, the eye and the time. */
+    static final String SUN = "ShadingSun", SKY = "ShadingSky", EYE = "ShadingEye";
+
+    private static final String MIRROR_VERTEX_HEAD = """
+            uniform vec4 ShadingEye;
+            out vec3 shadingNormal;
+            out vec3 shadingToward;
+            out vec3 shadingPlace;
+            """;
+    private static final String MIRROR_VERTEX_MAIN = """
+
+            void main() {
+                shading_main();
+                vec4 seen = inverse(ProjMat) * gl_Position;
+                shadingToward = transpose(mat3(ModelViewMat)) * (seen.xyz / seen.w);
+                shadingPlace = shadingToward + ShadingEye.xyz;
+                shadingNormal = Normal;
+            }
+            """;
+    private static final String MIRROR_FRAGMENT_HEAD = """
+            uniform vec4 ShadingSun;
+            uniform vec4 ShadingSky;
+            uniform vec4 ShadingEye;
+            in vec3 shadingNormal;
+            in vec3 shadingToward;
+            in vec3 shadingPlace;
+            """;
+    // A surface seen at a shallow angle shows the sky above it and the sun's glint; one facing up also ripples.
+    private static final String MIRROR_FRAGMENT_MAIN = """
+
+            void main() {
+                shading_main();
+                vec3 normal = normalize(shadingNormal);
+                float up = step(0.9, normal.y);
+                vec2 at = shadingPlace.xz;
+                float time = ShadingEye.w;
+                vec2 ripple = vec2(sin(at.x * 1.7 + at.y * 0.6 + time * 1.3) + sin(at.x * 3.9 - at.y * 2.3 - time * 1.9) * 0.5,
+                        sin(at.y * 1.9 - at.x * 0.7 + time * 1.1) + sin(at.y * 4.3 + at.x * 2.9 + time * 2.3) * 0.5);
+                ripple += vec2(sin(at.x * 9.1 + at.y * 6.7 + time * 2.9), sin(at.y * 8.3 - at.x * 7.1 - time * 3.1)) * 0.35;
+                normal = normalize(normal + vec3(ripple.x, 0.0, ripple.y) * 0.03 * up);
+                float far = length(shadingToward);
+                vec3 toward = shadingToward / max(far, 1e-4);
+                float facing = clamp(dot(-toward, normal), 0.0, 1.0);
+                float mirror = (0.03 + 0.97 * pow(1.0 - facing, 5.0)) * (0.35 + 0.65 * up);
+                vec3 bounced = reflect(toward, normal);
+                vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
+                float day = step(0.5, ShadingSky.w);
+                vec3 sun = mix(vec3(0.3, 0.36, 0.55), mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, ShadingSun.y)), day);
+                float glint = pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * ShadingSun.w * up;
+                float clear = 1.0 - smoothstep(FogStart, FogEnd, far);
+                fragColor.rgb = mix(fragColor.rgb, above, mirror * clear) + sun * min(glint * 3.0, 1.0) * clear;
+                fragColor.a = max(fragColor.a, mirror * clear);
+            }
+            """;
+
     private static final String VERTEX_HEAD = """
             out vec4 shadingLight;
             out vec4 shadingSurface;
@@ -61,15 +117,53 @@ final class BlazeShadingSource {
                 vec2 folded = normal.xy / (axes.x + axes.y + axes.z);
                 if (normal.z < 0.0) folded = (1.0 - abs(folded.yx)) * vec2(folded.x >= 0.0 ? 1.0 : -1.0, folded.y >= 0.0 ? 1.0 : -1.0);
                 vec2 levels = clamp(shadingLevels, 0.0, 1.0);
-                gl_FragData[1] = vec4(folded * 0.5 + 0.5, levels.x, (1.0 + levels.y * 254.0) / 255.0);
+                gl_FragData[1] = vec4(folded * 0.5 + 0.5, (floor(levels.x * 127.0 + 0.5) * 2.0 + SHADING_SOFT) / 255.0, (1.0 + levels.y * 254.0) / 255.0);
             }
             """;
 
     private BlazeShadingSource() {}
 
     /** Whether the program is one of the game's solid or cutout terrain shaders, the ones shaded this way. */
+    /** Whether the terrain program draws cut-out surfaces: leaves, plants and the like, thin enough for the sun to pass through. */
+    static boolean soft(String programName) {
+        return programName.contains("rendertype_cutout");
+    }
+
     static boolean terrain(String programName) {
         return TERRAIN.matcher(programName).find();
+    }
+
+    /** Whether the program is the game's translucent terrain shader, the one whose surfaces mirror the sky. */
+    static boolean translucent(String programName) {
+        return TRANSLUCENT.matcher(programName).find();
+    }
+
+    /** The translucent vertex stage passing on where each surface is and faces, or null when it has no normal. */
+    static String mirrorVertex(String source) {
+        if (!NORMAL.matcher(source).find()) return null;
+        return rename(source, MIRROR_VERTEX_HEAD, MIRROR_VERTEX_MAIN);
+    }
+
+    /** The translucent fragment stage mirroring the sky, or null when it does not fog and write its colour the usual way. */
+    static String mirrorFragment(String source) {
+        if (!OUTPUT.matcher(source).find() || !FOG.matcher(source).find()) return null;
+        return rename(source, MIRROR_FRAGMENT_HEAD, MIRROR_FRAGMENT_MAIN);
+    }
+
+    /** Whether the mirrored program takes every uniform of the one it stands in for, the same samplers, and the light. */
+    static boolean widens(BlazeProgramCompiler.Program mirrored, BlazeProgramCompiler.Program original) {
+        var uniforms = mirrored.bindings().uniforms();
+        for (var entry : original.bindings().uniforms().entrySet()) {
+            var same = uniforms.get(entry.getKey());
+            if (same == null || !same.type().equals(entry.getValue().type()) || same.byteSize() != entry.getValue().byteSize()) return false;
+        }
+        return mirrored(mirrored) && uniforms.containsKey(SKY) && uniforms.containsKey(EYE)
+                && mirrored.bindings().samplers().equals(original.bindings().samplers());
+    }
+
+    /** Whether the program is one {@link #widens} passed, so its snapshot needs the light. */
+    static boolean mirrored(BlazeProgramCompiler.Program program) {
+        return program.bindings().uniforms().containsKey(SUN);
     }
 
     /** The vertex stage passing on the surface, or null when it does not light vertices through the game's lightmap. */
@@ -79,9 +173,9 @@ final class BlazeShadingSource {
     }
 
     /** The fragment stage writing the surface, or null when it does not fog and write its colour the usual way. */
-    static String fragment(String source) {
+    static String fragment(String source, boolean soft) {
         if (!OUTPUT.matcher(source).find()) return null;
-        return wrap(source, FOG, FRAGMENT_HEAD, FRAGMENT_MAIN);
+        return wrap(source, FOG, "#define SHADING_SOFT " + (soft ? "1.0" : "0.0") + "\n" + FRAGMENT_HEAD, FRAGMENT_MAIN);
     }
 
     /** Whether the shaded program takes exactly the uniforms and samplers of the one it stands in for. */
@@ -95,6 +189,12 @@ final class BlazeShadingSource {
      * Renames the shader's main, puts {@code head} before it and the new main after everything. The function
      * {@code used} names has to be defined above main, where the head's macro no longer reaches it, and called in it.
      */
+    private static String rename(String source, String head, String main) {
+        Matcher entry = MAIN.matcher(source);
+        if (!entry.find()) return null;
+        return source.substring(0, entry.start()) + head + "void shading_main()" + source.substring(entry.end()) + main;
+    }
+
     private static String wrap(String source, Pattern used, String head, String main) {
         Matcher entry = MAIN.matcher(source);
         if (!entry.find()) return null;

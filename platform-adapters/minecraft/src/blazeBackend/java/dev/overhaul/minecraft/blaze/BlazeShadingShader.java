@@ -132,13 +132,14 @@ final class BlazeShadingShader {
             }
 
             // What one pixel holds before it is lit; shadow is the share of the sun it found for itself.
-            struct Seen { vec4 color; vec3 normal; vec3 position; float blockLevel; float skyLevel; float shadow; bool inside; bool terrain; };
+            struct Seen { vec4 color; vec3 normal; vec3 position; float blockLevel; float skyLevel; float shadow; bool inside; bool terrain; bool soft; };
 
             // Reads one pixel; part is its place among the four that share what they found of the sun.
             Seen seenAt(ivec2 pixel, float part) {
                 Seen seen;
                 seen.inside = all(lessThan(uvec2(pixel), size.xy));
                 seen.terrain = false;
+                seen.soft = false;
                 seen.shadow = 0.0;
                 if (!seen.inside) return seen;
                 seen.color = texelFetch(sceneColor, pixel, 0);
@@ -147,11 +148,16 @@ final class BlazeShadingShader {
                 imageStore(surfaces, pixel, vec4(0.0));
                 seen.terrain = true;
                 seen.normal = unfold(surface.xy * 2.0 - 1.0);
-                seen.blockLevel = surface.z;
+                // The block light level shares its byte with the mark of leaves and plants, which the sun passes through.
+                int marked = int(surface.z * 255.0 + 0.5);
+                seen.soft = (marked & 1) != 0;
+                seen.blockLevel = float(marked >> 1) / 127.0;
                 seen.skyLevel = clamp((surface.a * 255.0 - 1.0) / 254.0, 0.0, 1.0);
                 seen.position = positionOf(pixel);
-                if (dot(seen.normal, light.xyz) > 0.0 && light.w > 0.0)
-                    seen.shadow = shadowAt(seen.position, seen.normal, seen.skyLevel, length(seen.position), pixel, part);
+                float facing = dot(seen.normal, light.xyz);
+                if ((facing > 0.0 || seen.soft) && light.w > 0.0)
+                    seen.shadow = shadowAt(seen.position, facing > 0.0 ? seen.normal : -seen.normal, seen.skyLevel, length(seen.position), pixel, part);
+                if (seen.soft) seen.shadow = 0.4 + 0.6 * seen.shadow;
                 return seen;
             }
 
@@ -179,7 +185,7 @@ final class BlazeShadingShader {
                 // A little warmer than the sun itself and a little bluer than the sky, the way film sees daylight.
                 // A low sun grazes the ground, so it is given more strength to keep the golden hour bright.
                 float low = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.0, 0.45, light.y);
-                vec3 sun = sunColor() * vec3(1.04, 0.97, 0.86) * light.w * max(dot(normal, light.xyz), 0.0) * shadow * (2.0 + 2.5 * low);
+                vec3 sun = sunColor() * vec3(1.04, 0.97, 0.86) * light.w * (seen.soft ? 0.55 + 0.25 * dot(normal, light.xyz) : max(dot(normal, light.xyz), 0.0)) * shadow * (2.0 + (seen.soft ? 1.0 : 2.5) * low);
                 vec3 ambient = mix(vec3(1.0), skyTint(), 0.65) * brightness(seen.skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(seen.blockLevel) * 1.6;
                 vec3 shaded = linear(seen.color.rgb) * (sun + ambient + torch + 0.012);

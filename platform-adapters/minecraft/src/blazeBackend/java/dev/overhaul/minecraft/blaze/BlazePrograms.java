@@ -180,14 +180,16 @@ public final class BlazePrograms implements AutoCloseable {
         return entry.shadedCompact;
     }
     private BlazeProgramCompiler.Program shadedVariant(Entry entry,String vertex,BlazeProgramCompiler.Program original){
-        if(!BlazeShadingSource.terrain(entry.name))return null;
+        boolean mirror=BlazeShadingSource.translucent(entry.name);
+        if(!mirror&&!BlazeShadingSource.terrain(entry.name))return null;
         String why;
         try{
-            String shadedVertex=BlazeShadingSource.vertex(vertex),shadedFragment=BlazeShadingSource.fragment(entry.fragmentSource);
+            String shadedVertex=mirror?BlazeShadingSource.mirrorVertex(vertex):BlazeShadingSource.vertex(vertex);
+            String shadedFragment=mirror?BlazeShadingSource.mirrorFragment(entry.fragmentSource):BlazeShadingSource.fragment(entry.fragmentSource,BlazeShadingSource.soft(entry.name));
             if(shadedVertex==null||shadedFragment==null)why="it does not light and fog terrain the way the game's shader does";
             else{
                 var program=variant(entry,shadedVertex,shadedFragment);
-                if(BlazeShadingSource.replaces(program,original))return program;
+                if(mirror?BlazeShadingSource.widens(program,original):BlazeShadingSource.replaces(program,original))return program;
                 released.accept(program);why="its uniforms change";
             }
         }catch(RuntimeException failure){why=failure.getMessage();}

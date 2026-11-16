@@ -21,7 +21,7 @@ final class UpscalingPage extends SettingsPage {
     /** The options this page owns, which the optimisation page leaves out. */
     static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
-            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
+            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.SHADING_WATER, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
             ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
     private static final List<Integer> ANISOTROPY_LEVELS = List.of(1, 2, 4, 8, 16);
@@ -139,6 +139,8 @@ final class UpscalingPage extends SettingsPage {
         rows.add(toggle(BlazeOptimization.SHADING_EXPOSURE, "Auto exposure", "The picture brightens in the dark and dims in full sun, like an eye adapting")
                 .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
         rows.add(toggle(BlazeOptimization.SHADING_SCREEN_SHADOWS, "Screen shadows", "Sun shadows of what is on screen, for cards without ray traced shadows")
+                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
+        rows.add(toggle(BlazeOptimization.SHADING_WATER, "Water reflections", "Water mirrors the sky at shallow angles and catches the glint of the sun")
                 .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
         rows.add(new SettingsRow.Header("Ray tracing"));
         rows.add(toggle(BlazeOptimization.RAY_TRACING, "Ray traced lighting",

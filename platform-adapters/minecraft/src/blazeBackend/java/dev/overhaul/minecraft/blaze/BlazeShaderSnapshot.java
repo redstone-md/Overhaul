@@ -18,6 +18,30 @@ public record BlazeShaderSnapshot(BlazeProgramCompiler.Program program, ByteBuff
     /** The same values for a program with the same uniform layout. */
     BlazeShaderSnapshot withProgram(BlazeProgramCompiler.Program replacement) { return new BlazeShaderSnapshot(replacement, uniforms, samplers); }
 
+    private static ByteBuffer widened = ByteBuffer.allocateDirect(4096).order(ByteOrder.nativeOrder());
+
+    /**
+     * The same values for a program that takes every uniform of this one and more: each shared uniform keeps its
+     * value, each of {@code extras} lands where the replacement declares it. The bytes last until the next widening.
+     */
+    BlazeShaderSnapshot widened(BlazeProgramCompiler.Program replacement, Map<String, float[]> extras) {
+        int bytes = replacement.bindings().uniformBytes();
+        if (widened.capacity() < bytes) widened = ByteBuffer.allocateDirect(bytes * 2).order(ByteOrder.nativeOrder());
+        ByteBuffer values = widened.clear().limit(bytes).slice().order(ByteOrder.nativeOrder());
+        MemoryUtil.memSet(values, 0);
+        var own = program.bindings().uniforms();
+        for (var entry : replacement.bindings().uniforms().entrySet()) {
+            ProgramBindings.Uniform to = entry.getValue(), from = own.get(entry.getKey());
+            if (from != null) {
+                for (int index = 0; index < Math.min(from.byteSize(), to.byteSize()); index++) values.put(to.byteOffset() + index, uniforms.get(from.byteOffset() + index));
+                continue;
+            }
+            float[] extra = extras.get(entry.getKey());
+            if (extra != null) for (int index = 0; index < extra.length && index * 4 < to.byteSize(); index++) values.putFloat(to.byteOffset() + index * 4, extra[index]);
+        }
+        return new BlazeShaderSnapshot(replacement, values, samplers);
+    }
+
     private static ByteBuffer scratch = ByteBuffer.allocateDirect(4096).order(ByteOrder.nativeOrder());
 
     public static BlazeShaderSnapshot capture(BlazeProgramCompiler.Program program,

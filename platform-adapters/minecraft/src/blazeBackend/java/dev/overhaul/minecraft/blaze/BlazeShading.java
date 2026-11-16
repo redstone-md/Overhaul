@@ -47,6 +47,8 @@ public final class BlazeShading {
     private boolean clean;
     /** What the log last said: 0 nothing, 1 shadows from sky light, 2 traced shadows. */
     private int logged;
+    /** What mirrored translucent terrain takes this frame, under the names its program gives them. */
+    private final java.util.Map<String, float[]> mirrorLight = new java.util.HashMap<>();
 
     private BlazeShading() {}
 
@@ -106,17 +108,21 @@ public final class BlazeShading {
      * {@code compact} is the layer's program for compact meshes, null when it has none.
      */
     Route route(BlazeRenderer renderer, BlazeShaderAccess shader, BlazeShaderSnapshot game, BlazeProgramCompiler.Program compact) {
-        if (!collecting || renderer != owner || renderer.currentTarget() != main) return null;
+        if (!collecting && !lit || renderer != owner || renderer.currentTarget() != main) return null;
         BlazeProgramCompiler.Program full = shader.overhaul$shadedSectionProgram(false);
         if (full == null) return null;
+        // Opaque layers write their surfaces while those are collected; translucent ones mirror the sky once lit.
+        boolean mirror = BlazeShadingSource.mirrored(full);
+        if (mirror ? !lit || mirrorLight.isEmpty() || !BlazeOptimization.SHADING_WATER.on() : !collecting) return null;
+        int outputs = mirror ? 1 : 2;
         BlazeProgramCompiler.Program shadedCompact = null;
         if (compact != null) {
             shadedCompact = shader.overhaul$shadedSectionProgram(true);
             if (shadedCompact == null) return null;
-            renderer.shape(shadedCompact, new BlazeSectionShape(shadedCompact.bindings(), 2));
+            renderer.shape(shadedCompact, new BlazeSectionShape(shadedCompact.bindings(), outputs));
         }
-        renderer.shape(full, new BlazeSectionShape(full.bindings(), 2));
-        return new Route(game.withProgram(full), shadedCompact, target);
+        renderer.shape(full, new BlazeSectionShape(full.bindings(), outputs));
+        return mirror ? new Route(game.widened(full, mirrorLight), shadedCompact, main) : new Route(game.withProgram(full), shadedCompact, target);
     }
 
     /** Lights the terrain drawn since the frame started, with the camera matrices it was drawn with. */
@@ -141,8 +147,13 @@ public final class BlazeShading {
             float[] light = BlazeRayTracing.light(world, partialTick);
             // No sun or moon where the sky gives no light.
             if (!world.dimensionType().hasSkyLight()) light[3] = 0;
+            float[] sky = BlazeRayTracing.sky(world, position, partialTick);
+            mirrorLight.put(BlazeShadingSource.SUN, light);
+            mirrorLight.put(BlazeShadingSource.SKY, sky);
+            mirrorLight.put(BlazeShadingSource.EYE, new float[]{(float) (position.x % 1024), (float) (position.y % 1024), (float) (position.z % 1024),
+                    (world.getGameTime() % 24000 + partialTick) / 20f});
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), light,
-                    BlazeRayTracing.sky(world, position, partialTick), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
+                    sky, RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
