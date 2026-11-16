@@ -185,13 +185,7 @@ final class BlazeShadingShader {
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
-                // A little warmer than the sun itself and a little bluer than the sky, the way film sees daylight.
-                // A low sun grazes the ground, so it is given more strength to keep the golden hour bright.
-                float low = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.0, 0.45, light.y);
-                vec3 sun = sunColor() * vec3(1.04, 0.97, 0.86) * light.w * (seen.soft ? 0.55 + 0.25 * dot(normal, light.xyz) : max(dot(normal, light.xyz), 0.0)) * shadow * (2.0 + (seen.soft ? 1.0 : 2.5) * low);
-                vec3 ambient = mix(vec3(1.0), skyTint(), 0.65) * brightness(seen.skyLevel) * (0.08 + 0.5 * sky.w) * (0.75 + 0.25 * normal.y);
-                vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(seen.blockLevel) * 1.6;
-                vec3 shaded = linear(seen.color.rgb) * (sun + ambient + torch + 0.012);
+                vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft);
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR
