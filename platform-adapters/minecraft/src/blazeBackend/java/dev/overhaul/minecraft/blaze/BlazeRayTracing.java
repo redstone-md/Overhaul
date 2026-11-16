@@ -113,7 +113,7 @@ public final class BlazeRayTracing {
         double angle = world.getTimeOfDay(partialTick) * Math.PI * 2;
         float x = (float) -Math.sin(angle), y = (float) Math.cos(angle);
         float weather = SHOW_LIGHT ? 1 : 1 - 0.85f * world.getRainLevel(partialTick);
-        if (y >= 0) return new float[]{x, y, 0, Math.min(1, y * 4) * weather};
+        if (y >= 0) return new float[]{x, y, 0, Math.min(1, y * 10) * weather};
         return new float[]{-x, -y, 0, 0.35f * Math.min(1, -y * 4) * weather};
     }
 
