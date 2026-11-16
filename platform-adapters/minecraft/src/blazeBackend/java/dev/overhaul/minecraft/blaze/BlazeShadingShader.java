@@ -5,8 +5,8 @@ package dev.overhaul.minecraft.blaze;
  * wrote holds its own colour in the colour target and its folded normal and light levels beside it; the shader lights
  * it in linear light with a coloured sun or moon, an ambient the sky tints and that the sky light level lets in, and
  * warm block light, then maps it to the screen with a filmic curve and fogs it the way the game does. Pixels terrain
- * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera
- * and fades to the sky light level's guess beyond; the plain one guesses, and can walk the depth it already has
+ * did not write keep their colour. The traced variant finds sun shadows with one ray query per pixel near the camera,
+ * aimed across the sun's disc so their edges are soft, and fades to the sky light level's guess beyond; the plain one guesses, and can walk the depth it already has
  * toward the sun for the shadows of what is on screen, so it runs on any card. Pixels are lit two by two, sharing
  * what they found of the sun. The linear variant also leaves their mean linear light at half size, for
  * {@link BlazeShadingGlow} to blur and measure; it mixes in the glow and the exposure that made of the frame before,
@@ -125,7 +125,12 @@ final class BlazeShadingShader {
             #ifdef TRACED
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
-                    float traced = blocked(origin, light.xyz, 256.0) ? 0.0 : transmitted(origin, light.xyz, 256.0);
+                    // Each of the four pixels that share what they find aims at its own spot on the sun's disc, turned
+                    // from one four to the next, so a shadow's edge softens the further it falls from what casts it.
+                    float turn = 6.2831853 * (part * 0.25 + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715)))));
+                    vec3 across = normalize(cross(light.xyz, vec3(0.0, 1.0, 0.01)));
+                    vec3 toward = normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * 0.035 * sqrt((part + 0.5) * 0.25));
+                    float traced = blocked(origin, toward, 256.0) ? 0.0 : transmitted(origin, toward, 256.0);
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
             #else
