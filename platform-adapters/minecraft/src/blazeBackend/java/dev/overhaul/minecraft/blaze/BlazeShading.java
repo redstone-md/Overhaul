@@ -120,7 +120,10 @@ public final class BlazeShading {
             int variant = (traced ? 1 : 0) | (linear ? 2 : 0);
             if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear);
             if (linear && glow == null) glow = new BlazeShadingGlow(owner);
-            var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), BlazeRayTracing.light(world, partialTick),
+            float[] light = BlazeRayTracing.light(world, partialTick);
+            // No sun or moon where the sky gives no light.
+            if (!world.dimensionType().hasSkyLight()) light[3] = 0;
+            var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), light,
                     BlazeRayTracing.sky(world, position, partialTick), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);

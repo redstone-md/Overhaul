@@ -151,12 +151,24 @@ final class BlazeShadingShader {
                 return seen;
             }
 
+            // The game's sky with the air's own light added: deeper overhead, hazy at the horizon, bright around the
+            // sun or moon. Only where nothing was drawn over the sky, and not in fog too thick to see it.
+            vec3 skyOf(vec3 drawn, ivec2 pixel) {
+                if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
+                vec3 toward = normalize(positionOf(pixel));
+                float near = max(dot(toward, light.xyz), 0.0);
+                float low = pow(1.0 - clamp(toward.y, 0.0, 1.0), 5.0) * smoothstep(-0.2, 0.0, toward.y);
+                vec3 air = linear(drawn) * mix(1.0, 0.8, smoothstep(0.1, 0.9, toward.y));
+                vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near));
+                return display(1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0)));
+            }
+
             // Lights one pixel onto the screen with its share of the sun; gives its linear light back, with 1 beside
             // it where terrain is.
             vec4 lightOf(Seen seen, float shadow, ivec2 pixel) {
                 if (!seen.inside) return vec4(0.0);
                 if (!seen.terrain) {
-                    imageStore(lit, pixel, seen.color);
+                    imageStore(lit, pixel, vec4(skyOf(seen.color.rgb, pixel), seen.color.a));
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
