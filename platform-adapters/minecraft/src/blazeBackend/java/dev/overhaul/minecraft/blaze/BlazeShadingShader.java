@@ -171,7 +171,7 @@ final class BlazeShadingShader {
 
             // The game's sky with the air's own light added: paled by haze, most at the horizon, deeper overhead, bright
             // around the sun or moon. Only where nothing was drawn over the sky, and not in fog too thick to see it.
-            vec3 skyOf(vec3 drawn, ivec2 pixel) {
+            vec3 skyOf(vec3 drawn, ivec2 pixel, float shaft) {
                 if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
                 vec3 toward = normalize(positionOf(pixel));
                 float near = max(dot(toward, light.xyz), 0.0);
@@ -180,16 +180,40 @@ final class BlazeShadingShader {
                 // Haze scatters every colour alike: it pales the blue toward a warm white as bright as the sky is.
                 vec3 haze = vec3(1.0, 0.97, 0.92) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.7;
                 air = mix(air, haze, mix(0.7, 0.3, smoothstep(0.0, 0.6, toward.y))) * mix(1.0, 0.85, smoothstep(0.1, 0.9, toward.y));
-                vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near));
+                vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft);
                 return display(1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0)));
             }
 
-            // Lights one pixel onto the screen with its share of the sun; gives its linear light back, with 1 beside
-            // it where terrain is.
-            vec4 lightOf(Seen seen, float shadow, ivec2 pixel) {
+            // How much of the sun's light the air between the eye and these pixels catches: the way across the screen
+            // to the sun is walked from a place that differs per four pixels, and each step that finds open sky adds
+            // to it, so what stands before the sun cuts shafts into the light fanning out around it.
+            float shaftAt(ivec2 pixel) {
+            #ifdef SHAFTS
+                if (light.w <= 0.0) return 0.0;
+                vec4 clip = inverse(inverseViewProjection) * vec4(light.xyz, 0.0);
+                if (clip.w <= 0.0) return 0.0;
+                vec2 at = (vec2(pixel) + 1.0) / vec2(size.xy), toward = clip.xy / clip.w * 0.5 + 0.5 - at;
+                float near = 1.0 - smoothstep(0.0, 0.85, length(toward * vec2(float(size.x) / float(size.y), 1.0)));
+                if (near <= 0.0) return 0.0;
+                float offset = fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))));
+                float open = 0.0;
+                for (int pace = 0; pace < 8; pace++) {
+                    vec2 place = at + toward * (float(pace) + offset) * 0.125;
+                    // Off the screen nothing is known to stand before the sun.
+                    open += any(greaterThan(abs(place - 0.5), vec2(0.5))) ? 1.0 : step(1.0, textureLod(sceneDepth, place, 0.0).r);
+                }
+                return open * 0.125 * near * near;
+            #else
+                return 0.0;
+            #endif
+            }
+
+            // Lights one pixel onto the screen with its share of the sun and of the light the air catches; gives its
+            // linear light back, with 1 beside it where terrain is.
+            vec4 lightOf(Seen seen, float shadow, float shaft, ivec2 pixel) {
                 if (!seen.inside) return vec4(0.0);
                 if (!seen.terrain) {
-                    imageStore(lit, pixel, vec4(skyOf(seen.color.rgb, pixel), seen.color.a));
+                    imageStore(lit, pixel, vec4(skyOf(seen.color.rgb, pixel, shaft), seen.color.a));
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
@@ -203,6 +227,8 @@ final class BlazeShadingShader {
                 float average = texelFetch(measured, ivec2(0), 0).r;
                 if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 2.0);
             #endif
+                // The further a surface, the more lit air lies before it.
+                shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position));
                 imageStore(lit, pixel, vec4(screened(shown, seen.position, exposure), seen.color.a));
                 return vec4(shaded, 1.0);
             }
@@ -220,6 +246,7 @@ final class BlazeShadingShader {
                 Seen seen[4];
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 vec4 sum = vec4(0.0);
+                float shaft = shaftAt(cell * 2);
                 for (int i = 0; i < 4; i++) {
                     float shadow = 0.0, weight = 0.0, distance = length(seen[i].position);
                     if (seen[i].terrain) for (int j = 0; j < 4; j++) {
@@ -228,7 +255,7 @@ final class BlazeShadingShader {
                         shadow += seen[j].shadow;
                         weight += 1.0;
                     }
-                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, cell * 2 + ivec2(i & 1, i >> 1));
+                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
                 }
             #ifdef LINEAR
                 if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
@@ -238,10 +265,11 @@ final class BlazeShadingShader {
 
     /**
      * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
-     * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before.
+     * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before;
+     * with {@code shafts} the air catches the sun's light.
      */
-    static String source(boolean traced, boolean linear) {
-        String head = HEAD + (linear ? "#define LINEAR\n" : "");
+    static String source(boolean traced, boolean linear, boolean shafts) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "");
         if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY;
         return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY;
     }

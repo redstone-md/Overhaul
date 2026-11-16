@@ -38,8 +38,8 @@ public final class BlazeShading {
     private BlazeTarget main, target;
     private GpuImage surfaces;
     private GpuImageView surfacesView, forColor, forDepth;
-    /** The lighting passes made so far: traced ones at odd places, ones leaving linear light in the upper half. */
-    private final BlazeShadingPass[] passes = new BlazeShadingPass[4];
+    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun. */
+    private final BlazeShadingPass[] passes = new BlazeShadingPass[8];
     private BlazeShadingGlow glow;
     private int revision = -1;
     private boolean collecting, lit, failed;
@@ -94,7 +94,7 @@ public final class BlazeShading {
             if (renderer != owner) adopt(renderer);
             main = renderer.target(client.getMainRenderTarget().frameBufferId);
             if (main == null || main.depthView() == null) return;
-            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on()
+            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on() && !BlazeOptimization.SHADING_SHAFTS.on()
                     && !(renderer.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on())) {
                 light(client.level, camera.getPosition(), partialTick);
                 lit = direct = true;
@@ -151,8 +151,9 @@ public final class BlazeShading {
             BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position) : null;
             traced = scene != null;
             boolean bloom = BlazeOptimization.SHADING_BLOOM.on(), adapt = BlazeOptimization.SHADING_EXPOSURE.on(), linear = bloom || adapt;
-            int variant = (traced ? 1 : 0) | (linear ? 2 : 0);
-            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear);
+            boolean shafts = BlazeOptimization.SHADING_SHAFTS.on();
+            int variant = (traced ? 1 : 0) | (linear ? 2 : 0) | (shafts ? 4 : 0);
+            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts);
             if (linear && glow == null) glow = new BlazeShadingGlow(owner);
             light(world, position, partialTick);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), mirrorLight.get(BlazeShadingSource.SUN),
