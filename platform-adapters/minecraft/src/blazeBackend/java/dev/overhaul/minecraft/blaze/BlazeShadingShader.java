@@ -190,8 +190,15 @@ final class BlazeShadingShader {
                 vec3 air = linear(drawn);
                 // Haze scatters every colour alike: it pales the blue toward a warm white as bright as the sky is.
                 vec3 haze = vec3(1.0, 0.97, 0.92) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.7;
-                air = mix(air, haze, mix(0.7, 0.3, smoothstep(0.0, 0.6, toward.y))) * mix(1.0, 0.85, smoothstep(0.1, 0.9, toward.y));
-                vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft);
+                float high = smoothstep(0.05, 0.8, toward.y);
+                air = mix(air, haze, mix(0.7, 0.1, smoothstep(0.0, 0.5, toward.y))) * mix(1.0, 0.72, high);
+                // Overhead the blue deepens.
+                air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.4 * high), 0.0);
+                // A low sun lays a warm band along the horizon, strongest beneath itself.
+                float dusk = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.05, 0.45, light.y);
+                float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 4.0);
+                vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
+                        + dusk * band * (0.12 + 0.5 * near * near));
                 vec4 cloud = cloudsAt(toward, pixel);
                 return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
