@@ -43,6 +43,8 @@ public final class BlazeShading {
     private BlazeShadingGlow glow;
     private int revision = -1;
     private boolean collecting, lit, failed;
+    /** Whether this frame's sky carries the clouds of {@link BlazeShadingClouds}, so the game draws none. */
+    private boolean cloudy;
     /** Whether this frame's terrain lights itself as it is drawn: nothing asked needs the depth or the light of the whole frame. */
     private boolean direct;
     /** Whether the lighting pass left the surfaces wiped, as it does each frame it runs. */
@@ -60,6 +62,11 @@ public final class BlazeShading {
 
     /** The draw that shaded terrain goes to: the game's snapshot on a shaded program, its compact twin and the target. */
     record Route(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, BlazeTarget target) {}
+
+    /** Whether this frame's sky already carries clouds, so the game's own are not to be drawn. */
+    public boolean cloudsDrawn() {
+        return cloudy;
+    }
 
     /** Whether this frame's terrain was lit here, so nothing else lights it again. */
     boolean litThisFrame() {
@@ -80,7 +87,7 @@ public final class BlazeShading {
 
     /** Clears the surfaces when this frame's terrain is to be shaded here, or hands terrain the light to shade itself with. */
     public void frameStarted(Minecraft client, Camera camera, float partialTick) {
-        collecting = lit = direct = false;
+        collecting = lit = direct = cloudy = false;
         if (revision != BlazeOptimization.revision()) {
             revision = BlazeOptimization.revision();
             failed = false;
@@ -94,7 +101,7 @@ public final class BlazeShading {
             if (renderer != owner) adopt(renderer);
             main = renderer.target(client.getMainRenderTarget().frameBufferId);
             if (main == null || main.depthView() == null) return;
-            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on() && !BlazeOptimization.SHADING_SHAFTS.on() && !BlazeOptimization.SHADING_OCCLUSION.on()
+            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on() && !BlazeOptimization.SHADING_SHAFTS.on() && !BlazeOptimization.SHADING_OCCLUSION.on() && !BlazeShadingClouds.wanted(client)
                     && !(renderer.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on())) {
                 light(client.level, camera.getPosition(), partialTick);
                 lit = direct = true;
@@ -146,9 +153,10 @@ public final class BlazeShading {
             owner.gpuMark("shadedTerrain");
             Matrix4f viewProjection = new Matrix4f(projection).mul(view);
             var position = camera.getPosition();
+            long clouds = BlazeShadingClouds.words(client, world, position, partialTick);
             boolean traced = area != null && owner.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on();
             BlazeTextures.Sampled atlas = traced ? owner.textures().resolve(client.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)) : null;
-            BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position) : null;
+            BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position, clouds) : null;
             traced = scene != null;
             boolean bloom = BlazeOptimization.SHADING_BLOOM.on(), adapt = BlazeOptimization.SHADING_EXPOSURE.on(), linear = bloom || adapt;
             boolean shafts = BlazeOptimization.SHADING_SHAFTS.on();
@@ -159,11 +167,12 @@ public final class BlazeShading {
             light(world, position, partialTick);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), mirrorLight.get(BlazeShadingSource.SUN),
                     mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
-                    RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0);
+                    RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0, clouds);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
             lit = clean = true;
+            cloudy = clouds != 0;
             log(traced ? 2 : 1);
         } catch (RuntimeException | Error failure) {
             fail(failure);

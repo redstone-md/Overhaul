@@ -64,7 +64,7 @@ public final class BlazeRayTracing {
             BlazeTarget target = renderer.target(client.getMainRenderTarget().frameBufferId);
             Matrix4f viewProjection = new Matrix4f(projection).mul(view);
             float[] trailer = pass.trailer(target, viewProjection, position.x, position.y, position.z);
-            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance, trailer);
+            BlazeRayScene.Frame traced = scene.prepare(area, position.x, position.y, position.z, distance, trailer, 0);
             if (traced == null) return;
             if (SHOW_LIGHT) flags |= BlazeRayShader.SHOW_LIGHT;
             var lighting = new BlazeRayPass.Lighting(viewProjection.invert(new Matrix4f()), light(world, partialTick),
@@ -80,11 +80,11 @@ public final class BlazeRayTracing {
 
     /**
      * The terrain around the camera as acceleration structures, for {@link BlazeShading}'s sun shadows, reaching as
-     * far as {@link #reach}; null where the scene cannot be built this frame.
+     * far as {@link #reach}, with {@code words} left just before its hit table; null where the scene cannot be built this frame.
      */
-    BlazeRayScene.Frame shadowScene(BlazeRenderer renderer, ClientLevel world, ViewArea area, Vec3 position) {
+    BlazeRayScene.Frame shadowScene(BlazeRenderer renderer, ClientLevel world, ViewArea area, Vec3 position, long words) {
         prepare(renderer, world);
-        return scene.prepare(area, position.x, position.y, position.z, distance, new float[BlazeRayShader.TRAILER_FLOATS]);
+        return scene.prepare(area, position.x, position.y, position.z, distance, new float[BlazeRayShader.TRAILER_FLOATS], words);
     }
 
     /** How far rays reach, in blocks. */

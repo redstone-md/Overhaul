@@ -35,7 +35,7 @@ final class BlazeRayScene implements AutoCloseable {
         TRACED = traced;
     }
     private static final int BUILDS_PER_FRAME = 48, TRIANGLES_PER_FRAME = 400_000;
-    private static final int INSTANCE_BYTES = 64, ENTRY_BYTES = 32, COMPACT_STRIDE = 20, FULL_STRIDE = 32;
+    private static final int INSTANCE_BYTES = 64, ENTRY_BYTES = 32, HEADER_BYTES = 16, COMPACT_STRIDE = 20, FULL_STRIDE = 32;
     /** Frames a structure outside the traced distance is kept, so turning around or stepping back does not rebuild it. */
     private static final int KEEP_FRAMES = 600;
     private static final float COMPACT_SCALE = 65535f / 2048f;
@@ -72,7 +72,7 @@ final class BlazeRayScene implements AutoCloseable {
      * Gathers the terrain within {@code distance} of the camera. {@code trailer} follows the hit table in the same
      * buffer, sixteen byte aligned, for the pass's own per-frame values.
      */
-    Frame prepare(ViewArea area, double x, double y, double z, int distance, float[] trailer) {
+    Frame prepare(ViewArea area, double x, double y, double z, int distance, float[] trailer, long words) {
         frame++;
         placed.clear();
         offsets.clear();
@@ -114,7 +114,7 @@ final class BlazeRayScene implements AutoCloseable {
         }
         List<Blas> builds = startBuilds();
         evict();
-        return placed.isEmpty() ? null : queue(builds, trailer);
+        return placed.isEmpty() ? null : queue(builds, trailer, words);
     }
 
     private boolean traceable(BlazeMesh mesh) {
@@ -166,7 +166,7 @@ final class BlazeRayScene implements AutoCloseable {
         }
     }
 
-    private Frame queue(List<Blas> builds, float[] trailer) {
+    private Frame queue(List<Blas> builds, float[] trailer, long words) {
         int count = placed.size();
         if (top == null || topCapacity < count) {
             if (top != null) owner.retire(top);
@@ -178,10 +178,12 @@ final class BlazeRayScene implements AutoCloseable {
                 topScratch = sizes.buildScratchSize();
             }
         }
-        GpuBuffer instances = instanceBuffers.take(count * INSTANCE_BYTES), table = tableBuffers.take(count * ENTRY_BYTES + trailer.length * 4);
+        GpuBuffer instances = instanceBuffers.take(count * INSTANCE_BYTES), table = tableBuffers.take(HEADER_BYTES + count * ENTRY_BYTES + trailer.length * 4);
         try (var instanceRange = instances.mapRange(0, count * INSTANCE_BYTES, false, true);
-             var tableRange = table.mapRange(0, count * ENTRY_BYTES + trailer.length * 4, false, true)) {
+             var tableRange = table.mapRange(0, HEADER_BYTES + count * ENTRY_BYTES + trailer.length * 4, false, true)) {
             ByteBuffer instanceData = instanceRange.buffer(), tableData = tableRange.buffer();
+            // The caller's words lie just before the table, where its address still finds them.
+            tableData.putLong(0, words).putLong(8, 0);
             for (int index = 0; index < count; index++) {
                 Blas blas = placed.get(index);
                 float[] offset = offsets.get(index);
@@ -193,16 +195,16 @@ final class BlazeRayScene implements AutoCloseable {
                 instanceData.putInt(at + 48, index & 0xFFFFFF | blas.mask << 24);
                 instanceData.putInt(at + 52, VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR << 24);
                 instanceData.putLong(at + 56, blas.structure.address());
-                int entry = index * ENTRY_BYTES;
+                int entry = HEADER_BYTES + index * ENTRY_BYTES;
                 tableData.putLong(entry, blas.vertexAddress).putLong(entry + 8, blas.indexAddress)
                         .putInt(entry + 16, blas.indexBytes).putInt(entry + 20, blas.compact ? 1 : 0).putInt(entry + 24, blas.mask).putInt(entry + 28, 0);
             }
-            for (int i = 0; i < trailer.length; i++) tableData.putFloat(count * ENTRY_BYTES + i * 4, trailer[i]);
+            for (int i = 0; i < trailer.length; i++) tableData.putFloat(HEADER_BYTES + count * ENTRY_BYTES + i * 4, trailer[i]);
         }
         owner.enqueue(new Build(builds, instances.deviceAddress(), count, top, topScratch));
         instanceBuffers.giveBack(instances);
         tableBuffers.giveBack(table);
-        return new Frame(top, table.deviceAddress(), count);
+        return new Frame(top, table.deviceAddress() + HEADER_BYTES, count);
     }
 
     private long topScratch;

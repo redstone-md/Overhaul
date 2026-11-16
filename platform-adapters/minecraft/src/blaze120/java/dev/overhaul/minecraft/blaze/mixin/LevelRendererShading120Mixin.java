@@ -38,6 +38,12 @@ abstract class LevelRendererShading120Mixin {
         BlazeShading.get().terrainDrawn(Minecraft.getInstance(), viewArea, camera, partial, pose.last().pose(), projection);
     }
 
+    // The sky lit here already carries clouds of its own.
+    @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
+    private void overhaul$ownClouds(CallbackInfo callback) {
+        if (BlazeShading.get().cloudsDrawn()) callback.cancel();
+    }
+
     // Clouds draw after the terrain is lit, so they can take the same low sun.
     @ModifyExpressionValue(method = "renderClouds", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/multiplayer/ClientLevel;getCloudColor(F)Lnet/minecraft/world/phys/Vec3;"))

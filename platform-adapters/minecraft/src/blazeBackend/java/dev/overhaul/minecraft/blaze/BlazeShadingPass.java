@@ -99,9 +99,10 @@ final class BlazeShadingPass implements AutoCloseable {
 
     /**
      * What one frame's lighting reads beyond the target: the sun or moon and the sky as {@link BlazeRayTracing} gives
-     * them, the fog's colour, start and end, and how far shadows are looked for: traced, or walked on screen by the plain variant.
+     * them, the fog's colour, start and end, how far shadows are looked for: traced, or walked on screen by the plain variant,
+     * and {@link BlazeShadingClouds}' words.
      */
-    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
+    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach, long clouds) {}
 
     /**
      * Queues the lighting of {@code target}'s colour from {@code surfaces}, which it leaves wiped where terrain was.
@@ -141,7 +142,7 @@ final class BlazeShadingPass implements AutoCloseable {
             binding = null;
             binding = new Binding(top, views, samplers, traced && atlas.general(), inPlace, written);
         }
-        owner.enqueue(new Dispatch(binding, traced ? scene.table() : 0, lighting, width, height));
+        owner.enqueue(new Dispatch(binding, traced ? scene.table() : lighting.clouds(), lighting, width, height));
         if (!inPlace) owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
     }
 

@@ -21,7 +21,7 @@ final class UpscalingPage extends SettingsPage {
     /** The options this page owns, which the optimisation page leaves out. */
     static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
-            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.SHADING_SHAFTS, BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_WATER, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
+            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.SHADING_SHAFTS, BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
             ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
     private static final List<Integer> ANISOTROPY_LEVELS = List.of(1, 2, 4, 8, 16);
@@ -143,6 +143,8 @@ final class UpscalingPage extends SettingsPage {
         rows.add(toggle(BlazeOptimization.SHADING_SHAFTS, "Sun shafts", "The air catches the sun: light fans out around it and what stands before it cuts shafts into that light")
                 .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
         rows.add(toggle(BlazeOptimization.SHADING_OCCLUSION, "Corner shading", "Corners and creases darken where what lies beside a surface stands before it")
+                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
+        rows.add(toggle(BlazeOptimization.SHADING_CLOUDS, "Soft clouds", "The sky carries soft clouds of its own, shaded by the sun, in place of the game's flat ones")
                 .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
         rows.add(toggle(BlazeOptimization.SHADING_WATER, "Water reflections", "Water mirrors the sky at shallow angles and catches the glint of the sun")
                 .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));

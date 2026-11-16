@@ -171,6 +171,17 @@ final class BlazeShadingShader {
 
             // The game's sky with the air's own light added: paled by haze, most at the horizon, deeper overhead, bright
             // around the sun or moon. Only where nothing was drawn over the sky, and not in fog too thick to see it.
+            // Where the camera is among the clouds and how far below them: with a traced scene just before its hit
+            // table, since the table's address takes the words' place.
+            uvec2 cloudWords() {
+            #ifdef TRACED
+                return Table(uvec2(size.z - 16u, size.w - (size.z < 16u ? 1u : 0u))).e[0].xy;
+            #else
+                return size.zw;
+            #endif
+            }
+
+""" + BlazeShadingClouds.SOURCE + """
             vec3 skyOf(vec3 drawn, ivec2 pixel, float shaft) {
                 if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
                 vec3 toward = normalize(positionOf(pixel));
@@ -181,7 +192,8 @@ final class BlazeShadingShader {
                 vec3 haze = vec3(1.0, 0.97, 0.92) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.7;
                 air = mix(air, haze, mix(0.7, 0.3, smoothstep(0.0, 0.6, toward.y))) * mix(1.0, 0.85, smoothstep(0.1, 0.9, toward.y));
                 vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft);
-                return display(1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0)));
+                vec4 cloud = cloudsAt(toward, pixel);
+                return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
 
             // How much of the sun's light the air between the eye and these pixels catches: the way across the screen
