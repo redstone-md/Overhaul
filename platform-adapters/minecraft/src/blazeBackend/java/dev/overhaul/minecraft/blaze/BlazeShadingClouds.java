@@ -7,8 +7,8 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * The clouds of Overhaul's own shading: a layer of soft shapes above the world, walked by the ray of every pixel of
- * sky inside the lighting pass, each step shaded by how much cloud lies between it and the sun. Nothing is drawn for
- * them: they take the place of the game's flat clouds.
+ * sky inside the lighting pass, each step shaded by how much cloud lies between it and the sun, and the ground below
+ * darkened where they stand before the sun. Nothing is drawn for them: they take the place of the game's flat clouds.
  */
 final class BlazeShadingClouds {
     /** The shapes repeat after this many blocks, so where the camera is among them fits sixteen bits a side. */
@@ -63,6 +63,16 @@ final class BlazeShadingClouds {
                 shape += fine ? cloudNoise(unit * 112.0 + 9.1, 112.0) * 0.15 + cloudNoise(unit * 320.0, 320.0) * 0.08 : 0.115;
                 float edge = 0.55 + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
                 return clamp((shape - edge) * 14.0, 0.0, 1.0);
+            }
+
+            // How much of the sun's light the layer lets down to a place below it: the place is followed toward the sun
+            // up into the middle of the layer.
+            float cloudShadeAt(vec3 position) {
+                uvec2 words = cloudWords();
+                float up = uintBitsToFloat(words.y) + 15.0 - position.y;
+                if (words.y == 0u || up <= 0.0) return 1.0;
+                vec2 at = vec2(words.x & 0xFFFFu, words.x >> 16) / 32.0 + position.xz + light.xz * (up / max(light.y, 0.15));
+                return mix(1.0, 0.45, smoothstep(0.0, 0.8, cloudAt(at, 0.5, false)));
             }
 
             // The layer along a ray from the eye into the sky: its light, already weighed by how much it covers, then

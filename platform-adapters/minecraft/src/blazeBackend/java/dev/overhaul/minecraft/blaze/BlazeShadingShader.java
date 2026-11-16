@@ -289,6 +289,12 @@ final class BlazeShadingShader {
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 vec4 sum = vec4(0.0);
                 float shaft = shaftAt(cell * 2);
+                // Clouds shade broadly, so the four pixels share what the first of them on terrain finds.
+                float cloudy = 1.0;
+                for (int i = 0; i < 4; i++) if (seen[i].terrain) {
+                    cloudy = cloudShadeAt(seen[i].position);
+                    break;
+                }
                 for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
                 for (int i = 0; i < 4; i++) {
                     float shadow = 0.0, open = 0.0, weight = 0.0, distance = length(seen[i].position);
@@ -299,7 +305,7 @@ final class BlazeShadingShader {
                         open += opens[j];
                         weight += 1.0;
                     }
-                    sum += lightOf(seen[i], weight > 0.0 ? shadow / weight : 0.0, weight > 0.0 ? open / weight : 1.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
+                    sum += lightOf(seen[i], (weight > 0.0 ? shadow / weight : 0.0) * cloudy, weight > 0.0 ? open / weight : 1.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
                 }
             #ifdef LINEAR
                 if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
