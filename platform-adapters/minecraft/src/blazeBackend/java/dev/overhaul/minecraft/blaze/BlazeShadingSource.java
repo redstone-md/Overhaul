@@ -68,12 +68,18 @@ final class BlazeShadingSource {
                 float mirror = (0.03 + 0.97 * pow(1.0 - facing, 5.0)) * (0.35 + 0.65 * up);
                 vec3 bounced = reflect(toward, normal);
                 vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
-                float day = step(0.5, ShadingSky.w);
+                float day = step(0.235, ShadingSky.w);
                 vec3 sun = mix(vec3(0.3, 0.36, 0.55), mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, ShadingSun.y)), day);
                 float glint = pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * ShadingSun.w * up;
                 float clear = 1.0 - smoothstep(FogStart, FogEnd, far);
                 fragColor.rgb = mix(mix(fragColor.rgb, above, mirror * clear), sun, min(glint * 3.0, 1.0) * clear);
                 fragColor.a = max(fragColor.a, mirror * clear);
+                // Far water sinks into the air's colour the way far land does.
+                float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
+                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.84, 0.92, 1.0), sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.45);
+                float sunk = min(1.0 - exp(-far / 280.0), 0.75) * clear;
+                fragColor.rgb = mix(fragColor.rgb, air, sunk);
+                fragColor.a = max(fragColor.a, sunk);
             }
             """;
 

@@ -130,11 +130,20 @@ final class BlazeRayShader {
             // The game's own brightness curve for a light level from 0 to 1.
             float brightness(float level) { return level / (4.0 - 3.0 * level); }
 
+            // How much of the day is left: the game's sky never darkens below a fifth.
+            float day() { return clamp((sky.w - 0.2) * 1.25, 0.0, 1.0); }
+
+            // Whether the light is the sun's: it stays so through the twilight, until the sky is nearly dark.
+            bool sunLit() { return sky.w >= 0.235; }
+
+            // How low the sun stands, fading out with its light as it sets.
+            float lowSun() { return sunLit() ? (1.0 - smoothstep(0.05, 0.45, light.y)) * min(light.w * 2.5, 1.0) : 0.0; }
+
             vec3 skyTint() { return sky.rgb / max(dot(sky.rgb, vec3(0.3, 0.59, 0.11)), 0.05); }
 
             // The sun warms toward the horizon; the moon is a cool, faint blue.
             vec3 sunColor() {
-                if (sky.w < 0.5) return vec3(0.38, 0.6, 1.0) * 0.11;
+                if (!sunLit()) return vec3(0.38, 0.6, 1.0) * 0.07;
                 return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
             }
 
@@ -143,10 +152,10 @@ final class BlazeRayShader {
             // low sun, which only grazes the ground, is given more strength to keep the golden hour bright. Leaves
             // and plants are soft: the sun passes through them.
             vec3 daylight(vec3 normal, vec2 levels, float shadow, bool soft) {
-                float low = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.0, 0.45, light.y);
+                float low = lowSun();
                 float facing = dot(normal, light.xyz);
-                vec3 sun = sunColor() * vec3(1.08, 0.97, 0.8) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.7 + (soft ? 1.0 : 2.5) * low);
-                vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(1.0), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.07 + 0.36 * sky.w) * (0.75 + 0.25 * normal.y);
+                vec3 sun = sunColor() * vec3(1.05, 0.98, 0.84) * light.w * (soft ? 0.55 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.7 + (soft ? 0.3 : 0.6) * low);
+                vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(1.0), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.38 * sky.w) * (1.0 - 0.4 * low) * (0.75 + 0.25 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(levels.x) * 1.6;
                 return sun + ambient + torch + 0.012;
             }

@@ -183,23 +183,31 @@ final class BlazeShadingShader {
             }
 
 """ + BlazeShadingClouds.SOURCE + """
+            // The faint blue the air keeps at night.
+            vec3 nightAir() { return vec3(0.007, 0.016, 0.028) * (1.0 - day()); }
+
+            // The colour a low sun gives the air.
+            const vec3 DUSK = vec3(0.7, 0.22, 0.05);
+
             vec3 skyOf(vec3 drawn, ivec2 pixel, float shaft) {
                 if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
                 vec3 toward = normalize(positionOf(pixel));
                 float near = max(dot(toward, light.xyz), 0.0);
                 float low = pow(1.0 - clamp(toward.y, 0.0, 1.0), 5.0) * smoothstep(-0.2, 0.0, toward.y);
                 vec3 air = linear(drawn);
-                // Haze scatters every colour alike: it pales the blue toward a warm white as bright as the sky is.
-                vec3 haze = vec3(1.0, 0.97, 0.92) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.7;
+                // A low sun colours the air; the night's air keeps a faint blue of its own.
+                float dusk = lowSun();
+                // Haze pales the blue toward the horizon, and takes the low sun's colour.
+                vec3 haze = mix(vec3(0.84, 0.92, 1.0), vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3;
                 float high = smoothstep(0.05, 0.8, toward.y);
-                air = mix(air, haze, mix(0.7, 0.1, smoothstep(0.0, 0.5, toward.y))) * mix(1.0, 0.72, high);
+                air = mix(air, haze, mix(0.6, 0.1, smoothstep(0.0, 0.5, toward.y))) * mix(1.0, 0.6, high) * (1.0 - 0.5 * dusk);
                 // Overhead the blue deepens.
-                air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.4 * high), 0.0);
-                // A low sun lays a warm band along the horizon, strongest beneath itself.
-                float dusk = sky.w < 0.5 ? 0.0 : 1.0 - smoothstep(0.05, 0.45, light.y);
-                float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 4.0);
+                air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.6 * high), 0.0) + nightAir();
+                // A low sun turns the air along the horizon orange, strongest beneath itself.
+                float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 2.5);
+                air = mix(air, DUSK * (0.55 + 0.65 * near * near), dusk * band * 0.9);
                 vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
-                        + dusk * band * (0.12 + 0.5 * near * near));
+                        + dusk * band * 0.1) + vec3(1.0, 0.42, 0.12) * light.w * dusk * band * (0.4 + 0.6 * near * near);
                 vec4 cloud = cloudsAt(toward, pixel);
                 return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
@@ -260,6 +268,9 @@ final class BlazeShadingShader {
                 }
                 vec3 normal = seen.normal;
                 vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) * open;
+                // The eye loses colour in the dark, away from fire.
+                float dim = 0.55 * (1.0 - day()) * (1.0 - brightness(seen.blockLevel));
+                shaded = mix(shaded, vec3(0.75, 0.95, 1.2) * dot(shaded, vec3(0.3, 0.59, 0.11)), dim);
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR
@@ -267,11 +278,17 @@ final class BlazeShadingShader {
                 vec4 around = textureLod(glow, (vec2(pixel) + 0.5) / vec2(size.xy), 0.0);
                 if (around.a > 0.0) shown = mix(shaded, around.rgb / around.a, 0.12);
                 float average = texelFetch(measured, ivec2(0), 0).r;
-                if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 2.0);
+                if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 1.0 + day() * smoothstep(0.05, 0.45, light.y));
             #endif
                 // The further a surface, the more lit air lies before it.
                 shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position));
-                imageStore(lit, pixel, vec4(screened(shown, seen.position, exposure), seen.color.a));
+                // Far terrain under the open sky sinks into the air's own colour, the one the sky has at the horizon.
+                float dusk = lowSun();
+                vec3 air = linear(sky.rgb);
+                air = mix(air, mix(vec3(0.84, 0.92, 1.0), sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.45) + nightAir();
+                air = mix(air, DUSK * 0.6, dusk * 0.8);
+                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel);
+                imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }
 
