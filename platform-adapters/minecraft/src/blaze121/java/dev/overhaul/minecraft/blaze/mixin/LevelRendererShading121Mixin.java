@@ -8,6 +8,9 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.ViewArea;
+import net.minecraft.world.phys.Vec3;
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import com.llamalad7.mixinextras.sugar.Local;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,5 +36,12 @@ abstract class LevelRendererShading121Mixin {
     private void overhaul$shadeTerrain(DeltaTracker delta, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f view, Matrix4f projection,
                                        CallbackInfo callback) {
         BlazeShading.get().terrainDrawn(Minecraft.getInstance(), viewArea, camera, delta.getGameTimeDeltaPartialTick(false), view, projection);
+    }
+
+    // Clouds draw after the terrain is lit, so they can take the same low sun.
+    @ModifyExpressionValue(method = "renderClouds", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/multiplayer/ClientLevel;getCloudColor(F)Lnet/minecraft/world/phys/Vec3;"))
+    private Vec3 overhaul$lightClouds(Vec3 color, @Local(argsOnly = true) float partialTick) {
+        return BlazeShading.get().clouds(Minecraft.getInstance().level, color, partialTick);
     }
 }

@@ -62,6 +62,18 @@ public final class BlazeShading {
         return lit;
     }
 
+    /**
+     * The colour clouds take while terrain is lit here: the game's own, warmed toward the low sun's light so the sky
+     * at dawn and dusk matches the ground beneath it.
+     */
+    public net.minecraft.world.phys.Vec3 clouds(ClientLevel world, net.minecraft.world.phys.Vec3 game, float partialTick) {
+        if (!lit || world == null) return game;
+        float height = (float) Math.cos(world.getTimeOfDay(partialTick) * Math.PI * 2);
+        if (height < -0.1f) return game;
+        float along = Math.min(1, Math.max(0, (height + 0.1f) / 0.55f)), low = 1 - along * along * (3 - 2 * along);
+        return new net.minecraft.world.phys.Vec3(game.x * (1 + 0.25 * low), game.y * (1 - 0.14 * low), game.z * (1 - 0.42 * low));
+    }
+
     /** Clears the surfaces when this frame's terrain is to be shaded here. */
     public void frameStarted(Minecraft client) {
         collecting = lit = false;
