@@ -43,6 +43,8 @@ public final class BlazeShading {
     private BlazeShadingGlow glow;
     private int revision = -1;
     private boolean collecting, lit, failed;
+    /** Whether the lighting pass left the surfaces wiped, as it does each frame it runs. */
+    private boolean clean;
     /** What the log last said: 0 nothing, 1 shadows from sky light, 2 traced shadows. */
     private int logged;
 
@@ -75,7 +77,9 @@ public final class BlazeShading {
             main = renderer.target(client.getMainRenderTarget().frameBufferId);
             if (main == null || main.depthView() == null) return;
             fit(renderer, main);
-            renderer.clearImage(surfaces, 0, 0, 0, 0, 0, 0);
+            // The lighting pass wipes the surfaces it read; only ones it did not get to are cleared here.
+            if (!clean) renderer.clearImage(surfaces, 0, 0, 0, 0, 0, 0);
+            clean = false;
             collecting = true;
         } catch (RuntimeException | Error failure) {
             fail(failure);
@@ -129,7 +133,7 @@ public final class BlazeShading {
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
-            lit = true;
+            lit = clean = true;
             int shown = traced ? 2 : 1;
             if (logged != shown) LoggerFactory.getLogger(BlazeShading.class).info("Overhaul shading on, sun shadows {}", traced ? "traced" : "from sky light");
             logged = shown;
@@ -144,7 +148,8 @@ public final class BlazeShading {
                 && surfaces.height(0) == main.height()) return;
         release(renderer);
         surfaces = renderer.allocator().createImage(ImageFormat.RGBA8_UNORM, main.width(), main.height(), 1, 1,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        clean = false;
         surfacesView = surfaces.view(0, 1, 0, 1);
         forColor = main.colorView();
         forDepth = main.depthView();

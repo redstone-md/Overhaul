@@ -37,7 +37,8 @@ final class BlazeShadingShader {
             layout(binding = 1) uniform sampler2D sceneColor;
             layout(binding = 2) uniform sampler2D sceneDepth;
             layout(binding = 4, rgba8) writeonly uniform image2D lit;
-            layout(binding = 5) uniform sampler2D surfaces;
+            // Read, then wiped for the frame to come.
+            layout(binding = 5, rgba8) uniform image2D surfaces;
             #ifdef LINEAR
             // The glow and the measured brightness of the frame before, and this frame's light at half size.
             layout(binding = 6) uniform sampler2D glow;
@@ -141,8 +142,9 @@ final class BlazeShadingShader {
                 seen.shadow = 0.0;
                 if (!seen.inside) return seen;
                 seen.color = texelFetch(sceneColor, pixel, 0);
-                vec4 surface = texelFetch(surfaces, pixel, 0);
+                vec4 surface = imageLoad(surfaces, pixel);
                 if (surface.a == 0.0) return seen;
+                imageStore(surfaces, pixel, vec4(0.0));
                 seen.terrain = true;
                 seen.normal = unfold(surface.xy * 2.0 - 1.0);
                 seen.blockLevel = surface.z;

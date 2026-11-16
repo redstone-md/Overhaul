@@ -56,13 +56,13 @@ final class BlazeShadingPass implements AutoCloseable {
     }
 
     private int[] sampled() {
-        if (linear) return traced ? new int[]{1, 2, 3, 5, 6, 7} : new int[]{1, 2, 5, 6, 7};
-        return traced ? new int[]{1, 2, 3, 5} : new int[]{1, 2, 5};
+        if (linear) return traced ? new int[]{1, 2, 3, 6, 7} : new int[]{1, 2, 6, 7};
+        return traced ? new int[]{1, 2, 3} : new int[]{1, 2};
     }
 
-    /** The images written: the screen colour, then with a glow the half size light. */
+    /** The images written: the screen colour, the surfaces, then with a glow the half size light. */
     private int[] stored() {
-        return linear ? new int[]{4, 8} : new int[]{4};
+        return linear ? new int[]{4, 5, 8} : new int[]{4, 5};
     }
 
     private void create() {
@@ -102,7 +102,7 @@ final class BlazeShadingPass implements AutoCloseable {
     record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach) {}
 
     /**
-     * Queues the lighting of {@code target}'s colour from {@code surfaces}.
+     * Queues the lighting of {@code target}'s colour from {@code surfaces}, which it leaves wiped where terrain was.
      * A linear pass reads and writes the images {@code glow} gives it.
      */
     void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, BlazeShadingGlow.Light glow) {
@@ -125,8 +125,6 @@ final class BlazeShadingPass implements AutoCloseable {
             views.add(atlas.view());
             samplers.add(atlas.sampler());
         }
-        views.add(surfaces);
-        samplers.add(sampler.handle());
         if (linear) {
             views.add(glow.glow());
             samplers.add(glow.smooth());
@@ -134,7 +132,7 @@ final class BlazeShadingPass implements AutoCloseable {
             samplers.add(sampler.handle());
         }
         GpuImageView lit = inPlace ? target.colorView() : outputView;
-        List<GpuImageView> written = linear ? List.of(lit, glow.spread()) : List.of(lit);
+        List<GpuImageView> written = linear ? List.of(lit, surfaces, glow.spread()) : List.of(lit, surfaces);
         BlazeRayStructures.Structure top = traced ? scene.top() : null;
         if (binding == null || !binding.reads(top, views, samplers, written)) {
             if (binding != null) owner.retire(binding);
