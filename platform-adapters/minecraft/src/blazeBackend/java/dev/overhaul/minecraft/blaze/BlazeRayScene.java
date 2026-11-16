@@ -47,6 +47,9 @@ final class BlazeRayScene implements AutoCloseable {
     private final List<Candidate> waiting = new ArrayList<>();
     private final List<Blas> placed = new ArrayList<>();
     private final List<float[]> offsets = new ArrayList<>();
+    /** The sections found within reach when the whole view was last looked through, and the section the camera stood in then. */
+    private final List<BlazeSectionBuffers> within = new ArrayList<>();
+    private long withinFrom = Long.MIN_VALUE;
     private BlazeRayStructures.Structure top;
     private int topCapacity, frame;
 
@@ -75,8 +78,20 @@ final class BlazeRayScene implements AutoCloseable {
         offsets.clear();
         waiting.clear();
         long reach = (long) (distance + 14) * (distance + 14);
-        for (Object entry : BlazeViewSections.all(area)) {
-            BlazeSectionBuffers section = (BlazeSectionBuffers) entry;
+        // Sections are remembered a section's width further out than they are traced, so the camera can move within
+        // its own section without any being missed.
+        long kept = (long) (distance + 42) * (distance + 42);
+        long from = ((long) Math.floor(x / 16) & 0x1FFFFF) << 42 | ((long) Math.floor(y / 16) & 0x1FFFFF) << 21 | (long) Math.floor(z / 16) & 0x1FFFFF;
+        if (!BlazeOptimization.RT_SCENE_MEMORY.on() || from != withinFrom || (frame & 15) == 0) {
+            withinFrom = from;
+            within.clear();
+            for (Object entry : BlazeViewSections.all(area)) {
+                BlazeSectionBuffers section = (BlazeSectionBuffers) entry;
+                double dx = section.overhaul$originX() + 8 - x, dy = section.overhaul$originY() + 8 - y, dz = section.overhaul$originZ() + 8 - z;
+                if (dx * dx + dy * dy + dz * dz <= kept) within.add(section);
+            }
+        }
+        for (BlazeSectionBuffers section : within) {
             long contents = section.overhaul$contents() & TRACED;
             if (contents == 0) continue;
             int originX = section.overhaul$originX(), originY = section.overhaul$originY(), originZ = section.overhaul$originZ();
