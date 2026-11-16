@@ -70,6 +70,7 @@ public final class BlazeShading {
             failed = false;
         }
         if (client.level != null) BlazeDevClock.hold(client.level);
+        BlazeDevCommands.run(client);
         if (failed || !BlazeOptimization.OVERHAUL_SHADING.on() || client.level == null) return;
         BlazeRenderer renderer = BlazeFrontend.current();
         if (renderer == null || renderer.packScene() != null || Minecraft.useShaderTransparency() || !renderer.context().storageFormats()) return;
