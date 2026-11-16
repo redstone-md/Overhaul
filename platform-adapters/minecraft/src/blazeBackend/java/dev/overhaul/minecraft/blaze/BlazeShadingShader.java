@@ -80,29 +80,31 @@ final class BlazeShadingShader {
             """;
     private static final String BODY = """
             #ifndef TRACED
-            // From the world around the camera back to the screen; main works it out once for its four pixels.
+            // From the world around the camera back to the screen, and what gives the depth in front of the camera
+            // from a place on screen; main works them out once for its four pixels.
             mat4 viewProjection;
+            vec4 depthRow;
 
             // The share of the sun left after walking the depth on screen toward it: steps grow with the distance
             // walked and start at a place that differs per pixel, part being its quarter of a step, so the few steps
             // do not band. A step is in shadow
-            // when what the screen shows there is nearer than the step, by less than a block and a half: anything
+            // when what the screen shows there is nearer the camera than the step, by less than a block and a half: anything
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
             float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
                 float far = reach * clamp(distance / 24.0, 0.2, 1.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
+                vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(light.xyz * far, 0.0);
                 for (int i = 0; i < 8; i++) {
                     float along = (float(i) + offset) / 8.0;
-                    vec3 point = origin + light.xyz * (far * along * along);
-                    vec4 clip = viewProjection * vec4(point, 1.0);
+                    vec4 clip = from + toward * (along * along);
                     if (clip.w <= 0.0) break;
-                    vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+                    vec2 place = clip.xy / clip.w, uv = place * 0.5 + 0.5;
                     if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) break;
                     ivec2 at = ivec2(uv * vec2(size.xy));
                     if (at == pixel) continue;
-                    float gap = length(point) - length(positionOf(at));
-                    float slack = 0.05 + length(point) * 0.004;
+                    float gap = clip.w - 1.0 / dot(depthRow, vec4(place, texelFetch(sceneDepth, at, 0).r * 2.0 - 1.0, 1.0));
+                    float slack = 0.05 + clip.w * 0.004;
                     if (gap > slack && gap < 1.5 + slack) {
                         vec2 edge = min(uv, 1.0 - uv);
                         return 1.0 - smoothstep(0.0, 0.03, min(edge.x, edge.y));
@@ -195,7 +197,10 @@ final class BlazeShadingShader {
             void main() {
                 ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
             #ifndef TRACED
-                if (uintBitsToFloat(options.z) > 0.0) viewProjection = inverse(inverseViewProjection);
+                if (uintBitsToFloat(options.z) > 0.0) {
+                    viewProjection = inverse(inverseViewProjection);
+                    depthRow = vec4(inverseViewProjection[0][3], inverseViewProjection[1][3], inverseViewProjection[2][3], inverseViewProjection[3][3]);
+                }
             #endif
                 Seen seen[4];
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
