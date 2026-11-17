@@ -5,7 +5,9 @@ import com.mojang.blaze3d.platform.NativeImage;
 /**
  * Mip levels averaged in linear light and weighted by alpha, as Sodium and Embeddium build them. The game averages
  * sRGB values and lets fully transparent pixels pull colour in, so distant blocks come out darker and speckled,
- * which shimmers as the camera moves. Colours are ABGR: red in the low byte, alpha in the high one.
+ * which shimmers as the camera moves. Alpha is the plain average, so a level keeps the share of the sprite its parents
+ * cover: Sodium quarters it beside a transparent pixel, which thins far leaves down to bare trunks. Colours are
+ * ABGR: red in the low byte, alpha in the high one.
  */
 public final class BlazeMipColors {
     private static final float[] TO_LINEAR = new float[256];
@@ -35,8 +37,8 @@ public final class BlazeMipColors {
     private static int pair(int one, int two) {
         int alphaOne = one >>> 24, alphaTwo = two >>> 24;
         if (alphaOne == alphaTwo) return pack(0.5F, one, 0.5F, two, alphaOne);
-        if (alphaOne == 0) return two & 0xFFFFFF | (alphaTwo >> 2) << 24;
-        if (alphaTwo == 0) return one & 0xFFFFFF | (alphaOne >> 2) << 24;
+        if (alphaOne == 0) return two & 0xFFFFFF | (alphaTwo >> 1) << 24;
+        if (alphaTwo == 0) return one & 0xFFFFFF | (alphaOne >> 1) << 24;
         float scale = 1.0F / (alphaOne + alphaTwo);
         return pack(alphaOne * scale, one, alphaTwo * scale, two, (alphaOne + alphaTwo) >> 1);
     }
