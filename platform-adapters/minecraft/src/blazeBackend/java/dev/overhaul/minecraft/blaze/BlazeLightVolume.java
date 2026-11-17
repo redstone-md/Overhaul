@@ -107,6 +107,17 @@ final class BlazeLightVolume implements AutoCloseable {
                 return texelFetch(lightBlocks, ivec2((tile & 15) * 64 + inside.x + (inside.y & 3) * 16, (tile >> 4) * 64 + inside.z + (inside.y >> 2) * 16), 0);
             }
 
+            // What the first of the four blocks beside a place lets pass, of those that colour light.
+            vec3 beside(vec3 at) {
+                const vec2 SIDES[4] = vec2[](vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0));
+                for (int side = 0; side < 4; side++) {
+                    vec4 block = volumeBlock(at + vec3(SIDES[side].x, 0.0, SIDES[side].y));
+                    float sum = block.r + block.g + block.b;
+                    if (block.a == 0.0 && sum > 0.0 && sum < 2.97) return block.rgb;
+                }
+                return vec3(1.0);
+            }
+
             // What the sun's light is left with on its way to a place: it takes the colour of the stained glass, ice
             // or leaves it crosses within twenty blocks, the deepest of them, and loses no strength to it.
             vec3 sunThrough(vec3 position, vec3 normal) {
@@ -116,8 +127,12 @@ final class BlazeLightVolume implements AutoCloseable {
                     vec3 away = abs(at);
                     if (max(away.x, away.z) > 54.0 || away.y > 22.0) break;
                     vec4 block = volumeBlock(at);
-                    // Solid blocks, lights and fluids are not this walk's to judge.
-                    if (block.a == 0.0 && block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
+                    // Lights and fluids are not this walk's to judge. A solid block here means the sun slipped past
+                    // its edge, so the glass beside it colours the light.
+                    if (block.a == 0.0) {
+                        if (block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
+                        else left = min(left, beside(at));
+                    }
                     at += light.xyz;
                 }
                 float most = max(left.r, max(left.g, left.b));
