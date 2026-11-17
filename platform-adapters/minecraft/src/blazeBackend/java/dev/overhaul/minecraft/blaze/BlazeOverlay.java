@@ -131,6 +131,13 @@ public final class BlazeOverlay {
                     double load = BlazeCpuLoad.get();
                     add("CPU", load < 0 ? "-" : Math.round(load * 100) + "%", tint);
                 }
+                case GPU_LOAD -> sensor("GPU use", BlazeHardware.Reading.GPU_LOAD, "%.0f%%", renderer, tint);
+                case GPU_TEMPERATURE -> sensor("GPU temp", BlazeHardware.Reading.GPU_TEMPERATURE, "%.0f°C", renderer, tint);
+                case GPU_CLOCK -> sensor("GPU clock", BlazeHardware.Reading.GPU_CLOCK, "%.0f MHz", renderer, tint);
+                case GPU_POWER -> sensor("GPU power", BlazeHardware.Reading.GPU_POWER, "%.0f W", renderer, tint);
+                case GPU_FAN -> sensor("GPU fan", BlazeHardware.Reading.GPU_FAN, "%.0f%%", renderer, tint);
+                case CPU_CLOCK -> sensor("CPU clock", BlazeHardware.Reading.CPU_CLOCK, "%.0f MHz", renderer, tint);
+                case THERMAL_ZONE -> sensor("Board", BlazeHardware.Reading.ZONE_TEMPERATURE, "%.0f°C", renderer, tint);
                 case MEMORY -> {
                     Runtime runtime = Runtime.getRuntime();
                     add("RAM", gigabytes(runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory()), tint);
@@ -155,6 +162,11 @@ public final class BlazeOverlay {
             rowWidth += font.width(line[0]) + 4 + font.width(line[1]) + GAP * 2;
         }
         if (!lines.isEmpty()) rowWidth -= GAP * 2;
+    }
+
+    private void sensor(String label, BlazeHardware.Reading reading, String format, BlazeRenderer renderer, int colour) {
+        double value = renderer == null ? Double.NaN : BlazeHardware.get(reading, renderer.context().deviceName());
+        add(label, Double.isNaN(value) ? "-" : String.format(Locale.ROOT, format, value), colour);
     }
 
     private void add(String label, String value, int colour) {
