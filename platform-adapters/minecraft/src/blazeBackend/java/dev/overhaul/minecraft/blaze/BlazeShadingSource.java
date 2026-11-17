@@ -17,6 +17,7 @@ final class BlazeShadingSource {
     private static final Pattern TERRAIN = Pattern.compile("\\brendertype_(?:solid|cutout|cutout_mipped)\\.vsh\\b"),
             MAIN = Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(?:void\\s*)?\\)"),
             NORMAL = Pattern.compile("\\bin\\s+vec3\\s+Normal\\s*;"),
+            COLOR = Pattern.compile("\\bin\\s+vec4\\s+Color\\s*;"),
             LIGHTMAP = Pattern.compile("\\bminecraft_sample_lightmap\\s*\\("),
             FOG = Pattern.compile("\\blinear_fog\\s*\\("),
             OUTPUT = Pattern.compile("\\bout\\s+vec4\\s+fragColor\\s*;");
@@ -30,6 +31,7 @@ final class BlazeShadingSource {
             out vec3 shadingNormal;
             out vec3 shadingToward;
             out vec3 shadingPlace;
+            out float shadingWater;
             """;
     private static final String MIRROR_VERTEX_MAIN = """
 
@@ -39,6 +41,9 @@ final class BlazeShadingSource {
                 shadingToward = transpose(mat3(ModelViewMat)) * (seen.xyz / seen.w);
                 shadingPlace = shadingToward + ShadingEye.xyz;
                 shadingNormal = Normal;
+                // Water comes tinted by its biome; glass, ice and slime come white.
+                float most = max(Color.r, max(Color.g, Color.b));
+                shadingWater = step(0.12 * most, most - min(Color.r, min(Color.g, Color.b)));
             }
             """;
     private static final String MIRROR_FRAGMENT_HEAD = """
@@ -48,6 +53,7 @@ final class BlazeShadingSource {
             in vec3 shadingNormal;
             in vec3 shadingToward;
             in vec3 shadingPlace;
+            in float shadingWater;
             """;
     // A surface seen at a shallow angle shows the sky above it and the sun's glint; one facing up also ripples.
     private static final String MIRROR_FRAGMENT_MAIN = """
@@ -57,7 +63,8 @@ final class BlazeShadingSource {
             void main() {
                 shading_main();
                 vec3 normal = normalize(shadingNormal);
-                float up = step(0.9, normal.y);
+                float water = step(0.5, shadingWater);
+                float up = step(0.9, normal.y) * water;
                 vec2 at = shadingPlace.xz;
                 float time = ShadingEye.w;
                 vec2 ripple = vec2(sin(at.x * 1.7 + at.y * 0.6 + time * 1.3) + sin(at.x * 3.9 - at.y * 2.3 - time * 1.9) * 0.5,
@@ -67,18 +74,20 @@ final class BlazeShadingSource {
                 float far = length(shadingToward);
                 vec3 toward = shadingToward / max(far, 1e-4);
                 float facing = clamp(dot(-toward, normal), 0.0, 1.0);
-                float mirror = (0.03 + 0.97 * pow(1.0 - facing, 5.0)) * (0.35 + 0.65 * up);
+                // Glass mirrors less than water, and the same on every face.
+                float mirror = (0.03 + 0.97 * pow(1.0 - facing, 5.0)) * mix(0.45, 0.35 + 0.65 * up, water);
                 vec3 bounced = reflect(toward, normal);
                 vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
                 float day = step(0.235, ShadingSky.w);
                 // At night the water is slate under the night sky's own dim air, not the day's blue.
                 above = mix(max(dot(above, vec3(0.3, 0.59, 0.11)) * vec3(0.5, 0.62, 0.75), NIGHT_AIR), above, day);
-                fragColor.rgb = mix(dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.45, 0.6, 0.75), fragColor.rgb, day);
+                fragColor.rgb = mix(dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.45, 0.6, 0.75), fragColor.rgb, max(day, 1.0 - water));
                 // Under a low sun the water mirrors the dusk's dim warm air, not the day's blue.
                 above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38) * (1.0 + 1.5 * pow(max(dot(bounced, ShadingSun.xyz), 0.0), 3.0)), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
-                fragColor.rgb = mix(fragColor.rgb, dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(1.05, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.9);
+                fragColor.rgb = mix(fragColor.rgb, dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(1.05, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.9 * water);
                 vec3 sun = mix(vec3(0.3, 0.36, 0.55), mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, ShadingSun.y)), day);
-                float glint = pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * ShadingSun.w * up;
+                // Water glints sharply off its ripples; a pane of glass shows the sun wider and fainter on any face.
+                float glint = mix(pow(max(dot(bounced, ShadingSun.xyz), 0.0), 48.0) * 0.5, pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * up, water) * ShadingSun.w;
                 float clear = 1.0 - smoothstep(FogStart, FogEnd, far);
                 fragColor.rgb = mix(mix(fragColor.rgb, above, mirror * clear), sun, min(glint * 3.0, 1.0) * clear);
                 fragColor.a = max(fragColor.a, mirror * clear);
@@ -204,9 +213,9 @@ final class BlazeShadingSource {
         return TRANSLUCENT.matcher(programName).find();
     }
 
-    /** The translucent vertex stage passing on where each surface is and faces, or null when it has no normal. */
+    /** The translucent vertex stage passing on where each surface is and faces, or null when it has no normal or colour. */
     static String mirrorVertex(String source) {
-        if (!NORMAL.matcher(source).find()) return null;
+        if (!NORMAL.matcher(source).find() || !COLOR.matcher(source).find()) return null;
         return rename(source, MIRROR_VERTEX_HEAD, MIRROR_VERTEX_MAIN);
     }
 
