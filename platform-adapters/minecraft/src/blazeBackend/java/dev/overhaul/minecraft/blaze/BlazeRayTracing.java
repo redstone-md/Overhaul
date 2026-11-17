@@ -113,13 +113,24 @@ public final class BlazeRayTracing {
      * the world: the sun goes on lighting through the twilight, from just above the horizon, as its light fades.
      */
     private static final float TWILIGHT = 0.08f;
+    /**
+     * How far the sun's path leans from overhead toward the south under Overhaul's own shading, in radians, so noon
+     * still casts shadows; the sky's own sun and moon lean with it.
+     */
+    static final float LEAN = (float) Math.toRadians(32);
+
+    /** Whether the sun's path leans: only where Overhaul's own shading lights the world. */
+    static boolean leaning() {
+        return BlazeOptimization.OVERHAUL_SHADING.on();
+    }
 
     static float[] light(ClientLevel world, float partialTick) {
         double angle = world.getTimeOfDay(partialTick) * Math.PI * 2;
-        float x = (float) -Math.sin(angle), y = (float) Math.cos(angle);
+        float lean = leaning() ? LEAN : 0, x = (float) -Math.sin(angle), up = (float) Math.cos(angle);
+        float y = up * (float) Math.cos(lean), z = up * (float) Math.sin(lean);
         float weather = SHOW_LIGHT ? 1 : 1 - 0.85f * world.getRainLevel(partialTick);
-        if (y >= -TWILIGHT) return new float[]{x, Math.max(y, 0.02f), 0, Math.min(1, (y + TWILIGHT) * 5) * weather};
-        return new float[]{-x, -y, 0, 0.35f * Math.min(1, (-y - TWILIGHT) * 4) * weather};
+        if (y >= -TWILIGHT) return new float[]{x, Math.max(y, 0.02f), z, Math.min(1, (y + TWILIGHT) * 5) * weather};
+        return new float[]{-x, -y, -z, 0.35f * Math.min(1, (-y - TWILIGHT) * 4) * weather};
     }
 
     static float[] sky(ClientLevel world, Vec3 position, float partialTick) {

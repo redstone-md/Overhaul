@@ -12,10 +12,12 @@ import net.minecraft.world.phys.Vec3;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Lets Overhaul's own shading collect solid and cutout terrain's surfaces, then lights them before anything else draws. */
@@ -36,6 +38,13 @@ abstract class LevelRendererShading120Mixin {
     private void overhaul$shadeTerrain(PoseStack pose, float partial, long nanos, boolean outline, Camera camera, GameRenderer game, LightTexture light, Matrix4f projection,
                                        CallbackInfo callback) {
         BlazeShading.get().terrainDrawn(Minecraft.getInstance(), viewArea, camera, partial, pose.last().pose(), projection);
+    }
+
+    // The sun, moon and stars lean with the light: the turn that sets them east to west is the fourth of the sky's.
+    @ModifyArg(method = "renderSky", require = 0, at = @At(value = "INVOKE", ordinal = 3,
+            target = "Lcom/mojang/blaze3d/vertex/PoseStack;mulPose(Lorg/joml/Quaternionf;)V"))
+    private Quaternionf overhaul$leanSky(Quaternionf turn) {
+        return BlazeShading.get().skyTurn(turn);
     }
 
     // The sky lit here already carries clouds of its own.

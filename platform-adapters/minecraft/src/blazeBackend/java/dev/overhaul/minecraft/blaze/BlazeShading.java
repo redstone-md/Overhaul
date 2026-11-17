@@ -63,6 +63,11 @@ public final class BlazeShading {
     /** The draw that shaded terrain goes to: the game's snapshot on a shaded program, its compact twin and the target. */
     record Route(BlazeShaderSnapshot shader, BlazeProgramCompiler.Program compact, BlazeTarget target) {}
 
+    /** The turn the sky's sun, moon and stars are drawn under, leaned the way the light of {@link BlazeRayTracing#light} leans. */
+    public org.joml.Quaternionf skyTurn(org.joml.Quaternionf turn) {
+        return BlazeRayTracing.leaning() ? new org.joml.Quaternionf().rotationX(BlazeRayTracing.LEAN).mul(turn) : turn;
+    }
+
     /** Whether this frame's sky already carries clouds, so the game's own are not to be drawn. */
     public boolean cloudsDrawn() {
         return cloudy;

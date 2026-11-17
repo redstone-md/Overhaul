@@ -61,7 +61,7 @@ final class BlazeShadingClouds {
                 vec2 unit = at / 2048.0;
                 float shape = cloudNoise(unit * 9.0, 9.0) * 0.56 + cloudNoise(unit * 26.0 + 3.7, 26.0) * 0.24;
                 shape += fine ? cloudNoise(unit * 80.0 + 9.1, 80.0) * 0.14 + cloudNoise(unit * 240.0, 240.0) * 0.06 : 0.1;
-                float edge = 0.52 + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
+                float edge = 0.48 + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
                 return clamp((shape - edge) * 7.0, 0.0, 1.0);
             }
 
@@ -92,8 +92,8 @@ final class BlazeShadingClouds {
                 float turn = fract(52.9829189 * fract(dot(vec2(pixel), vec2(0.06711056, 0.00583715))));
                 // Night clouds all but vanish into the dark; a low sun leaves them dim against its glow.
                 float low = lowSun();
-                vec3 sun = sunColor() * clamp(light.w, 0.0, 1.0) * (0.015 + 0.5 * day()) * (1.0 - 0.45 * low);
-                vec3 air = linear(sky.rgb) * (0.1 + 0.22 * day()) + vec3(0.27, 0.33, 0.43) * day() * (1.0 - 0.6 * low) + vec3(0.3, 0.13, 0.05) * low + nightAir() * 0.6;
+                vec3 sun = sunColor() * clamp(light.w, 0.0, 1.0) * (0.015 + 0.28 * day()) * (1.0 - 0.45 * low);
+                vec3 air = linear(sky.rgb) * (0.1 + 0.22 * day()) + vec3(0.2, 0.26, 0.36) * day() * (1.0 - 0.6 * low) + vec3(0.34, 0.14, 0.04) * low + nightAir() * 0.6;
                 vec2 sunward = light.xz / max(light.y, 0.3) * 9.0;
                 float left = 1.0;
                 vec3 lit = vec3(0.0);
