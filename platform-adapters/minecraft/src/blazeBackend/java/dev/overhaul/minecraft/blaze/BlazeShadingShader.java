@@ -104,20 +104,26 @@ final class BlazeShadingShader {
             // A number that stays with a place in the world, not with a pixel: one per texel of a block near the
             // camera, per ever larger cells further off so a cell never shrinks under a pixel. What is scattered by it
             // stands still while the camera moves. The cells repeat every sixteen blocks, as the camera's place does.
+            // Neighbouring cells get numbers far apart, so what is scattered comes out as an even weave, not in clumps.
             float grainAt(vec3 position, vec3 normal) {
                 float cells = 16.0 / exp2(max(ceil(log2(length(position) / 24.0)), 0.0));
                 vec3 camera = vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0;
-                vec3 at = fract(mod(floor((position + camera - normal * 0.02) * cells), 16.0 * cells) * vec3(0.1031, 0.1030, 0.0973));
-                at += dot(at, at.yxz + 33.33);
-                return fract((at.x + at.y) * at.z);
+                vec3 at = mod(floor((position + camera - normal * 0.02) * cells), 16.0 * cells);
+                return fract(52.9829189 * fract(dot(at, vec3(0.06711056, 0.0291, 0.00583715))));
             }
+
+            // How many more spots of the sun each pixel aims at where a shadow's edge passes.
+            const int SPARE = 3;
 
             // Where on the sun's disc a pixel aims: each of the four pixels that share what they find takes its own spot,
             // turned by the grain of the place, so a shadow's edge softens the further it falls from what casts it.
+            // Parts from four on are the spare spots, laid between the first four.
             vec3 sunSpot(float grain, float part, float wide) {
-                float turn = 6.2831853 * (part * 0.25 + grain);
+                bool spare = part >= 4.0;
+                float turn = 6.2831853 * (grain + (spare ? 0.125 + (part - 4.0) * 0.618034 : part * 0.25));
+                float away = spare ? (part - 3.5) / float(4 * SPARE) : (part + 0.5) * 0.25;
                 vec3 across = normalize(cross(light.xyz, vec3(0.0, 1.0, 0.01)));
-                return normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * wide * sqrt((part + 0.5) * 0.25));
+                return normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * wide * sqrt(away));
             }
 
             // How far the walk on screen is set to go where rays end.
@@ -184,16 +190,28 @@ final class BlazeShadingShader {
                 return guess;
             }
 
-            // What one pixel holds before it is lit; shadow is the share of the sun it found for itself.
-            struct Seen { vec4 color; vec3 normal; vec3 position; float blockLevel; float skyLevel; float shadow; bool inside; bool terrain; bool soft; };
+            // What one pixel holds before it is lit.
+            struct Seen { vec4 color; vec3 normal; vec3 position; float blockLevel; float skyLevel; bool inside; bool terrain; bool soft; };
 
-            // Reads one pixel; part is its place among the four that share what they found of the sun.
-            Seen seenAt(ivec2 pixel, float part) {
+            // Whether the sun can reach a pixel at all, and the side of its surface that faces the sun.
+            bool sunny(Seen seen) { return seen.terrain && light.w > 0.0 && (seen.soft || dot(seen.normal, light.xyz) > 0.0); }
+            vec3 sunward(Seen seen) { return dot(seen.normal, light.xyz) > 0.0 ? seen.normal : -seen.normal; }
+
+            // The share of the sun a pixel finds for itself at one spot of the disc; part is the spot, the first four
+            // being the places of the four pixels that share what they find.
+            float sunShare(Seen seen, ivec2 pixel, float part) {
+                if (!sunny(seen)) return 0.0;
+                float share = shadowAt(seen.position, sunward(seen), seen.skyLevel, length(seen.position), pixel, part);
+                // What passes through a soft surface from behind still comes from the sky: none of it reaches a cave.
+                return seen.soft ? mix(share, 1.0, 0.4 * smoothstep(0.5, 0.95, seen.skyLevel)) : share;
+            }
+
+            // Reads one pixel.
+            Seen seenAt(ivec2 pixel) {
                 Seen seen;
                 seen.inside = all(lessThan(uvec2(pixel), size.xy));
                 seen.terrain = false;
                 seen.soft = false;
-                seen.shadow = 0.0;
                 if (!seen.inside) return seen;
                 seen.color = texelFetch(sceneColor, pixel, 0);
                 vec4 surface = imageLoad(surfaces, pixel);
@@ -207,11 +225,6 @@ final class BlazeShadingShader {
                 seen.blockLevel = float(marked >> 1) / 127.0;
                 seen.skyLevel = clamp((surface.a * 255.0 - 1.0) / 254.0, 0.0, 1.0);
                 seen.position = positionOf(pixel);
-                float facing = dot(seen.normal, light.xyz);
-                if ((facing > 0.0 || seen.soft) && light.w > 0.0)
-                    seen.shadow = shadowAt(seen.position, facing > 0.0 ? seen.normal : -seen.normal, seen.skyLevel, length(seen.position), pixel, part);
-                // What passes through a soft surface from behind still comes from the sky: none of it reaches a cave.
-                if (seen.soft) seen.shadow = mix(seen.shadow, 1.0, 0.4 * smoothstep(0.5, 0.95, seen.skyLevel));
                 return seen;
             }
 
@@ -357,8 +370,21 @@ final class BlazeShadingShader {
                 return vec4(shaded, 1.0);
             }
 
+            // The sun a pixel finds at one spot of the disc: in the colour of the glass on the way, then its share.
+            vec4 sunOn(Seen seen, ivec2 pixel, float part) {
+                float share = sunShare(seen, pixel, part);
+                vec3 tint = vec3(1.0);
+            #ifdef COLORED
+                // The colour is looked for along the very line the share was found on.
+                vec3 toward = sunward(seen);
+                if (share > 0.0) tint = sunThrough(seen.position, toward, sunSpot(grainAt(seen.position, toward), part, 0.035));
+            #endif
+                return vec4(tint * share, share);
+            }
+
             // Two by two pixels at a time: each finds its share of the sun at its own place along the way, and those
-            // on one surface share the mean, which is as good as four times the steps.
+            // on one surface share the mean, which is as good as four times the steps. Where the four differ a
+            // shadow's edge passes, and each looks at more spots of the sun so the edge comes out even.
             void main() {
                 ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
                 if (uintBitsToFloat(options.z & 0xFFFFFF00u) != 0.0) {
@@ -367,7 +393,27 @@ final class BlazeShadingShader {
                 }
                 Seen seen[4];
                 float opens[4];
-                for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));
+                vec4 suns[4];
+                float least = 1.0, most = 0.0;
+                for (int i = 0; i < 4; i++) {
+                    ivec2 pixel = cell * 2 + ivec2(i & 1, i >> 1);
+                    seen[i] = seenAt(pixel);
+                    suns[i] = sunOn(seen[i], pixel, float(i));
+                    if (!sunny(seen[i])) continue;
+                    least = min(least, suns[i].a);
+                    most = max(most, suns[i].a);
+                }
+                // Four that agree may still have missed an edge: two of them look once more, at the disc's rim.
+                if (most - least <= 0.02 && most >= least) for (int i = 0; i < 4; i += 3) {
+                    if (!sunny(seen[i])) continue;
+                    float rim = sunShare(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(4 * SPARE + i));
+                    least = min(least, rim);
+                    most = max(most, rim);
+                }
+                if (most - least > 0.02) for (int i = 0; i < 4; i++) {
+                    for (int spot = 0; spot < SPARE; spot++) suns[i] += sunOn(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(4 + i + 4 * spot));
+                    suns[i] /= float(1 + SPARE);
+                }
                 vec4 sum = vec4(0.0);
                 float shaft = shaftAt(cell * 2);
                 // Clouds shade broadly, so the four pixels share what the first of them on terrain finds.
@@ -377,16 +423,6 @@ final class BlazeShadingShader {
                     break;
                 }
                 for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
-            #ifdef COLORED
-                // What colours the sun on its way to each pixel, along the very line its share of the sun was found on.
-                vec3 tints[4];
-                for (int i = 0; i < 4; i++) {
-                    tints[i] = vec3(0.0);
-                    if (!seen[i].terrain || seen[i].shadow <= 0.0 || light.w <= 0.0) continue;
-                    vec3 toward = dot(seen[i].normal, light.xyz) > 0.0 ? seen[i].normal : -seen[i].normal;
-                    tints[i] = seen[i].shadow * sunThrough(seen[i].position, toward, sunSpot(grainAt(seen[i].position, toward), float(i), 0.035));
-                }
-            #endif
             #ifdef BOUNCED
                 // The light that came back is gathered coarsely: each pixel takes it from the nine around that lie as far as it does.
                 vec4 back[9];
@@ -399,10 +435,8 @@ final class BlazeShadingShader {
                     if (seen[i].terrain) for (int j = 0; j < 4; j++) {
                         if (!seen[j].terrain || dot(seen[i].normal, seen[j].normal) < 0.9) continue;
                         if (abs(length(seen[j].position) - distance) > 0.1 + 0.02 * distance) continue;
-                        shadow += seen[j].shadow;
-            #ifdef COLORED
-                        tint += tints[j];
-            #endif
+                        shadow += suns[j].a;
+                        tint += suns[j].rgb;
                         open += opens[j];
                         weight += 1.0;
                     }
