@@ -167,6 +167,8 @@ final class BlazeRayShader {
 
             // The colour of block light: warm, unless a shader knows the colour of the light that falls here.
             vec3 torchColor = vec3(1.0, 0.66, 0.38);
+            // What the sun's light passed on its way here: the colour of glass or leaves, white for open air.
+            vec3 sunFilter = vec3(1.0);
 
             // The light on a surface of terrain: a sun warmer than the sun itself over a sky bluer than the sky, the
             // way film sees daylight, and warm block light. The sun is strong against the sky so shadows read, and a
@@ -175,7 +177,7 @@ final class BlazeRayShader {
             vec3 daylight(vec3 normal, vec2 levels, float shadow, bool soft) {
                 float low = lowSun();
                 float facing = dot(normal, light.xyz);
-                vec3 sun = sunColor() * vec3(0.93, 0.97, 1.0) * light.w * (soft ? 0.25 + 0.6 * max(light.y, 0.0) + 0.15 * facing : max(facing, 0.0)) * shadow * (1.7 - (soft ? 1.0 : 0.9) * low);
+                vec3 sun = sunColor() * vec3(0.93, 0.97, 1.0) * light.w * (soft ? 0.25 + 0.6 * max(light.y, 0.0) + 0.15 * facing : max(facing, 0.0)) * shadow * (1.7 - (soft ? 1.0 : 0.9) * low) * sunFilter;
                 vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(0.9, 1.0, 1.12), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.21 * sky.w) * (1.0 - 0.68 * low) * (0.32 + 0.68 * normal.y);
                 vec3 torch = torchColor * brightness(levels.x) * 1.45;
                 return sun + ambient + torch + 0.012;

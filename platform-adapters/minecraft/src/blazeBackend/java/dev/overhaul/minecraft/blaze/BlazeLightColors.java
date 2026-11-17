@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * What a block is to coloured light, as one word a {@link BlazeLightVolume} stores per block: red, green and blue in
- * the low bytes and the light level times seventeen in the high one. A block that gives light carries the colour of
+ * the low bytes and the light level times seventeen in the high one, or one there for a fluid. A block that gives light carries the colour of
  * its light, taken from the bright part of its texture; any other carries what it lets through: white for air,
  * nothing for a solid block, and its own colour, paled, for glass, ice, leaves and water. Answers are kept per block
  * state and per texture, so a texture is read once.
@@ -62,8 +62,8 @@ final class BlazeLightColors {
         if (!fluid && !leaves && !(block instanceof HalfTransparentBlock) && !(block instanceof StainedGlassPaneBlock)) return CLEAR;
         int colour = state.getMapColor(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).col;
         if (colour == 0) return CLEAR;
-        float keep = leaves ? 0.35f : 0.5f;
-        return pack(pale(colour >> 16, keep), pale(colour >> 8, keep), pale(colour, keep));
+        float keep = leaves ? 0.45f : fluid ? 0.5f : 0.9f;
+        return pack(pale(colour >> 16, keep), pale(colour >> 8, keep), pale(colour, keep)) | (fluid ? 1 << 24 : 0);
     }
 
     private static float pale(int channel, float keep) {

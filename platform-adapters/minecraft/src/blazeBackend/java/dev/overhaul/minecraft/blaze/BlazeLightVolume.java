@@ -72,20 +72,22 @@ final class BlazeLightVolume implements AutoCloseable {
                 ivec3 voxel = ivec3(gl_GlobalInvocationID);
                 ivec3 within = (voxel - origin.xyz) & (SIZE - 1);
                 vec4 block = blockAt(voxel);
-                vec3 passes = block.a > 0.0 ? vec3(1.0) : block.rgb;
+                // A light's own word carries its level; the faintest mark is a fluid's.
+                bool gives = block.a > 0.03;
+                vec3 passes = gives ? vec3(1.0) : block.rgb;
                 vec3 light = vec3(0.0);
                 if (passes.r + passes.g + passes.b > 0.0) {
                     light = max(max(from(voxel, within, ivec3(1, 0, 0)), from(voxel, within, ivec3(-1, 0, 0))),
                             max(from(voxel, within, ivec3(0, 1, 0)), from(voxel, within, ivec3(0, -1, 0))));
                     light = max(light, max(from(voxel, within, ivec3(0, 0, 1)), from(voxel, within, ivec3(0, 0, -1)))) * passes;
                 }
-                if (block.a > 0.0) light = max(light, block.rgb * block.a);
+                if (gives) light = max(light, block.rgb * block.a);
                 imageStore(after, voxel, vec4(light, 1.0));
             }
             """;
 
-    /** What the lighting pass reads: the volume, how to sample it, and which sixteen blocks of it the camera is in. */
-    record Sampled(GpuImageView view, long sampler, int cell) {}
+    /** What the lighting pass reads: the volume and the blocks, how to sample each, and which sixteen blocks of them the camera is in. */
+    record Sampled(GpuImageView view, long sampler, GpuImageView blocks, long exact, int cell) {}
 
     private final BlazeRenderer owner;
     private final VulkanContext context;
@@ -217,7 +219,7 @@ final class BlazeLightVolume implements AutoCloseable {
             spreadAt = now;
             owner.enqueue(new Spread((originX & WIDE - 1) * 16, (originY & HIGH - 1) * 16, (originZ & WIDE - 1) * 16));
         }
-        return new Sampled(lightViews[0], wrapped.handle(), Math.floorDiv(x, 16) & WIDE - 1 | (Math.floorDiv(y, 16) & HIGH - 1) << 3 | (Math.floorDiv(z, 16) & WIDE - 1) << 5);
+        return new Sampled(lightViews[0], wrapped.handle(), blocksView, nearest.handle(), Math.floorDiv(x, 16) & WIDE - 1 | (Math.floorDiv(y, 16) & HIGH - 1) << 3 | (Math.floorDiv(z, 16) & WIDE - 1) << 5);
     }
 
     /** The section of the volume that falls into a slot: the one whose coordinates end in the slot's. */

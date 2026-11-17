@@ -48,6 +48,8 @@ final class BlazeShadingShader {
             #ifdef COLORED
             // The colour of block light around the camera, a block to a texel, wrapping.
             layout(binding = 9) uniform sampler3D lightColors;
+            // The blocks that volume was spread through, a tile of sixteen layers to a section: what each lets pass.
+            layout(binding = 10) uniform sampler2D lightBlocks;
             #endif
             """ + FRAME;
     /** Between the colours the screen shows and linear light, and the filmic curve that brings light back to the screen. */
@@ -312,6 +314,38 @@ final class BlazeShadingShader {
             #endif
             }
 
+            #ifdef COLORED
+            // Where the camera is in the light volume, which wraps every 128 by 64 by 128 blocks.
+            vec3 volumeCamera() {
+                return vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0
+                        + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
+            }
+
+            // What the sun's light is left with on its way to a place: it takes the colour of the stained glass, ice
+            // or leaves it crosses within twenty blocks, the deepest of them, and loses no strength to it.
+            vec3 sunThrough(vec3 position, vec3 normal) {
+                vec3 camera = volumeCamera();
+                vec3 at = position + normal * 0.6 + light.xyz * 0.5;
+                vec3 left = vec3(1.0);
+                for (int i = 0; i < 20; i++) {
+                    vec3 away = abs(at);
+                    if (max(away.x, away.z) > 54.0 || away.y > 22.0) break;
+                    ivec3 voxel = ivec3(floor(at + camera)) & ivec3(127, 63, 127);
+                    ivec3 slot = voxel >> 4, inside = voxel & 15;
+                    int tile = slot.x + slot.z * 8 + slot.y * 64;
+                    vec4 block = texelFetch(lightBlocks, ivec2((tile & 15) * 64 + inside.x + (inside.y & 3) * 16, (tile >> 4) * 64 + inside.z + (inside.y >> 2) * 16), 0);
+                    // Solid blocks, lights and fluids are not this walk's to judge.
+                    if (block.a == 0.0 && block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
+                    at += light.xyz;
+                }
+                float most = max(left.r, max(left.g, left.b));
+                if (most <= 0.0) return vec3(1.0);
+                left /= most;
+                float grey = dot(left, vec3(0.3, 0.59, 0.11));
+                return max(mix(vec3(grey), left, 1.6), 0.0);
+            }
+            #endif
+
             // The colour of the block light at a place: that of the lights whose light reaches it, tinted by what it
             // came through, as the volume around the camera holds it; warm where the volume ends or knows of none.
             vec3 torchAt(vec3 position, vec3 normal) {
@@ -320,14 +354,16 @@ final class BlazeShadingShader {
                 vec3 away = abs(position);
                 float known = (1.0 - smoothstep(44.0, 54.0, max(away.x, away.z))) * (1.0 - smoothstep(16.0, 22.0, away.y));
                 if (known <= 0.0) return warm;
-                vec3 camera = vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0
-                        + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
-                vec3 found = textureLod(lightColors, (position + camera + normal * 0.5) / vec3(128.0, 64.0, 128.0), 0.0).rgb;
+                vec3 found = textureLod(lightColors, (position + volumeCamera() + normal * 0.5) / vec3(128.0, 64.0, 128.0), 0.0).rgb;
                 float most = max(found.r, max(found.g, found.b));
                 if (most <= 0.0) return warm;
                 vec3 hue = found / most;
-                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room.
-                hue *= mix(1.0, min(0.72 / max(dot(hue, vec3(0.3, 0.59, 0.11)), 0.05), 2.5), 0.5);
+                // Richer than the volume holds it, the way a lit room looks through a lens.
+                float grey = dot(hue, vec3(0.3, 0.59, 0.11));
+                hue = max(mix(vec3(grey), hue, 1.3), 0.0);
+                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room;
+                // and near its source a coloured light is stronger than the plain warm one.
+                hue *= mix(1.0, min(0.72 / max(grey, 0.05), 2.5), 0.5) * (1.15 + 0.5 * most * most);
                 return mix(warm, hue, known * smoothstep(0.0, 0.04, most));
             #else
                 return warm;
@@ -344,9 +380,12 @@ final class BlazeShadingShader {
                 }
                 vec3 normal = seen.normal;
                 torchColor = seen.blockLevel > 0.0 ? torchAt(seen.position, normal) : vec3(1.0, 0.66, 0.38);
+            #ifdef COLORED
+                sunFilter = shadow > 0.0 && light.w > 0.0 ? sunThrough(seen.position, normal) : vec3(1.0);
+            #endif
                 vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) * open;
                 // The eye loses colour in the dark, away from fire.
-                float dim = 0.55 * (1.0 - day()) * (1.0 - brightness(seen.blockLevel));
+                float dim = 0.55 * (1.0 - day()) * (1.0 - smoothstep(0.0, 0.45, seen.blockLevel));
                 shaded = mix(shaded, vec3(0.75, 0.95, 1.2) * dot(shaded, vec3(0.3, 0.59, 0.11)), dim);
                 // Daylight keeps colours rich.
                 shaded = max(mix(vec3(dot(shaded, vec3(0.3, 0.59, 0.11))), shaded, 1.0 + 0.12 * day()), 0.0);

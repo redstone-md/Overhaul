@@ -59,7 +59,7 @@ final class BlazeShadingPass implements AutoCloseable {
     }
 
     private int[] sampled() {
-        int[] slots = new int[2 + (traced ? 1 : 0) + (linear ? 2 : 0) + (colored ? 1 : 0)];
+        int[] slots = new int[2 + (traced ? 1 : 0) + (linear ? 2 : 0) + (colored ? 2 : 0)];
         int at = 0;
         slots[at++] = 1;
         slots[at++] = 2;
@@ -68,7 +68,10 @@ final class BlazeShadingPass implements AutoCloseable {
             slots[at++] = 6;
             slots[at++] = 7;
         }
-        if (colored) slots[at] = 9;
+        if (colored) {
+            slots[at++] = 9;
+            slots[at] = 10;
+        }
         return slots;
     }
 
@@ -170,6 +173,8 @@ final class BlazeShadingPass implements AutoCloseable {
         if (colored) {
             views.add(lighting.colors().view());
             samplers.add(lighting.colors().sampler());
+            views.add(lighting.colors().blocks());
+            samplers.add(lighting.colors().exact());
         }
         GpuImageView lit = inPlace ? target.colorView() : outputView;
         List<GpuImageView> written = linear ? List.of(lit, surfaces, glow.spread()) : List.of(lit, surfaces);
