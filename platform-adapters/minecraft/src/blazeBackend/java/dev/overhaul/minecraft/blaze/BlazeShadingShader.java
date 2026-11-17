@@ -76,11 +76,14 @@ final class BlazeShadingShader {
                 return position.xyz / position.w;
             }
 
+            // Where the game's fog ends, in blocks.
+            float fogEnd() { return float(options.y >> 16u) / 16.0; }
+
             // Linear light at an exposure to screen colour, under the game's own fog: a cylinder around the camera,
             // linear from start to end. A low sun has the fog take the air's colour, the share given as dusk.
             vec3 screened(vec3 shaded, vec3 position, float exposure, vec3 air, float dusk) {
                 vec3 result = display(filmic(shaded * 0.5 * exposure));
-                float start = uintBitsToFloat(options.y), end = uintBitsToFloat(options.w);
+                float start = float(options.y & 0xFFFFu) / 16.0, end = fogEnd();
                 vec4 fog = unpackUnorm4x8(options.x);
                 float around = max(length(position.xz), abs(position.y));
                 float fogged = end > start ? clamp((around - start) / (end - start), 0.0, 1.0) : 0.0;
@@ -88,10 +91,21 @@ final class BlazeShadingShader {
             }
             """;
     private static final String BODY = """
+            // A number that stays with a place in the world, not with a pixel: one per texel of a block near the
+            // camera, per ever larger cells further off so a cell never shrinks under a pixel. What is scattered by it
+            // stands still while the camera moves. The cells repeat every sixteen blocks, as the camera's place does.
+            float grainAt(vec3 position, vec3 normal) {
+                float cells = 16.0 / exp2(max(ceil(log2(length(position) / 24.0)), 0.0));
+                vec3 camera = vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0;
+                vec3 at = fract(mod(floor((position + camera - normal * 0.02) * cells), 16.0 * cells) * vec3(0.1031, 0.1030, 0.0973));
+                at += dot(at, at.yxz + 33.33);
+                return fract((at.x + at.y) * at.z);
+            }
+
             // Where on the sun's disc a pixel aims: each of the four pixels that share what they find takes its own spot,
-            // turned from one four to the next, so a shadow's edge softens the further it falls from what casts it.
-            vec3 sunSpot(ivec2 pixel, float part, float wide) {
-                float turn = 6.2831853 * (part * 0.25 + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715)))));
+            // turned by the grain of the place, so a shadow's edge softens the further it falls from what casts it.
+            vec3 sunSpot(float grain, float part, float wide) {
+                float turn = 6.2831853 * (part * 0.25 + grain);
                 vec3 across = normalize(cross(light.xyz, vec3(0.0, 1.0, 0.01)));
                 return normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * wide * sqrt((part + 0.5) * 0.25));
             }
@@ -104,15 +118,15 @@ final class BlazeShadingShader {
 
             // The share of the sun left after walking the depth on screen toward it: steps stay short, a little
             // longer the further they are walked, so none jumps over a blade of grass, and start at a place that differs
-            // per pixel, part being its quarter of a step, so they do not band. A step is in shadow
+            // by the grain of the surface, part being its quarter of a step, so they do not band. A step is in shadow
             // when what the screen shows there is nearer the camera than the step, by less than a block and a half: anything
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
-            float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
+            float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part, float grain) {
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
                 // What throws a shadow worth seeing stands within a few blocks: the steps stay short enough to meet a blade.
                 float far = reach * 0.11 * clamp(distance / 32.0, 1.0, 2.5);
-                float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
-                vec3 aim = sunSpot(pixel, part, 0.07);
+                float offset = (part + grain) * 0.25;
+                vec3 aim = sunSpot(grain, part, 0.07);
                 vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(aim * far, 0.0);
                 for (int i = 0; i < 24; i++) {
                     float along = (float(i) + offset) / 24.0;
@@ -141,13 +155,13 @@ final class BlazeShadingShader {
             #ifdef TRACED
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
-                    vec3 toward = sunSpot(pixel, part, 0.035);
+                    vec3 toward = sunSpot(grainAt(position, normal), part, 0.035);
                     float traced = sunPassing(origin, toward, 256.0);
                     if (traced > 0.0) traced *= transmitted(origin, toward, 256.0);
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
             #else
-                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel, part);
+                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel, part, grainAt(position, normal));
             #endif
                 return guess;
             }
@@ -208,7 +222,7 @@ final class BlazeShadingShader {
             }
 
             vec3 skyOf(vec3 drawn, ivec2 pixel, float shaft) {
-                if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
+                if (light.w <= 0.0 || fogEnd() < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
                 vec3 toward = normalize(positionOf(pixel));
                 float near = max(dot(toward, light.xyz), 0.0);
                 float low = pow(1.0 - clamp(toward.y, 0.0, 1.0), 5.0) * smoothstep(-0.2, 0.0, toward.y);

@@ -102,7 +102,25 @@ final class BlazeShadingPass implements AutoCloseable {
      * them, the fog's colour, start and end, how far shadows are looked for: traced, or walked on screen by the plain variant,
      * and {@link BlazeShadingClouds}' words.
      */
-    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach, long clouds) {}
+    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach, long clouds, int place) {
+        /** A camera position as the shaders read it: where it is in a cube of sixteen blocks, a sixty-fourth of a block fine. */
+        static int place(double x, double y, double z) {
+            return part(x) | part(y) << 10 | part(z) << 20;
+        }
+
+        private static int part(double value) {
+            return (int) ((value - Math.floor(value / 16) * 16) * 64) & 1023;
+        }
+
+        /** Both ends of the fog in one word, a sixteenth of a block fine. */
+        int fog() {
+            return sixteenths(fogStart) | sixteenths(fogEnd) << 16;
+        }
+
+        private static int sixteenths(float blocks) {
+            return Math.round(Math.max(0, Math.min(4095, blocks)) * 16);
+        }
+    }
 
     /**
      * Queues the lighting of {@code target}'s colour from {@code surfaces}, which it leaves wiped where terrain was.
@@ -146,7 +164,7 @@ final class BlazeShadingPass implements AutoCloseable {
         if (!inPlace) owner.copyImage(output, ImageRegion.whole(output, 0, 0), target.color(), ImageRegion.whole(target.color(), 0, 0));
     }
 
-    /** Fills the shaders' {@code Frame}: the camera, the lights, the size and two more words, then the fog and the reach. */
+    /** Fills the shaders' {@code Frame}: the camera, the lights, the size and two more words, then the fog, the reach and the camera's place. */
     static void frame(java.nio.ByteBuffer push, Lighting lighting, int width, int height, long words) {
         lighting.inverseViewProjection().get(0, push);
         for (int i = 0; i < 4; i++) push.putFloat(64 + i * 4, lighting.light()[i]).putFloat(80 + i * 4, lighting.sky()[i]);
@@ -154,7 +172,7 @@ final class BlazeShadingPass implements AutoCloseable {
         float[] fog = lighting.fogColor();
         int packed = 0;
         for (int i = 0; i < 4; i++) packed |= Math.round(Math.max(0, Math.min(1, fog[i])) * 255) << (i * 8);
-        push.putInt(112, packed).putFloat(116, lighting.fogStart()).putFloat(120, lighting.reach()).putFloat(124, lighting.fogEnd());
+        push.putInt(112, packed).putInt(116, lighting.fog()).putFloat(120, lighting.reach()).putInt(124, lighting.place());
     }
 
     /** One descriptor set over a target's views, the surfaces, the images written, and for the traced variant the scene and the atlas. */
