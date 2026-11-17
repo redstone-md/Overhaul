@@ -90,26 +90,28 @@ final class BlazeShadingShader {
             mat4 viewProjection;
             vec4 depthRow;
 
-            // The share of the sun left after walking the depth on screen toward it: steps grow with the distance
-            // walked and start at a place that differs per pixel, part being its quarter of a step, so the few steps
-            // do not band. A step is in shadow
+            // The share of the sun left after walking the depth on screen toward it: steps stay short, a little
+            // longer the further they are walked, so none jumps over a blade of grass, and start at a place that differs
+            // per pixel, part being its quarter of a step, so they do not band. A step is in shadow
             // when what the screen shows there is nearer the camera than the step, by less than a block and a half: anything
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
             float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
-                float far = reach * clamp(distance / 24.0, 0.2, 1.5);
+                // What throws a shadow worth seeing stands within a few blocks: the steps stay short enough to meet a blade.
+                float far = reach * 0.15 * clamp(distance / 32.0, 1.0, 2.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
                 vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(light.xyz * far, 0.0);
-                for (int i = 0; i < 4; i++) {
-                    float along = (float(i) + offset) / 4.0;
-                    vec4 clip = from + toward * (along * along);
+                for (int i = 0; i < 20; i++) {
+                    float along = (float(i) + offset) / 20.0;
+                    along *= 0.4 + 0.6 * along;
+                    vec4 clip = from + toward * along;
                     if (clip.w <= 0.0) break;
                     vec2 place = clip.xy / clip.w, uv = place * 0.5 + 0.5;
                     if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) break;
                     ivec2 at = ivec2(uv * vec2(size.xy));
                     if (at == pixel) continue;
-                    float gap = clip.w - 1.0 / dot(depthRow, vec4(place, texelFetch(sceneDepth, at, 0).r * 2.0 - 1.0, 1.0));
-                    float slack = 0.05 + clip.w * 0.004;
+                    float deep = length(origin + light.xyz * (far * along)), gap = deep - length(positionOf(at));
+                    float slack = 0.03 + deep * 0.003;
                     if (gap > slack && gap < 1.5 + slack) {
                         vec2 edge = min(uv, 1.0 - uv);
                         return 1.0 - smoothstep(0.0, 0.03, min(edge.x, edge.y));
