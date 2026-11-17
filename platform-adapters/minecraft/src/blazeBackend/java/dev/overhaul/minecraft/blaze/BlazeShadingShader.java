@@ -98,12 +98,12 @@ final class BlazeShadingShader {
             float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part) {
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
                 // What throws a shadow worth seeing stands within a few blocks: the steps stay short enough to meet a blade.
-                float far = reach * 0.15 * clamp(distance / 32.0, 1.0, 2.5);
+                float far = reach * 0.11 * clamp(distance / 32.0, 1.0, 2.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
                 vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(light.xyz * far, 0.0);
-                for (int i = 0; i < 20; i++) {
-                    float along = (float(i) + offset) / 20.0;
-                    along *= 0.4 + 0.6 * along;
+                for (int i = 0; i < 24; i++) {
+                    float along = (float(i) + offset) / 24.0;
+                    along *= 0.6 + 0.4 * along;
                     vec4 clip = from + toward * along;
                     if (clip.w <= 0.0) break;
                     vec2 place = clip.xy / clip.w, uv = place * 0.5 + 0.5;
