@@ -33,6 +33,11 @@ final class BlazeSourceLowering {
                     if (!declaration.lookingAt()) throw new UnsupportedShaderException("Unsupported Blaze3D stage declaration");
                     boolean flat=declaration.group(1)!=null;
                     String direction=declaration.group(2),type = declaration.group(3), name = declaration.group(4);
+                    // OpenGL lets a stage declare a built-in again; it is no varying, and SPIR-V GLSL rejects the line.
+                    if (name.startsWith("gl_")) {
+                        index = declaration.end();
+                        continue;
+                    }
                     if(flat){
                         if(vertex&&!direction.equals("out")||!vertex&&!direction.equals("in"))throw new UnsupportedShaderException("Flat qualifier on non-varying input/output");
                         flatVaryings.add(name);
