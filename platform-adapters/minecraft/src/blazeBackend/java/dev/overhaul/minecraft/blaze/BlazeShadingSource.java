@@ -52,6 +52,8 @@ final class BlazeShadingSource {
     // A surface seen at a shallow angle shows the sky above it and the sun's glint; one facing up also ripples.
     private static final String MIRROR_FRAGMENT_MAIN = """
 
+            const vec3 NIGHT_AIR = vec3(0.075, 0.13, 0.17);
+
             void main() {
                 shading_main();
                 vec3 normal = normalize(shadingNormal);
@@ -69,8 +71,8 @@ final class BlazeShadingSource {
                 vec3 bounced = reflect(toward, normal);
                 vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
                 float day = step(0.235, ShadingSky.w);
-                // At night the water is dark slate, not the sky's blue.
-                above = mix(dot(above, vec3(0.3, 0.59, 0.11)) * vec3(0.5, 0.62, 0.75), above, day);
+                // At night the water is slate under the night sky's own dim air, not the day's blue.
+                above = mix(max(dot(above, vec3(0.3, 0.59, 0.11)) * vec3(0.5, 0.62, 0.75), NIGHT_AIR), above, day);
                 fragColor.rgb = mix(dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.45, 0.6, 0.75), fragColor.rgb, day);
                 // Under a low sun the water mirrors the dusk's dim warm air, not the day's blue.
                 above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38) * (1.0 + 1.5 * pow(max(dot(bounced, ShadingSun.xyz), 0.0), 3.0)), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
@@ -84,6 +86,7 @@ final class BlazeShadingSource {
                 float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
                 vec3 base = mix(ShadingSky.rgb, FogColor.rgb, day * (1.0 - dusk));
                 vec3 air = mix(base, mix(vec3(0.4, 0.8, 1.0) * 0.82, sun * 0.6, dusk) * dot(base, vec3(0.3, 0.59, 0.11)) * 1.15, 0.75) * mix(0.5, 1.0, day);
+                air = mix(max(air, NIGHT_AIR), air, day);
                 float sunk = max(min(1.0 - exp(-far / 280.0), 0.75) * clear * (1.0 - 0.6 * dusk), (1.0 - clear) * day * 0.86);
                 fragColor.rgb = mix(fragColor.rgb, air, sunk);
                 fragColor.a = max(fragColor.a, sunk);
