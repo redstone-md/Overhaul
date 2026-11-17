@@ -138,7 +138,8 @@ final class BlazeShadingShader {
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
                     vec3 toward = sunSpot(pixel, part, 0.035);
-                    float traced = blocked(origin, toward, 256.0) ? 0.0 : transmitted(origin, toward, 256.0);
+                    float traced = sunPassing(origin, toward, 256.0);
+                    if (traced > 0.0) traced *= transmitted(origin, toward, 256.0);
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
             #else

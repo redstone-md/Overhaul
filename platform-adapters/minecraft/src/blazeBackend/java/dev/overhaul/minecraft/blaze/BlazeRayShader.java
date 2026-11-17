@@ -90,6 +90,24 @@ final class BlazeRayShader {
                 return rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT;
             }
 
+            // The share of the sun's light that passes what stands on the way to it: solid ground stops it all, and
+            // leaves and plants each stop what their texture covers, and far ones an even share of it, the way
+            // the sun's disc blurs their shadow, so a crown's shadow is even and not a scatter of dots.
+            float sunPassing(vec3 origin, vec3 direction, float far) {
+                rayQueryEXT query;
+                rayQueryInitializeEXT(query, scene, gl_RayFlagsTerminateOnFirstHitEXT, SOLID_AND_CUTOUT, origin, 0.0, direction, far);
+                float passing = 1.0;
+                while (rayQueryProceedEXT(query)) {
+                    if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) continue;
+                    Surface candidate = fetch(rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
+                            rayQueryGetIntersectionPrimitiveIndexEXT(query, false), rayQueryGetIntersectionBarycentricsEXT(query, false));
+                    float covered = step(0.1, textureLod(atlas, candidate.uv, 0.0).a);
+                    passing *= 1.0 - mix(covered, 0.68, smoothstep(1.5, 5.0, rayQueryGetIntersectionTEXT(query, false)));
+                    if (passing < 0.04) rayQueryConfirmIntersectionEXT(query);
+                }
+                return rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionNoneEXT ? 0.0 : passing;
+            }
+
             // How much light passes the translucent layers ahead, water, ice, glass and slime each keeping part of it.
             float transmitted(vec3 origin, vec3 direction, float far) {
                 rayQueryEXT query;
