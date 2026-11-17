@@ -168,7 +168,7 @@ final class BlazeShadingSource {
                 bool soft = SHADING_SOFT > 0.5;
                 float facing = dot(normal, light.xyz);
                 float shadow = (facing > 0.0 || soft) && light.w > 0.0 ? smoothstep(0.8, 0.97, levels.y) : 0.0;
-                if (soft) shadow = 0.4 + 0.6 * shadow;
+                if (soft) shadow = mix(shadow, 1.0, 0.4 * smoothstep(0.5, 0.95, levels.y));
                 vec3 shaded = linear(own) * daylight(normal, levels, shadow, soft);
                 fragColor.rgb = mix(display(filmic(shaded * 0.5)), shadingFog, shadingFogged);
             }

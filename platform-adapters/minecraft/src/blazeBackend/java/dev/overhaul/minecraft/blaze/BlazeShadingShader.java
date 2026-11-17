@@ -174,7 +174,8 @@ final class BlazeShadingShader {
                 float facing = dot(seen.normal, light.xyz);
                 if ((facing > 0.0 || seen.soft) && light.w > 0.0)
                     seen.shadow = shadowAt(seen.position, facing > 0.0 ? seen.normal : -seen.normal, seen.skyLevel, length(seen.position), pixel, part);
-                if (seen.soft) seen.shadow = 0.4 + 0.6 * seen.shadow;
+                // What passes through a soft surface from behind still comes from the sky: none of it reaches a cave.
+                if (seen.soft) seen.shadow = mix(seen.shadow, 1.0, 0.4 * smoothstep(0.5, 0.95, seen.skyLevel));
                 return seen;
             }
 

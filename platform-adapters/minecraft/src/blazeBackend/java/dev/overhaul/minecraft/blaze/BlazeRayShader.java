@@ -168,11 +168,11 @@ final class BlazeRayShader {
             // The light on a surface of terrain: a sun warmer than the sun itself over a sky bluer than the sky, the
             // way film sees daylight, and warm block light. The sun is strong against the sky so shadows read, and a
             // low sun, which only grazes the ground, is given more strength to keep the golden hour bright. Leaves
-            // and plants are soft: the sun passes through them.
+            // and plants are soft: the sun passes through them, so they take about what level ground under them takes.
             vec3 daylight(vec3 normal, vec2 levels, float shadow, bool soft) {
                 float low = lowSun();
                 float facing = dot(normal, light.xyz);
-                vec3 sun = sunColor() * vec3(0.93, 0.97, 1.0) * light.w * (soft ? 0.64 + 0.25 * facing : max(facing, 0.0)) * shadow * (2.3 - (soft ? 1.6 : 1.5) * low);
+                vec3 sun = sunColor() * vec3(0.93, 0.97, 1.0) * light.w * (soft ? 0.25 + 0.6 * max(light.y, 0.0) + 0.15 * facing : max(facing, 0.0)) * shadow * (2.3 - (soft ? 1.6 : 1.5) * low);
                 vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(0.9, 1.0, 1.12), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.21 * sky.w) * (1.0 - 0.68 * low) * (0.32 + 0.68 * normal.y);
                 vec3 torch = vec3(1.0, 0.62, 0.32) * brightness(levels.x) * 1.6;
                 return sun + ambient + torch + 0.012;
