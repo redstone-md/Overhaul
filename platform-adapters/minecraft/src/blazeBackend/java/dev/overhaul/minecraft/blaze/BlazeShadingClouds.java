@@ -93,8 +93,10 @@ final class BlazeShadingClouds {
                 // Night clouds all but vanish into the dark; a low sun leaves them dim against its glow.
                 float low = lowSun();
                 vec3 sun = sunColor() * clamp(light.w, 0.0, 1.0) * (0.015 + 0.27 * day()) * (1.0 - 0.45 * low);
-                vec3 air = linear(sky.rgb) * (0.06 + 0.12 * day()) + vec3(0.17, 0.235, 0.3) * day() * (1.0 - 0.7 * low) + vec3(0.115, 0.078, 0.046) * low + nightAir() * 0.6;
+                vec3 air = linear(sky.rgb) * (0.06 + 0.12 * day()) + vec3(0.17, 0.235, 0.3) * day() * (1.0 - 0.9 * low) + vec3(0.21, 0.135, 0.07) * low + nightAir() * 0.6;
                 vec2 sunward = light.xz / max(light.y, 0.3) * 9.0;
+                // Toward a low sun the light comes through the thin of a cloud, so its rim glows against a dark body.
+                vec3 rim = sunColor() * clamp(light.w, 0.0, 1.0) * low * 0.5 * pow(max(dot(toward, light.xyz), 0.0), 5.0);
                 float left = 1.0;
                 vec3 lit = vec3(0.0);
                 for (int index = 0; index < STEPS && left > 0.03; index++) {
@@ -108,7 +110,7 @@ final class BlazeShadingClouds {
                     float between = cloudAt(at + sunward, min(height + 0.3, 1.0), false);
                     float shade = max(exp(-2.4 * between), 0.4 * exp(-0.5 * between)) * (0.6 + 0.4 * height);
                     float covers = 1.0 - exp(-thick * through / float(STEPS) * 0.24);
-                    lit += left * covers * (air * (0.72 + 0.28 * height) + sun * shade);
+                    lit += left * covers * (air * (0.72 + 0.28 * height) * (1.0 - 0.35 * low * (1.0 - height)) + sun * shade + rim * exp(-3.0 * (thick + between)));
                     left *= 1.0 - covers;
                 }
                 // Far clouds sink into the haze.
