@@ -73,8 +73,8 @@ final class BlazeShadingSource {
                 above = mix(dot(above, vec3(0.3, 0.59, 0.11)) * vec3(0.5, 0.62, 0.75), above, day);
                 fragColor.rgb = mix(dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.45, 0.6, 0.75), fragColor.rgb, day);
                 // Under a low sun the water mirrors the dusk's dim warm air, not the day's blue.
-                above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
-                fragColor.rgb = mix(fragColor.rgb, dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.9, 0.62, 0.46), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.75);
+                above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38) * (1.0 + 1.5 * pow(max(dot(bounced, ShadingSun.xyz), 0.0), 3.0)), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
+                fragColor.rgb = mix(fragColor.rgb, dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(1.05, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.9);
                 vec3 sun = mix(vec3(0.3, 0.36, 0.55), mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, ShadingSun.y)), day);
                 float glint = pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * ShadingSun.w * up;
                 float clear = 1.0 - smoothstep(FogStart, FogEnd, far);
