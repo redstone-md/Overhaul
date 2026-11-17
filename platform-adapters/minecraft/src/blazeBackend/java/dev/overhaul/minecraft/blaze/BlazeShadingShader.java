@@ -73,14 +73,14 @@ final class BlazeShadingShader {
             }
 
             // Linear light at an exposure to screen colour, under the game's own fog: a cylinder around the camera,
-            // linear from start to end.
-            vec3 screened(vec3 shaded, vec3 position, float exposure) {
+            // linear from start to end. A low sun has the fog take the air's colour, the share given as dusk.
+            vec3 screened(vec3 shaded, vec3 position, float exposure, vec3 air, float dusk) {
                 vec3 result = display(filmic(shaded * 0.5 * exposure));
                 float start = uintBitsToFloat(options.y), end = uintBitsToFloat(options.w);
                 vec4 fog = unpackUnorm4x8(options.x);
                 float around = max(length(position.xz), abs(position.y));
                 float fogged = end > start ? clamp((around - start) / (end - start), 0.0, 1.0) : 0.0;
-                return mix(result, fog.rgb, fogged * fog.a);
+                return mix(result, mix(fog.rgb, air, dusk), fogged * fog.a);
             }
             """;
     private static final String BODY = """
@@ -303,7 +303,7 @@ final class BlazeShadingShader {
                 air = mix(air, mix(vec3(0.42, 0.72, 1.0) * 0.95, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
                 air = mix(air, DUSK * 0.3, dusk * 0.85);
                 float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.7 * dusk);
-                imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure), display(air), sunk), seen.color.a));
+                imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure, display(air), dusk), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }
 
