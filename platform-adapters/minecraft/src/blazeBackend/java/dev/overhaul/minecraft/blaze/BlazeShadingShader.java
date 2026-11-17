@@ -358,12 +358,9 @@ final class BlazeShadingShader {
                 float most = max(found.r, max(found.g, found.b));
                 if (most <= 0.0) return warm;
                 vec3 hue = found / most;
-                // Richer than the volume holds it, the way a lit room looks through a lens.
                 float grey = dot(hue, vec3(0.3, 0.59, 0.11));
-                hue = max(mix(vec3(grey), hue, 1.3), 0.0);
-                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room;
-                // and near its source a coloured light is stronger than the plain warm one.
-                hue *= mix(1.0, min(0.72 / max(grey, 0.05), 2.5), 0.5) * (1.15 + 0.5 * most * most);
+                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room.
+                hue *= mix(1.0, min(0.72 / max(grey, 0.05), 2.5), 0.5);
                 return mix(warm, hue, known * smoothstep(0.0, 0.04, most));
             #else
                 return warm;

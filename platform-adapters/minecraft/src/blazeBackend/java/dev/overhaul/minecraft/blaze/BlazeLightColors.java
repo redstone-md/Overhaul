@@ -82,7 +82,10 @@ final class BlazeLightColors {
         }
     }
 
-    /** The colour of a texture's bright pixels, at full strength and richer than the file holds it. */
+    /**
+     * The colour of a texture's bright pixels at full strength. A flame's picture is yellower than the light it gives,
+     * so a colour that runs red, green, blue from strong to weak is drawn half way to the warm light of fire.
+     */
     private static int bright(ResourceLocation name) {
         var resource = Minecraft.getInstance().getResourceManager().getResource(name.withPath(path -> "textures/" + path + ".png"));
         if (resource.isEmpty()) return WARM;
@@ -93,22 +96,24 @@ final class BlazeLightColors {
             for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
                 int pixel = image.getPixelRGBA(x, y);
                 double r = (pixel & 255) / 255.0, g = (pixel >> 8 & 255) / 255.0, b = (pixel >> 16 & 255) / 255.0, most = Math.max(r, Math.max(g, b));
-                double weight = (pixel >>> 24) / 255.0 * most * most * most * most;
+                double weight = (pixel >>> 24) / 255.0 * most * most;
                 red += r * weight;
                 green += g * weight;
                 blue += b * weight;
                 total += weight;
             }
             if (total <= 0) return WARM;
-            double most = Math.max(red, Math.max(green, blue)), grey = (0.3 * red + 0.59 * green + 0.11 * blue) / most;
-            return pack(rich(red / most, grey), rich(green / most, grey), rich(blue / most, grey));
+            double most = Math.max(red, Math.max(green, blue));
+            double r = red / most, g = green / most, b = blue / most, fire = r >= g && g >= b ? 0.5 : 0;
+            return pack(shade(r + (1 - r) * fire), shade(g + (0.62 - g) * fire), shade(b + (0.36 - b) * fire));
         } catch (java.io.IOException | RuntimeException unreadable) {
             return WARM;
         }
     }
 
-    private static float rich(double channel, double grey) {
-        return (float) Math.max(0.02, Math.min(1, grey + (channel - grey) * 1.7));
+    /** No light is so pure that a channel is missing from it. */
+    private static float shade(double channel) {
+        return (float) Math.max(0.12, Math.min(1, channel));
     }
 
     private static int pack(float red, float green, float blue) {
