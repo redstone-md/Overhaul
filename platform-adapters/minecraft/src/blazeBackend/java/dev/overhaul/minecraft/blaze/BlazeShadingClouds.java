@@ -92,8 +92,8 @@ final class BlazeShadingClouds {
                 float turn = fract(52.9829189 * fract(dot(vec2(pixel), vec2(0.06711056, 0.00583715))));
                 // Night clouds all but vanish into the dark; a low sun leaves them dim against its glow.
                 float low = lowSun();
-                vec3 sun = sunColor() * clamp(light.w, 0.0, 1.0) * (0.015 + 0.28 * day()) * (1.0 - 0.45 * low);
-                vec3 air = linear(sky.rgb) * (0.1 + 0.22 * day()) + vec3(0.2, 0.26, 0.36) * day() * (1.0 - 0.6 * low) + vec3(0.34, 0.14, 0.04) * low + nightAir() * 0.6;
+                vec3 sun = sunColor() * clamp(light.w, 0.0, 1.0) * (0.015 + 0.21 * day()) * (1.0 - 0.45 * low);
+                vec3 air = linear(sky.rgb) * (0.06 + 0.12 * day()) + vec3(0.13, 0.2, 0.27) * day() * (1.0 - 0.7 * low) + vec3(0.17, 0.07, 0.025) * low + nightAir() * 0.6;
                 vec2 sunward = light.xz / max(light.y, 0.3) * 9.0;
                 float left = 1.0;
                 vec3 lit = vec3(0.0);

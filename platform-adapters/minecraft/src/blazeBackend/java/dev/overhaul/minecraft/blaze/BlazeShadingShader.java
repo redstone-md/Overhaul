@@ -202,16 +202,16 @@ final class BlazeShadingShader {
                 // The day's blue leans to cyan, not violet.
                 air *= mix(vec3(1.0), vec3(0.86, 1.0, 1.04), day() * (1.0 - dusk));
                 float high = smoothstep(0.05, 0.8, toward.y);
-                air = mix(air, haze, mix(0.7, 0.05, smoothstep(0.0, 0.3, toward.y))) * mix(0.85, 0.42, high) * (1.0 - 0.5 * dusk);
+                air = mix(air, haze, mix(0.7, 0.05, smoothstep(0.0, 0.3, toward.y))) * mix(0.85, 0.42, high) * (1.0 - 0.72 * dusk);
                 // Overhead the blue deepens.
-                air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.6 * high), 0.0) + nightAir();
+                air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.25 * high), 0.0) + nightAir();
                 // A low sun turns the air along the horizon orange, strongest beneath itself.
                 float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 2.5);
                 air = mix(air, DUSK * (0.55 + 0.65 * near * near), dusk * band * 0.9);
                 // The rest of the dusk sky warms with it.
                 air = mix(air, dot(air, vec3(0.3, 0.59, 0.11)) * vec3(1.3, 0.85, 0.55), dusk * 0.6);
                 vec3 glow = sunColor() * light.w * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
-                        + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.42, 0.12) * light.w * dusk * band * (0.4 + 0.6 * near * near);
+                        + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.3, 0.06) * light.w * dusk * band * (0.25 + 0.6 * near * near);
                 vec4 cloud = cloudsAt(toward, pixel);
                 return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
@@ -293,7 +293,7 @@ final class BlazeShadingShader {
                 vec3 air = linear(sky.rgb);
                 air = mix(air, mix(vec3(0.6, 0.86, 1.0) * 1.2, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
                 air = mix(air, DUSK * 0.6, dusk * 0.8);
-                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel);
+                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.6 * dusk);
                 imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }

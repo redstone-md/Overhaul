@@ -69,6 +69,8 @@ final class BlazeShadingSource {
                 vec3 bounced = reflect(toward, normal);
                 vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
                 float day = step(0.235, ShadingSky.w);
+                // Under a low sun the water mirrors the dusk's dim warm air, not the day's blue.
+                above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
                 vec3 sun = mix(vec3(0.3, 0.36, 0.55), mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, ShadingSun.y)), day);
                 float glint = pow(max(dot(bounced, ShadingSun.xyz), 0.0), 220.0) * ShadingSun.w * up;
                 float clear = 1.0 - smoothstep(FogStart, FogEnd, far);
