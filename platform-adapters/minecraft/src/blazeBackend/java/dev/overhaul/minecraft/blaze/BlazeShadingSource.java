@@ -76,7 +76,7 @@ final class BlazeShadingSource {
                 fragColor.a = max(fragColor.a, mirror * clear);
                 // Far water sinks into the air's colour the way far land does.
                 float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
-                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.6, 0.86, 1.0) * 1.2, sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.45);
+                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.6, 0.86, 1.0) * 1.2, sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.75);
                 float sunk = min(1.0 - exp(-far / 280.0), 0.75) * clear;
                 fragColor.rgb = mix(fragColor.rgb, air, sunk);
                 fragColor.a = max(fragColor.a, sunk);
@@ -172,6 +172,17 @@ final class BlazeShadingSource {
         return programName.contains("rendertype_cutout");
     }
 
+    /**
+     * What the fragment stage reads to tell a soft surface, as GLSL giving 1 or 0. Mipped cut-out terrain holds
+     * leaves beside whole blocks such as grass, so there a surface is soft only where its texture has holes, which
+     * the atlas's smallest mip tells: without mips nothing there is soft.
+     */
+    static String softness(String programName, String source) {
+        if (!soft(programName)) return "0.0";
+        if (!programName.contains("mipped")) return "1.0";
+        return source.contains("Sampler0") && source.contains("texCoord0") ? "(textureLod(Sampler0, texCoord0, 4.0).a < 0.97 ? 1.0 : 0.0)" : "0.0";
+    }
+
     static boolean terrain(String programName) {
         return TERRAIN.matcher(programName).find();
     }
@@ -215,10 +226,10 @@ final class BlazeShadingSource {
         return wrap(source, LIGHTMAP, VERTEX_HEAD, VERTEX_MAIN);
     }
 
-    /** The fragment stage writing the surface, or with {@code direct} lighting it itself with no surface written; null when it does not fog and write its colour the usual way. */
-    static String fragment(String source, boolean soft, boolean direct) {
+    /** The fragment stage writing the surface, soft where {@code soft} gives 1, or with {@code direct} lighting it itself with no surface written; null when it does not fog and write its colour the usual way. */
+    static String fragment(String source, String soft, boolean direct) {
         if (!OUTPUT.matcher(source).find()) return null;
-        return wrap(source, FOG, "#define SHADING_SOFT " + (soft ? "1.0" : "0.0") + "\n" + (direct ? DIRECT_HEAD : FRAGMENT_HEAD), direct ? DIRECT_MAIN : FRAGMENT_MAIN);
+        return wrap(source, FOG, "#define SHADING_SOFT " + soft + "\n" + (direct ? DIRECT_HEAD : FRAGMENT_HEAD), direct ? DIRECT_MAIN : FRAGMENT_MAIN);
     }
 
     /** Whether the shaded program takes exactly the uniforms and samplers of the one it stands in for. */

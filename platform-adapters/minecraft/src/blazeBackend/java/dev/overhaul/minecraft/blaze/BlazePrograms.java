@@ -182,7 +182,7 @@ public final class BlazePrograms implements AutoCloseable {
         String why;
         try{
             String shadedVertex=mirror?BlazeShadingSource.mirrorVertex(vertex):BlazeShadingSource.vertex(vertex);
-            String shadedFragment=mirror?BlazeShadingSource.mirrorFragment(entry.fragmentSource):BlazeShadingSource.fragment(entry.fragmentSource,BlazeShadingSource.soft(entry.name),direct);
+            String shadedFragment=mirror?BlazeShadingSource.mirrorFragment(entry.fragmentSource):BlazeShadingSource.fragment(entry.fragmentSource,BlazeShadingSource.softness(entry.name,entry.fragmentSource),direct);
             if(shadedVertex==null||shadedFragment==null)why="it does not light and fog terrain the way the game's shader does";
             else{
                 var program=variant(entry,shadedVertex,shadedFragment);
