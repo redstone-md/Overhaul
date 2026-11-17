@@ -110,7 +110,9 @@ final class BlazeShadingShader {
                 return normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * wide * sqrt((part + 0.5) * 0.25));
             }
 
-            #ifndef TRACED
+            // How far the walk on screen is set to go where rays end.
+            const float WALK = 16.0;
+
             // From the world around the camera back to the screen, and what gives the depth in front of the camera
             // from a place on screen; main works them out once for its four pixels.
             mat4 viewProjection;
@@ -123,8 +125,9 @@ final class BlazeShadingShader {
             // further in front is something else passing by. Off screen nothing is known, so the walk ends lit.
             float walked(vec3 position, vec3 normal, float distance, float reach, ivec2 pixel, float part, float grain) {
                 vec3 origin = position + normal * (0.02 + distance * 0.004);
-                // What throws a shadow worth seeing stands within a few blocks: the steps stay short enough to meet a blade.
-                float far = reach * 0.11 * clamp(distance / 32.0, 1.0, 2.5);
+                // What throws a shadow worth seeing stands within a few blocks. The walk is as long at any distance, so
+                // a shadow keeps its length while the camera comes nearer.
+                float far = reach * 0.22;
                 float offset = (part + grain) * 0.25;
                 vec3 aim = sunSpot(grain, part, 0.07);
                 vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(aim * far, 0.0);
@@ -146,23 +149,28 @@ final class BlazeShadingShader {
                 }
                 return 1.0;
             }
-            #endif
 
             // The share of the sun a surface sees: open sky makes a good guess; near the camera, rays know.
             float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance, ivec2 pixel, float part) {
                 float guess = smoothstep(0.8, 0.97, skyLevel);
+                // With rays the reach is theirs, below zero where the screen is not to be walked past them.
                 float reach = uintBitsToFloat(options.z);
             #ifdef TRACED
+                bool walks = reach > 0.0;
+                reach = abs(reach);
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
                     vec3 toward = sunSpot(grainAt(position, normal), part, 0.035);
                     float traced = sunPassing(origin, toward, 256.0);
                     if (traced > 0.0) traced *= transmitted(origin, toward, 256.0);
-                    return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
+                    float past = smoothstep(0.75 * reach, reach, distance);
+                    // Past the rays the screen's own depth carries the shadows on, so none ends at a line that follows the camera.
+                    if (walks && past > 0.0 && guess > 0.0) guess *= walked(position, normal, distance, WALK, pixel, part, grainAt(position, normal));
+                    return mix(traced, guess, past);
                 }
-            #else
-                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel, part, grainAt(position, normal));
+                reach = walks ? WALK : 0.0;
             #endif
+                if (reach > 0.0 && guess > 0.0) return guess * walked(position, normal, distance, reach, pixel, part, grainAt(position, normal));
                 return guess;
             }
 
@@ -340,12 +348,10 @@ final class BlazeShadingShader {
             // on one surface share the mean, which is as good as four times the steps.
             void main() {
                 ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
-            #ifndef TRACED
-                if (uintBitsToFloat(options.z) > 0.0) {
+                if (uintBitsToFloat(options.z) != 0.0) {
                     viewProjection = inverse(inverseViewProjection);
                     depthRow = vec4(inverseViewProjection[0][3], inverseViewProjection[1][3], inverseViewProjection[2][3], inverseViewProjection[3][3]);
                 }
-            #endif
                 Seen seen[4];
                 float opens[4];
                 for (int i = 0; i < 4; i++) seen[i] = seenAt(cell * 2 + ivec2(i & 1, i >> 1), float(i));

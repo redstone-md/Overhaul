@@ -147,6 +147,13 @@ public final class BlazeShading {
         return widened ? new Route(game.widened(full, mirrorLight), shadedCompact, main) : new Route(game.withProgram(full), shadedCompact, target);
     }
 
+    /** How far the sun's shadows are looked for: the rays' reach with rays, below zero where the screen is not walked past them. */
+    private static float reach(boolean traced) {
+        boolean walked = BlazeOptimization.SHADING_SCREEN_SHADOWS.on();
+        if (!traced) return walked ? SCREEN_SHADOW_REACH : 0;
+        return walked ? BlazeRayTracing.get().reach() : -BlazeRayTracing.get().reach();
+    }
+
     /** Lights the terrain drawn since the frame started, with the camera matrices it was drawn with. */
     public void terrainDrawn(Minecraft client, ViewArea area, Camera camera, float partialTick, Matrix4f view, Matrix4f projection) {
         if (!collecting) return;
@@ -172,7 +179,7 @@ public final class BlazeShading {
             light(world, position, partialTick);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), mirrorLight.get(BlazeShadingSource.SUN),
                     mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
-                    RenderSystem.getShaderFogEnd(), traced ? BlazeRayTracing.get().reach() : BlazeOptimization.SHADING_SCREEN_SHADOWS.on() ? SCREEN_SHADOW_REACH : 0, clouds,
+                    RenderSystem.getShaderFogEnd(), reach(traced), clouds,
                     BlazeShadingPass.Lighting.place(position.x, position.y, position.z));
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
