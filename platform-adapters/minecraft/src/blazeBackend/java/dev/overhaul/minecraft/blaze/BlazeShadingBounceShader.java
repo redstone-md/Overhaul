@@ -89,7 +89,8 @@ final class BlazeShadingBounceShader {
             }
 
             // Last frame's light where this surface was then, read through five taps whose distance must match, so
-            // history from another surface is left out; the alpha is 1 when one was found.
+            // history from another surface is left out; the taps lie a pixel apart, so the light also spreads a little
+            // each frame and single rays even out. The alpha is 1 when one was found.
             vec4 recall(vec3 position) {
                 Previous before = previous();
                 vec3 then = position + before.motion.xyz;
@@ -103,7 +104,7 @@ final class BlazeShadingBounceShader {
                 vec3 sum = vec3(0.0);
                 float weight = 0.0;
                 for (int tap = 0; tap < 5; tap++) {
-                    vec4 old = textureLod(history, uv + TAPS[tap] * texel * 0.5, 0.0);
+                    vec4 old = textureLod(history, uv + TAPS[tap] * texel, 0.0);
                     float w = old.a > 0.0 && abs(old.a - expected) < 0.1 + expected * 0.03 ? (tap == 0 ? 2.0 : 1.0) : 0.0;
                     sum += old.rgb * w;
                     weight += w;
@@ -133,7 +134,8 @@ final class BlazeShadingBounceShader {
                 for (int ray = 0; ray < rays; ray++)
                     gathered += bounce(origin, normal, vec2(noiseAt(vec2(pixel), 1u + uint(ray)), noiseAt(vec2(pixel.yx), 5u + uint(ray))));
                 gathered *= GAIN / float(rays) * (1.0 - smoothstep(0.75 * reach, reach, distance));
-                if (settled) gathered = mix(before.rgb, gathered, 0.08);
+                // One ray that met something far brighter than the rest must not flare up, so it counts for less.
+                if (settled) gathered = mix(before.rgb, min(gathered, before.rgb * 3.0 + 0.2), 0.04);
                 imageStore(accumulated, cell, vec4(gathered, distance));
             }
             """;
