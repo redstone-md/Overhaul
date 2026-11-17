@@ -189,6 +189,11 @@ final class BlazeShadingShader {
             // The colour a low sun gives the air.
             const vec3 DUSK = vec3(0.7, 0.22, 0.05);
 
+            // How much the air has of a low sun: it keeps the colour while the sun's light on the ground already fades.
+            float duskAir() {
+                return sunLit() ? (1.0 - smoothstep(0.05, 0.45, light.y)) * min(light.w * 8.0, 1.0) * smoothstep(0.235, 0.3, sky.w) : 0.0;
+            }
+
             vec3 skyOf(vec3 drawn, ivec2 pixel, float shaft) {
                 if (light.w <= 0.0 || uintBitsToFloat(options.w) < 8.0 || texelFetch(sceneDepth, pixel, 0).r < 1.0) return drawn;
                 vec3 toward = normalize(positionOf(pixel));
@@ -196,8 +201,7 @@ final class BlazeShadingShader {
                 float low = pow(1.0 - clamp(toward.y, 0.0, 1.0), 5.0) * smoothstep(-0.2, 0.0, toward.y);
                 vec3 air = linear(drawn);
                 // A low sun colours the air; the night's air keeps a faint blue of its own.
-                // The sky keeps the dusk's colour while the sun's light on the ground already fades.
-                float dusk = sunLit() ? (1.0 - smoothstep(0.05, 0.45, light.y)) * min(light.w * 8.0, 1.0) * smoothstep(0.235, 0.3, sky.w) : 0.0;
+                float dusk = duskAir();
                 float lit = max(light.w, 0.75 * dusk);
                 // Haze pales the blue toward the horizon, and takes the low sun's colour.
                 vec3 haze = mix(vec3(0.4, 0.8, 1.0) * 1.2, vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.12;
@@ -215,7 +219,8 @@ final class BlazeShadingShader {
                 // High above a low sun the sky is already a dark slate blue.
                 air = mix(air, vec3(0.02, 0.032, 0.055), dusk * smoothstep(0.08, 0.42, toward.y) * 0.85);
                 vec3 glow = mix(sunColor(), vec3(1.0, 0.38, 0.1), dusk) * lit * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
-                        + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.3, 0.06) * lit * dusk * band * (0.25 + 0.6 * near * near);
+                        + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.3, 0.06) * lit * dusk * band * (0.25 + 0.6 * near * near)
+                        + mix(vec3(1.0, 0.95, 0.85), vec3(1.0, 0.8, 0.5), dusk) * lit * smoothstep(0.99925, 0.9997, near) * 2.0;
                 vec4 cloud = cloudsAt(toward, pixel);
                 return display(clamp((1.0 - (1.0 - air) * (1.0 - clamp(glow, 0.0, 1.0))) * (1.0 - cloud.a) + cloud.rgb, 0.0, 1.0));
             }
@@ -291,13 +296,13 @@ final class BlazeShadingShader {
                 if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 1.0 + day() * smoothstep(0.05, 0.45, light.y));
             #endif
                 // The further a surface, the more lit air lies before it.
-                shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position));
+                shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position)) * (1.0 - 0.75 * duskAir());
                 // Far terrain under the open sky sinks into the air's own colour, the one the sky has at the horizon.
-                float dusk = lowSun();
+                float dusk = duskAir();
                 vec3 air = linear(sky.rgb);
                 air = mix(air, mix(vec3(0.42, 0.72, 1.0) * 0.95, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
-                air = mix(air, DUSK * 0.38, dusk * 0.8);
-                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.85 * dusk);
+                air = mix(air, DUSK * 0.3, dusk * 0.85);
+                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.7 * dusk);
                 imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }
