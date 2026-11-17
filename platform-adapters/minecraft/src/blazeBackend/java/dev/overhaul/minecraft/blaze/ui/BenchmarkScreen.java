@@ -17,7 +17,7 @@ final class BenchmarkScreen extends BlazeScreenBase {
 
     /** @param leave closes the benchmark world; runs once, however the run ends */
     BenchmarkScreen(Consumer<BenchmarkResult> finished, Runnable leave) {
-        super(Component.literal("Overhaul benchmark"));
+        super(Component.literal(OverhaulLang.get("overhaul.benchmark.title")));
         this.finished = finished;
         this.leave = leave;
     }
@@ -48,18 +48,18 @@ final class BenchmarkScreen extends BlazeScreenBase {
             end();
             return;
         }
-        int x = (width - CARD_WIDTH) / 2, y = height - SettingsTheme.GAP - CARD_HEIGHT;
-        graphics.fill(x, y, x + CARD_WIDTH, y + CARD_HEIGHT, SettingsTheme.SIDEBAR);
+        int x = (width - CARD_WIDTH) / 2, y = height - SettingsTheme.EDGE - CARD_HEIGHT;
+        graphics.fill(x, y, x + CARD_WIDTH, y + CARD_HEIGHT, SettingsTheme.PANEL);
         SettingsTheme.outline(graphics, x, y, CARD_WIDTH, CARD_HEIGHT, SettingsTheme.HAIRLINE);
         int left = x + SettingsTheme.PAD + 4, right = x + CARD_WIDTH - SettingsTheme.PAD - 4;
-        graphics.drawString(font, run.preset().label, left, y + 10, SettingsTheme.TEXT, false);
-        String stage = (run.stage() + 1) + " of " + run.stageCount();
-        graphics.drawString(font, stage, left + font.width(run.preset().label) + 8, y + 10, SettingsTheme.TEXT_3, false);
-        SettingsTheme.textRight(graphics, font, minecraft.getFps() + " fps", right, y + 6, 16, SettingsTheme.TEXT);
-        graphics.drawString(font, run.measuring() ? "Timing every frame" : "Loading the view", left, y + 24, SettingsTheme.TEXT_2, false);
-        SettingsTheme.textRight(graphics, font, "Esc to stop", right, y + 20, 16, SettingsTheme.TEXT_3);
+        graphics.drawString(font, run.preset().label(), left, y + 10, SettingsTheme.TEXT, false);
+        String stage = OverhaulLang.get("overhaul.benchmark.stage", run.stage() + 1, run.stageCount());
+        graphics.drawString(font, stage, left + font.width(run.preset().label()) + 8, y + 10, SettingsTheme.FAINT, false);
+        SettingsTheme.textRight(graphics, font, OverhaulLang.get("overhaul.benchmark.fps", minecraft.getFps()), right, y + 6, 16, SettingsTheme.TEXT);
+        graphics.drawString(font, OverhaulLang.get(run.measuring() ? "overhaul.benchmark.timing" : "overhaul.benchmark.loading"), left, y + 24, SettingsTheme.MUTED, false);
+        SettingsTheme.textRight(graphics, font, OverhaulLang.get("overhaul.benchmark.stop"), right, y + 20, 16, SettingsTheme.FAINT);
         int bar = y + CARD_HEIGHT - 10;
-        graphics.fill(left, bar, right, bar + 2, SettingsTheme.TRACK);
+        graphics.fill(left, bar, right, bar + 2, SettingsTheme.FIELD_HOVER);
         graphics.fill(left, bar, left + (int) Math.round((right - left) * run.progress()), bar + 2, SettingsTheme.ACCENT);
     }
 

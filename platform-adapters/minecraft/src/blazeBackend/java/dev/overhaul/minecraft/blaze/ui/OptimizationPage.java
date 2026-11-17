@@ -4,174 +4,149 @@ import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import net.minecraft.network.chat.Component;
 
 /**
- * Every switchable optimisation, so a gain can be measured with it off. Each change is written to the file at once;
- * the running game keeps what it started with, so the page counts what waits for a restart.
+ * Every switchable optimisation, grouped by what it speeds up, so a gain can be measured with it off. The running game
+ * keeps what it started with for the ones it reads at startup, so the page counts what waits for a restart.
  */
 final class OptimizationPage extends SettingsPage {
-    private static final Map<BlazeOptimization, String> LABELS = labels();
-    private static final List<Group> GROUPS = List.of(
-            new Group("Terrain", List.of(BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.GPU_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
-                    BlazeOptimization.SECTION_LISTS, BlazeOptimization.SECTION_TABLE, BlazeOptimization.SECTION_BOUNDS,
-                    BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID, BlazeOptimization.SECTION_RUN_KEYS, BlazeOptimization.SECTION_DRAWS,
-                    BlazeOptimization.STRIDE_OFFSETS)),
-            new Group("Entities", List.of(BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES,
-                    BlazeOptimization.CUBE_MESH, BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ITEM_AXES, BlazeOptimization.ENTITY_RENDERER_CACHE,
-                    BlazeOptimization.ENTITY_CLASS_SCANS, BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.PARTICLE_QUADS, BlazeOptimization.SELECTOR_ORDER, BlazeOptimization.SERVER_CLASS_SCANS,
-                    BlazeOptimization.SECTION_LOOKUP, BlazeOptimization.COLLISION_SCANS)),
-            new Group("Frame", List.of(BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION, BlazeOptimization.MIP_BLEND,
-                    BlazeOptimization.BIOME_CACHE, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS,
-                    BlazeOptimization.MERGED_BARRIERS)),
-            new Group("Other mods", List.of(BlazeOptimization.XAERO_LIMITS, BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.ENTITY_SCANS, BlazeOptimization.HEAD_CURIOS,
-                    BlazeOptimization.DH_CLOUDS, BlazeOptimization.DH_RENDER_LIST, BlazeOptimization.DH_SHARED_PAGES, BlazeOptimization.RAW_DRAWS, BlazeOptimization.MOD_ENTITY_TICKS,
-                    BlazeOptimization.DAMAGE_TEXT_SIGHT)));
-    private final Map<BlazeOptimization, Boolean> saved = new EnumMap<>(BlazeOptimization.class);
+    /** A rail entry and the options under it; options no group names fall to {@link #MODS}. */
+    private enum Group {
+        TERRAIN(SettingsIcon.TERRAIN, BlazeOptimization.SECTION_BATCH, BlazeOptimization.SECTION_OCCLUSION, BlazeOptimization.GPU_OCCLUSION, BlazeOptimization.COMPACT_SECTIONS,
+                BlazeOptimization.SECTION_LISTS, BlazeOptimization.SECTION_TABLE, BlazeOptimization.SECTION_BOUNDS, BlazeOptimization.SECTION_SCAN_REUSE, BlazeOptimization.SECTION_GRID,
+                BlazeOptimization.SECTION_RUN_KEYS, BlazeOptimization.SECTION_DRAWS, BlazeOptimization.STRIDE_OFFSETS, BlazeOptimization.SECTION_SLOT_KEEP, BlazeOptimization.BIOME_CACHE,
+                BlazeOptimization.PALETTE_ENTRIES, BlazeOptimization.BIOME_FIDDLE, BlazeOptimization.CLIENT_PLAINS, BlazeOptimization.TINT_BIOMES, BlazeOptimization.FLUID_TINT,
+                BlazeOptimization.NOISE_BIOMES, BlazeOptimization.FLUID_STATES, BlazeOptimization.LEVEL_HEIGHT),
+        ENTITIES(SettingsIcon.ENTITY, BlazeOptimization.ENTITY_OCCLUSION, BlazeOptimization.BLOCK_ENTITY_OCCLUSION, BlazeOptimization.BULK_VERTICES, BlazeOptimization.CUBE_MESH,
+                BlazeOptimization.CUBE_AXES, BlazeOptimization.ITEM_QUADS, BlazeOptimization.ITEM_AXES, BlazeOptimization.ENTITY_RENDERER_CACHE, BlazeOptimization.ENTITY_CLASS_SCANS,
+                BlazeOptimization.ENTITY_LIGHT, BlazeOptimization.SELECTOR_ORDER, BlazeOptimization.SECTION_LOOKUP, BlazeOptimization.COLLISION_SCANS,
+                BlazeOptimization.ENTITY_BLOCK_COLLISIONS, BlazeOptimization.COLLISION_SECTIONS, BlazeOptimization.SUPPORTING_BLOCK, BlazeOptimization.PLAYER_HAND_PACE,
+                BlazeOptimization.PLAYER_HAND_REPLAY, BlazeOptimization.ENTITY_NBT_TICK, BlazeOptimization.ENTITY_NBT_RULES, BlazeOptimization.VILLAGER_TEXTURES,
+                BlazeOptimization.EFFECT_POSES, BlazeOptimization.LAST_TARGET),
+        PARTICLES(SettingsIcon.DOTS, BlazeOptimization.PARTICLE_QUADS, BlazeOptimization.PARTICLE_RESERVE, BlazeOptimization.PARTICLE_CULLING, BlazeOptimization.PARTICLE_BOUNDS,
+                BlazeOptimization.PARTICLE_LIGHT, BlazeOptimization.PARTICLE_COLLISIONS, BlazeOptimization.PARTICLE_RIMS, BlazeOptimization.PARTICLE_ATLAS_WRITE,
+                BlazeOptimization.RAIN_BIOMES, BlazeOptimization.RAIN_LIGHT, BlazeOptimization.ATMOSPHERE_WEATHER, BlazeOptimization.SABLE_PARTICLES, BlazeOptimization.SABLE_RAIN),
+        FRAME(SettingsIcon.CHIP, BlazeOptimization.DRAW_MERGE, BlazeOptimization.STREAM_UPLOADS, BlazeOptimization.SPRITE_INTERPOLATION, BlazeOptimization.MIP_BLEND,
+                BlazeOptimization.POOL_RANGES, BlazeOptimization.PIXEL_ROWS, BlazeOptimization.MERGED_BARRIERS, BlazeOptimization.RAW_DRAWS, BlazeOptimization.RAW_PROGRAMS,
+                BlazeOptimization.RAW_DRAW_LAYOUT, BlazeOptimization.UNBOXED_PROGRAMS, BlazeOptimization.RT_SCENE_MEMORY),
+        INTERFACE(SettingsIcon.WINDOW, BlazeOptimization.HUD_CACHE, BlazeOptimization.DEBUG_TEXT, BlazeOptimization.HUD_LAYER_MEMO, BlazeOptimization.XAERO_LIMITS,
+                BlazeOptimization.CROSSHAIR_LIMIT, BlazeOptimization.DAMAGE_TEXT_SIGHT),
+        PACKS(SettingsIcon.CUBE, BlazeOptimization.PACK_BLOCK_IDS, BlazeOptimization.PACK_FRAME_QUEUE, BlazeOptimization.PACK_SECTION_BATCH, BlazeOptimization.PACK_SHADOW_REUSE,
+                BlazeOptimization.PACK_GRAPH_SHAPES, BlazeOptimization.UNIFORM_PLANS, BlazeOptimization.UNIFORM_READERS, BlazeOptimization.SHADOW_COLUMNS,
+                BlazeOptimization.SHADOW_TIGHT_REUSE, BlazeOptimization.SHADOW_REACH, BlazeOptimization.ENTITY_SHADOW_REACH, BlazeOptimization.PLAYER_SHADOW_PACE,
+                BlazeOptimization.PLAYER_SHADOW_REPLAY, BlazeOptimization.PLAYER_SHADOW_SLOW_PACE, BlazeOptimization.SHADOW_DRAWS, BlazeOptimization.SINGLE_PACK,
+                BlazeOptimization.PACK_REMAP),
+        HORIZONS(SettingsIcon.HORIZON),
+        MODS(SettingsIcon.GRID),
+        WORLD(SettingsIcon.WORLD, BlazeOptimization.SERVER_CLASS_SCANS, BlazeOptimization.SELECTOR_TAGS, BlazeOptimization.SELECTOR_INDEX, BlazeOptimization.SELECTOR_SCORES,
+                BlazeOptimization.ATTRIBUTE_OPERATIONS, BlazeOptimization.EVENT_LISTENERS, BlazeOptimization.COMMAND_SOURCE_NAMES, BlazeOptimization.BLOCK_SEARCH,
+                BlazeOptimization.FLUID_SOURCE_EVENT, BlazeOptimization.POI_RANGE_SECTIONS, BlazeOptimization.FIRE_SCAN, BlazeOptimization.CAMPFIRE_SCAN);
 
-    OptimizationPage(Runnable refresh) {
-        super(refresh);
-        for (BlazeOptimization option : BlazeOptimization.values()) saved.put(option, option.saved());
+        final SettingsIcon icon;
+        final List<BlazeOptimization> named;
+
+        Group(SettingsIcon icon, BlazeOptimization... named) {
+            this.icon = icon;
+            this.named = List.of(named);
+        }
     }
 
-    private record Group(String title, List<BlazeOptimization> options) {
+    private static final Map<Group, List<BlazeOptimization>> GROUPS = groups();
+    private final OptimizationValues values;
+    private int group;
+
+    OptimizationPage(OptimizationValues values, Runnable refresh) {
+        super("optimization", SettingsIcon.BOLT, refresh);
+        this.values = values;
+    }
+
+    private static Map<Group, List<BlazeOptimization>> groups() {
+        Map<Group, List<BlazeOptimization>> groups = new EnumMap<>(Group.class);
+        Map<BlazeOptimization, Group> owner = new EnumMap<>(BlazeOptimization.class);
+        for (Group group : Group.values()) {
+            groups.put(group, new ArrayList<>());
+            for (BlazeOptimization option : group.named) owner.put(option, group);
+        }
+        for (BlazeOptimization option : BlazeOptimization.values()) {
+            if (OptimizationValues.GRAPHICS.contains(option)) continue;
+            Group fallback = option.name().startsWith("DH_") ? Group.HORIZONS : Group.MODS;
+            groups.get(owner.getOrDefault(option, fallback)).add(option);
+        }
+        return groups;
     }
 
     @Override
-    String title() {
-        return "Optimisations";
+    List<Category> categories() {
+        List<Category> categories = new ArrayList<>();
+        for (Group entry : Group.values()) {
+            categories.add(new Category(entry.icon, text("group." + entry.name().toLowerCase(Locale.ROOT)), String.valueOf(GROUPS.get(entry).size())));
+        }
+        return categories;
+    }
+
+    @Override
+    int category() {
+        return group;
+    }
+
+    @Override
+    void category(int index) {
+        group = index;
     }
 
     @Override
     List<SettingsRow> rows() {
+        Group shown = Group.values()[group];
+        List<BlazeOptimization> options = GROUPS.get(shown);
         List<SettingsRow> rows = new ArrayList<>();
-        rows.add(new SettingsRow.Header("All"));
-        rows.add(new SettingsRow.Action(Component.literal("Turn all on"), "Every optimisation on, the default", () -> setAll(true), () -> count(true) + " on"));
-        rows.add(new SettingsRow.Action(Component.literal("Turn all off"), "Every optimisation off, for a baseline that only runs on Vulkan", () -> setAll(false), () -> count(false) + " off"));
-        List<BlazeOptimization> listed = new ArrayList<>();
-        for (Group group : GROUPS) {
-            rows.add(new SettingsRow.Header(group.title()));
-            for (BlazeOptimization option : group.options()) {
-                rows.add(row(option));
-                listed.add(option);
-            }
-        }
-        List<SettingsRow> rest = new ArrayList<>();
-        for (BlazeOptimization option : BlazeOptimization.values()) if (!listed.contains(option) && !UpscalingPage.OPTIONS.contains(option)) rest.add(row(option));
-        if (!rest.isEmpty()) {
-            rows.add(new SettingsRow.Header("More"));
-            rows.addAll(rest);
-        }
+        rows.add(new SettingsRow.Header(text("section.all"), () -> on(all()) + " / " + all().size()));
+        rows.add(new SettingsRow.Action(text("all_on.name"), text("all_on.desc"), SettingsIcon.CHECK, () -> text("all_on.run"), () -> setAll(true)));
+        rows.add(new SettingsRow.Action(text("all_off.name"), text("all_off.desc"), null, () -> text("all_off.run"), () -> setAll(false)));
+        rows.add(new SettingsRow.Header(text("group." + shown.name().toLowerCase(Locale.ROOT)), () -> on(options) + " / " + options.size()));
+        for (BlazeOptimization option : options) rows.add(row(option));
         return rows;
     }
 
     private SettingsRow row(BlazeOptimization option) {
-        return new SettingsRow.Toggle(Component.literal(LABELS.getOrDefault(option, option.key())), option.description(),
-                () -> saved.get(option), value -> set(Map.of(option, value)))
-                .enabledWhen(() -> !option.launchOverride())
-                .note(() -> option.launchOverride() ? "Set by -Doverhaul.opt." + option.key() + ", the screen cannot change it"
-                        : saved.get(option) != option.on() ? "Restart the game to apply" : option.key());
+        String key = "overhaul.opt." + option.key();
+        return values.toggle(option, OverhaulLang.or(key + ".name", option.key()), OverhaulLang.or(key + ".desc", option.description())).note(() -> {
+            if (option.launchOverride()) return OverhaulLang.get("overhaul.ui.launch_override", "-Doverhaul.opt." + option.key());
+            return waits(option) ? OverhaulLang.get("overhaul.ui.restart") : null;
+        });
+    }
+
+    /** Whether the game started with another value than the file holds, for an option it only reads at startup. */
+    private static boolean waits(BlazeOptimization option) {
+        return !option.live() && option.saved() != option.launched();
+    }
+
+    private static List<BlazeOptimization> all() {
+        return GROUPS.values().stream().flatMap(List::stream).toList();
+    }
+
+    private long on(List<BlazeOptimization> options) {
+        return options.stream().filter(option -> values.flag(option).get()).count();
     }
 
     private void setAll(boolean value) {
-        Map<BlazeOptimization, Boolean> values = new EnumMap<>(BlazeOptimization.class);
-        for (BlazeOptimization option : BlazeOptimization.values()) if (!option.launchOverride() && !UpscalingPage.OPTIONS.contains(option)) values.put(option, value);
-        set(values);
+        for (BlazeOptimization option : all()) if (!option.launchOverride()) values.flag(option).set(value);
     }
 
-    private void set(Map<BlazeOptimization, Boolean> values) {
-        BlazeOptimization.save(values);
-        saved.putAll(values);
-    }
-
-    private long count(boolean value) {
-        return saved.entrySet().stream().filter(e -> !UpscalingPage.OPTIONS.contains(e.getKey()) && e.getValue() == value).count();
+    @Override
+    String readout() {
+        return on(all()) + " / " + all().size();
     }
 
     @Override
     String status() {
-        long pending = saved.entrySet().stream().filter(OptimizationPage::pending).count();
-        if (pending == 0) return "Changes here apply after a restart";
-        return "Restart the game to apply " + pending + (pending == 1 ? " change" : " changes");
+        long waiting = all().stream().filter(OptimizationPage::waits).count();
+        return waiting == 0 ? "" : text("waiting", waiting);
     }
 
     @Override
     boolean statusIsPending() {
-        return saved.entrySet().stream().anyMatch(OptimizationPage::pending);
-    }
-
-    /** Options on the upscaling page apply there, at once, so they never wait for a restart here. */
-    private static boolean pending(Map.Entry<BlazeOptimization, Boolean> entry) {
-        return !UpscalingPage.OPTIONS.contains(entry.getKey()) && entry.getValue() != entry.getKey().on();
-    }
-
-    private static Map<BlazeOptimization, String> labels() {
-        Map<BlazeOptimization, String> labels = new EnumMap<>(BlazeOptimization.class);
-        labels.put(BlazeOptimization.SECTION_BATCH, "Batched terrain draws");
-        labels.put(BlazeOptimization.SECTION_OCCLUSION, "Terrain occlusion");
-        labels.put(BlazeOptimization.GPU_OCCLUSION, "Terrain occlusion on the GPU");
-        labels.put(BlazeOptimization.ENTITY_OCCLUSION, "Entity occlusion");
-        labels.put(BlazeOptimization.BLOCK_ENTITY_OCCLUSION, "Block entity occlusion");
-        labels.put(BlazeOptimization.COMPACT_SECTIONS, "Compact terrain vertices");
-        labels.put(BlazeOptimization.SECTION_LISTS, "Per-layer section lists");
-        labels.put(BlazeOptimization.DRAW_MERGE, "Merged draws");
-        labels.put(BlazeOptimization.STREAM_UPLOADS, "Streamed uploads");
-        labels.put(BlazeOptimization.BULK_VERTICES, "Bulk vertex writes");
-        labels.put(BlazeOptimization.CUBE_MESH, "Precomputed model cubes");
-        labels.put(BlazeOptimization.CUBE_AXES, "Shared cube normals");
-        labels.put(BlazeOptimization.ITEM_QUADS, "Direct item quads");
-        labels.put(BlazeOptimization.ITEM_AXES, "Shared item normals");
-        labels.put(BlazeOptimization.ENTITY_RENDERER_CACHE, "Entity renderer cache");
-        labels.put(BlazeOptimization.BIOME_CACHE, "Sky and fog biome cache");
-        labels.put(BlazeOptimization.SPRITE_INTERPOLATION, "Fast texture animation");
-        labels.put(BlazeOptimization.MIP_BLEND, "Clean distant textures");
-        labels.put(BlazeOptimization.XAERO_LIMITS, "Xaero's map limits");
-        labels.put(BlazeOptimization.CROSSHAIR_LIMIT, "Shoulder Surfing crosshair limit");
-        labels.put(BlazeOptimization.SECTION_TABLE, "Terrain draw tables");
-        labels.put(BlazeOptimization.SECTION_BOUNDS, "Flat frustum test");
-        labels.put(BlazeOptimization.ENTITY_SCANS, "Camera effect scans per tick");
-        labels.put(BlazeOptimization.HEAD_CURIOS, "Youkai camellia check per tick");
-        labels.put(BlazeOptimization.SECTION_SCAN_REUSE, "Reused section walks");
-        labels.put(BlazeOptimization.DH_CLOUDS, "Distant Horizons clouds at 60 Hz");
-        labels.put(BlazeOptimization.DH_RENDER_LIST, "Distant Horizons render list");
-        labels.put(BlazeOptimization.SECTION_GRID, "Incremental section grid");
-        labels.put(BlazeOptimization.PARTICLE_QUADS, "Direct particle quads");
-        labels.put(BlazeOptimization.ENTITY_CLASS_SCANS, "Skipped entity class scans");
-        labels.put(BlazeOptimization.SELECTOR_ORDER, "Cheap selector tests first");
-        labels.put(BlazeOptimization.SERVER_CLASS_SCANS, "Skipped server entity class scans");
-        labels.put(BlazeOptimization.SECTION_LOOKUP, "Entity sections by key");
-        labels.put(BlazeOptimization.COLLISION_SCANS, "Skipped entity collision scans");
-        labels.put(BlazeOptimization.MOD_ENTITY_TICKS, "Born in Chaos tick filter");
-        labels.put(BlazeOptimization.DAMAGE_TEXT_SIGHT, "Damage number sight rays per tick");
-        labels.put(BlazeOptimization.ENTITY_LIGHT, "Entity light per tick");
-        labels.put(BlazeOptimization.HUD_CACHE, "HUD at 30 Hz");
-        labels.put(BlazeOptimization.DEBUG_TEXT, "F3 text at 10 Hz");
-        labels.put(BlazeOptimization.SECTION_RUN_KEYS, "Shared terrain draw keys");
-        labels.put(BlazeOptimization.PACK_GRAPH_SHAPES, "Reused pack pass graphs");
-        labels.put(BlazeOptimization.POOL_RANGES, "Flat buffer pool ranges");
-        labels.put(BlazeOptimization.UNIFORM_PLANS, "Resolved pack uniforms");
-        labels.put(BlazeOptimization.UNIFORM_READERS, "Bound custom uniform inputs");
-        labels.put(BlazeOptimization.SHADOW_COLUMNS, "Shadow casters by column");
-        labels.put(BlazeOptimization.SHADOW_TIGHT_REUSE, "Reused shadow frustum test");
-        labels.put(BlazeOptimization.SHADOW_REACH, "Shadow casters by view");
-        labels.put(BlazeOptimization.ENTITY_SHADOW_REACH, "Entity shadows by view");
-        labels.put(BlazeOptimization.PLAYER_SHADOW_PACE, "Player shadow pose at 60 Hz");
-        labels.put(BlazeOptimization.PLAYER_SHADOW_REPLAY, "Replayed player shadow");
-        labels.put(BlazeOptimization.PLAYER_SHADOW_SLOW_PACE, "Player shadow pose at 30 Hz");
-        labels.put(BlazeOptimization.PLAYER_HAND_PACE, "Hand pose at 120 Hz");
-        labels.put(BlazeOptimization.PLAYER_HAND_REPLAY, "Replayed hand");
-        labels.put(BlazeOptimization.ENTITY_NBT_TICK, "Entity NBT once per tick");
-        labels.put(BlazeOptimization.ENTITY_NBT_RULES, "Entity NBT rules once per tick");
-        labels.put(BlazeOptimization.MOD_CLASS_CACHE, "Cached mod class lookups");
-        labels.put(BlazeOptimization.HUD_LAYER_MEMO, "Raised HUD layers by exact name");
-        labels.put(BlazeOptimization.SECTION_DRAWS, "Flat terrain draw fields");
-        labels.put(BlazeOptimization.PIXEL_ROWS, "Row copies for pixel reads");
-        labels.put(BlazeOptimization.STRIDE_OFFSETS, "Stride-aligned section vertices");
-        labels.put(BlazeOptimization.DH_SHARED_PAGES, "Distant Horizons shared pages");
-        labels.put(BlazeOptimization.MERGED_BARRIERS, "Merged image barriers");
-        labels.put(BlazeOptimization.RAW_DRAWS, "Native raw mod draws");
-        labels.put(BlazeOptimization.SHADOW_DRAWS, "Flat shadow draw fields");
-        return labels;
+        return true;
     }
 }

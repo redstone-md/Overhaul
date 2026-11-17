@@ -2,81 +2,87 @@ package dev.overhaul.minecraft.blaze.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
+import net.minecraft.client.CloudStatus;
+import net.minecraft.client.GraphicsStatus;
+import net.minecraft.client.Options;
+import net.minecraft.client.ParticleStatus;
 
 /**
- * Presets from Ultra low to Ultra, and the benchmark that measures each of them on this machine and names the
- * highest one it can hold. Presets write the video page's options, so the video page shows exactly what one set.
+ * A preset from Ultra low to Ultra, and under it every option a preset writes, so a setup changed by hand shows as
+ * custom with each value in view.
  */
 final class QualityPage extends SettingsPage {
-    private final Minecraft minecraft;
-    private final Function<Consumer<BenchmarkResult>, String> benchmark;
-    private BenchmarkResult result = BenchmarkResult.load();
-    private String problem;
+    private final GameOptions game;
+    private final Options options;
+    private final Supplier<BenchmarkResult> benchmark;
 
-    /**
-     * @param benchmark starts a run that hands its result to the given callback when every stage is measured; returns
-     *                  why it cannot start, or null
-     */
-    QualityPage(Minecraft minecraft, Runnable refresh, Function<Consumer<BenchmarkResult>, String> benchmark) {
-        super(refresh);
-        this.minecraft = minecraft;
+    /** @param benchmark the last benchmark's result, or null when none ran */
+    QualityPage(GameOptions game, Runnable refresh, Supplier<BenchmarkResult> benchmark) {
+        super("quality", SettingsIcon.QUALITY, refresh);
+        this.game = game;
+        this.options = game.options;
         this.benchmark = benchmark;
     }
 
     @Override
-    String title() {
-        return "Quality";
-    }
-
-    @Override
     List<SettingsRow> rows() {
+        QualityPreset[] presets = QualityPreset.values();
         List<SettingsRow> rows = new ArrayList<>();
-        rows.add(new SettingsRow.Header("Presets"));
-        for (int i = QualityPreset.values().length - 1; i >= 0; i--) {
-            QualityPreset preset = QualityPreset.values()[i];
-            rows.add(new SettingsRow.Action(Component.literal(preset.label), preset.description + ". View distance " + preset.renderDistance() + " chunks",
-                    () -> preset.apply(minecraft.options, true), () -> result != null && result.recommended() == preset ? "Recommended" : "")
-                    .selectedWhen(() -> preset.matches(minecraft.options)));
-        }
-        rows.add(new SettingsRow.Header("Benchmark"));
-        long seconds = BenchmarkRun.seconds();
-        rows.add(new SettingsRow.Action(Component.literal("Run benchmark"),
-                "Creates a test world with a fixed seed and tries every preset in it from Ultra down. The camera turns while each one loads its view, then turns again while every frame is timed under a storm of particles. Takes about "
-                        + seconds + " seconds plus the world's creation; the world is deleted and your settings come back afterwards",
-                this::start, () -> menu() ? seconds + " s" : "")
-                .enabledWhen(this::menu)
-                .note(() -> problem != null ? problem : menu() ? "" : "Runs from the main menu only; leave the world first"));
-        rows.add(new BenchmarkChartRow(() -> result));
-        if (result != null) {
-            QualityPreset picked = result.recommended();
-            rows.add(new SettingsRow.Action(Component.literal("Use " + picked.label), "Applies the preset the last benchmark recommended",
-                    () -> picked.apply(minecraft.options, true), () -> picked.matches(minecraft.options) ? "In use" : "")
-                    .enabledWhen(() -> !picked.matches(minecraft.options)));
-        }
+        rows.add(new SettingsRow.Header(text("section.preset")));
+        rows.add(new SettingsRow.Choice<>(text("preset.name"), text("preset.desc"), IntStream.range(0, presets.length).boxed().toList(), new Preset(),
+                index -> index < 0 ? text("custom") : presets[index].label())
+                .note(() -> staged() == null ? null : staged().description()));
+        rows.add(new SettingsRow.Action(text("recommended.name"), text("recommended.desc"), SettingsIcon.CHECK,
+                () -> recommended() == null ? text("recommended.none") : recommended().label(), () -> recommended().apply(options, game, true))
+                .enabledWhen(() -> recommended() != null && !recommended().matches(options, game)));
+        rows.add(new SettingsRow.Header(text("section.detail")));
+        rows.add(game.slider(options.renderDistance(), "options.renderDistance", text("distance.desc"), 2, QualityPreset.maxDistance(), 1, value -> text("chunks", value)));
+        rows.add(game.choice(options.graphicsMode(), "options.graphics", text("graphics.desc"), GraphicsStatus.values()));
+        rows.add(game.choice(options.cloudStatus(), "options.renderClouds", text("clouds.desc"), CloudStatus.values()));
+        rows.add(game.toggle(options.ambientOcclusion(), "options.ao", text("ao.desc")));
+        rows.add(game.choice(options.particles(), "options.particles", text("particles.desc"), ParticleStatus.values()));
+        rows.add(game.slider(options.biomeBlendRadius(), "options.biomeBlendRadius", text("blend.desc"), 0, 7, 1,
+                value -> value == 0 ? OverhaulLang.get("overhaul.ui.off") : (2 * value + 1) + "x" + (2 * value + 1)));
+        rows.add(game.toggle(options.entityShadows(), "options.entityShadows", text("shadows.desc")));
+        rows.add(game.percent(options.entityDistanceScaling(), "options.entityDistanceScaling", text("entities.desc"), 50, 500, 25));
+        rows.add(game.slider(options.mipmapLevels(), "options.mipmapLevels", text("mipmaps.desc"), 0, 4, 1,
+                value -> value == 0 ? OverhaulLang.get("overhaul.ui.off") : String.valueOf(value)));
         return rows;
     }
 
-    private boolean menu() {
-        return minecraft.level == null;
+    private QualityPreset staged() {
+        return QualityPreset.current(options, game);
     }
 
-    void start() {
-        problem = benchmark.apply(this::finished);
-        refresh.run();
-    }
-
-    void finished(BenchmarkResult finished) {
-        result = finished;
-        refresh.run();
+    private QualityPreset recommended() {
+        BenchmarkResult result = benchmark.get();
+        return result == null ? null : result.recommended();
     }
 
     @Override
-    String status() {
-        QualityPreset current = QualityPreset.current(minecraft.options);
-        return current == null ? "Custom settings; the video page shows every value" : "Using the " + current.label + " preset";
+    String readout() {
+        QualityPreset preset = staged();
+        return preset == null ? text("custom") : preset.label();
+    }
+
+    /** The preset as an index into the presets, or -1 for a setup no preset describes. */
+    private final class Preset implements SettingsDraft.Setting<Integer> {
+        @Override
+        public Integer get() {
+            QualityPreset preset = staged();
+            return preset == null ? -1 : preset.ordinal();
+        }
+
+        @Override
+        public void set(Integer index) {
+            QualityPreset.values()[index].apply(options, game, true);
+        }
+
+        @Override
+        public boolean changed() {
+            return staged() != QualityPreset.current(options);
+        }
     }
 }

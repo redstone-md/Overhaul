@@ -1,40 +1,52 @@
 package dev.overhaul.minecraft.blaze.ui;
 
+import java.util.Locale;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.GraphicsStatus;
+import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
 import net.minecraft.client.ParticleStatus;
 
 /**
- * Named sets of the game's own video options, lowest first. A preset only writes options the video page already
- * shows, so picking one and then changing a row by hand leaves a custom setup the page can still describe.
+ * Named sets of the game's own video options, lowest first. A preset only writes options the settings pages already
+ * show, so picking one and then changing a row by hand leaves a custom setup the pages can still describe.
  */
 enum QualityPreset {
-    ULTRA_LOW("Ultra low", "Integrated graphics and old laptops. Short view, flat leaves, almost no particles",
-            4, 5, GraphicsStatus.FAST, CloudStatus.OFF, false, ParticleStatus.MINIMAL, 0, false, 50, 0),
-    LOW("Low", "Entry graphics cards. Close view, flat leaves, fewer particles",
-            8, 6, GraphicsStatus.FAST, CloudStatus.OFF, true, ParticleStatus.DECREASED, 1, false, 75, 2),
-    OPTIMIZED("Optimized", "The usual choice for most players. Fancy leaves and smooth lighting at a moderate distance; clouds, entity shadows and extra particles that cost frames and add little are off",
-            12, 6, GraphicsStatus.FANCY, CloudStatus.OFF, true, ParticleStatus.DECREASED, 2, false, 100, 4),
-    MEDIUM("Medium", "Mid-range cards. Fancy leaves and clouds at a moderate distance",
-            12, 8, GraphicsStatus.FANCY, CloudStatus.FAST, true, ParticleStatus.ALL, 2, true, 100, 4),
-    HIGH("High", "Recent cards. Long view, fancy clouds, wider biome blending",
-            20, 10, GraphicsStatus.FANCY, CloudStatus.FANCY, true, ParticleStatus.ALL, 3, true, 150, 4),
-    ULTRA("Ultra", "Fast cards with plenty of memory. Furthest view, entities drawn far away, smoothest blending",
-            32, 12, GraphicsStatus.FANCY, CloudStatus.FANCY, true, ParticleStatus.ALL, 5, true, 250, 4);
+    ULTRA_LOW(4, 5, GraphicsStatus.FAST, CloudStatus.OFF, false, ParticleStatus.MINIMAL, 0, false, 50, 0),
+    LOW(8, 6, GraphicsStatus.FAST, CloudStatus.OFF, true, ParticleStatus.DECREASED, 1, false, 75, 2),
+    OPTIMIZED(12, 6, GraphicsStatus.FANCY, CloudStatus.OFF, true, ParticleStatus.DECREASED, 2, false, 100, 4),
+    MEDIUM(12, 8, GraphicsStatus.FANCY, CloudStatus.FAST, true, ParticleStatus.ALL, 2, true, 100, 4),
+    HIGH(20, 10, GraphicsStatus.FANCY, CloudStatus.FANCY, true, ParticleStatus.ALL, 3, true, 150, 4),
+    ULTRA(32, 12, GraphicsStatus.FANCY, CloudStatus.FANCY, true, ParticleStatus.ALL, 5, true, 250, 4);
 
-    final String label;
-    final String description;
+    /** Where a preset reads and writes options: the game itself, or a draft that holds them until Apply. */
+    interface Sink {
+        <T> T get(OptionInstance<T> option);
+
+        <T> void set(OptionInstance<T> option, T value);
+    }
+
+    private static final Sink DIRECT = new Sink() {
+        @Override
+        public <T> T get(OptionInstance<T> option) {
+            return option.get();
+        }
+
+        /** Some options reload the world when set, so one that already holds the value is left alone. */
+        @Override
+        public <T> void set(OptionInstance<T> option, T value) {
+            if (!option.get().equals(value)) option.set(value);
+        }
+    };
+
     private final int renderDistance, simulationDistance, biomeBlend, entityDistance, mipmaps;
     private final GraphicsStatus graphics;
     private final CloudStatus clouds;
     private final ParticleStatus particles;
     private final boolean ambientOcclusion, entityShadows;
 
-    QualityPreset(String label, String description, int renderDistance, int simulationDistance, GraphicsStatus graphics, CloudStatus clouds,
+    QualityPreset(int renderDistance, int simulationDistance, GraphicsStatus graphics, CloudStatus clouds,
                   boolean ambientOcclusion, ParticleStatus particles, int biomeBlend, boolean entityShadows, int entityDistance, int mipmaps) {
-        this.label = label;
-        this.description = description;
         this.renderDistance = renderDistance;
         this.simulationDistance = simulationDistance;
         this.graphics = graphics;
@@ -45,6 +57,14 @@ enum QualityPreset {
         this.entityShadows = entityShadows;
         this.entityDistance = entityDistance;
         this.mipmaps = mipmaps;
+    }
+
+    String label() {
+        return OverhaulLang.get("overhaul.preset." + name().toLowerCase(Locale.ROOT) + ".name");
+    }
+
+    String description() {
+        return OverhaulLang.get("overhaul.preset." + name().toLowerCase(Locale.ROOT) + ".desc");
     }
 
     /** The furthest distance the sliders offer; a small heap cannot hold the chunks of a longer view. */
@@ -60,31 +80,41 @@ enum QualityPreset {
         return Math.min(simulationDistance, maxDistance());
     }
 
-    /** @param textures whether to set mipmaps too, which reloads every texture when the settings screen closes */
+    /** Writes the preset to the game at once. */
     void apply(Options options, boolean textures) {
-        options.renderDistance().set(renderDistance());
-        options.simulationDistance().set(simulationDistance());
-        if (options.graphicsMode().get() != graphics) options.graphicsMode().set(graphics);
-        options.cloudStatus().set(clouds);
-        if (options.ambientOcclusion().get() != ambientOcclusion) options.ambientOcclusion().set(ambientOcclusion);
-        options.particles().set(particles);
-        if (options.biomeBlendRadius().get() != biomeBlend) options.biomeBlendRadius().set(biomeBlend);
-        options.entityShadows().set(entityShadows);
-        options.entityDistanceScaling().set(entityDistance / 100.0);
-        if (textures) options.mipmapLevels().set(mipmaps);
+        apply(options, DIRECT, textures);
     }
 
-    boolean matches(Options options) {
-        return options.renderDistance().get() == renderDistance() && options.simulationDistance().get() == simulationDistance()
-                && options.graphicsMode().get() == graphics && options.cloudStatus().get() == clouds
-                && options.ambientOcclusion().get() == ambientOcclusion && options.particles().get() == particles
-                && options.biomeBlendRadius().get() == biomeBlend && options.entityShadows().get() == entityShadows
-                && Math.round(options.entityDistanceScaling().get() * 100) == entityDistance && options.mipmapLevels().get() == mipmaps;
+    /** @param textures whether to set mipmaps too, which reloads every texture */
+    void apply(Options options, Sink sink, boolean textures) {
+        sink.set(options.renderDistance(), renderDistance());
+        sink.set(options.simulationDistance(), simulationDistance());
+        sink.set(options.graphicsMode(), graphics);
+        sink.set(options.cloudStatus(), clouds);
+        sink.set(options.ambientOcclusion(), ambientOcclusion);
+        sink.set(options.particles(), particles);
+        sink.set(options.biomeBlendRadius(), biomeBlend);
+        sink.set(options.entityShadows(), entityShadows);
+        sink.set(options.entityDistanceScaling(), entityDistance / 100.0);
+        if (textures) sink.set(options.mipmapLevels(), mipmaps);
+    }
+
+    boolean matches(Options options, Sink sink) {
+        return sink.get(options.renderDistance()) == renderDistance() && sink.get(options.simulationDistance()) == simulationDistance()
+                && sink.get(options.graphicsMode()) == graphics && sink.get(options.cloudStatus()) == clouds
+                && sink.get(options.ambientOcclusion()) == ambientOcclusion && sink.get(options.particles()) == particles
+                && sink.get(options.biomeBlendRadius()) == biomeBlend && sink.get(options.entityShadows()) == entityShadows
+                && Math.round(sink.get(options.entityDistanceScaling()) * 100) == entityDistance && sink.get(options.mipmapLevels()) == mipmaps;
     }
 
     /** The preset the options match, or null for a setup changed by hand. */
-    static QualityPreset current(Options options) {
-        for (QualityPreset preset : values()) if (preset.matches(options)) return preset;
+    static QualityPreset current(Options options, Sink sink) {
+        for (QualityPreset preset : values()) if (preset.matches(options, sink)) return preset;
         return null;
+    }
+
+    /** The preset the game runs now, or null. */
+    static QualityPreset current(Options options) {
+        return current(options, DIRECT);
     }
 }

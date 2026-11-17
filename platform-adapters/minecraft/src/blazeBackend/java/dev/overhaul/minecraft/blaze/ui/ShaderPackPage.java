@@ -8,40 +8,42 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Stream;
-import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Lists the packs in {@code shaderpacks/} and runs the chosen one on the next frame, so the world behind the page shows
- * the result. A pack's own options open as a second view and apply together, since each apply compiles the pack again.
+ * Lists the packs in {@code shaderpacks/}; Apply compiles the chosen one and runs it on the next frame, so the world
+ * beside the page shows the result. The running pack's own options open as a second view and apply together, since
+ * each apply compiles the pack again.
  */
 final class ShaderPackPage extends SettingsPage {
     private static final Logger LOG = LoggerFactory.getLogger(ShaderPackPage.class);
     private static final String SAVED = "saved.";
     private final Minecraft minecraft;
+    private final SettingsDraft draft;
     private final Path folder;
+    private final SettingsDraft.Value<String> pack;
     private Properties file;
     private String error = "";
-    private Map<String, Boolean> defaults;
+    private Map<String, Boolean> defaults = Map.of();
+    /** Options committed by an Apply and not yet written, with the pack they belong to. */
     private final Map<String, Boolean> pending = new LinkedHashMap<>();
-    private boolean optionsView, dirty;
+    private String pendingPack = "";
+    private boolean optionsView;
 
-    ShaderPackPage(Minecraft minecraft, Runnable refresh) {
-        super(refresh);
+    ShaderPackPage(Minecraft minecraft, SettingsDraft draft, Runnable refresh) {
+        super("packs", SettingsIcon.CUBE, refresh);
         this.minecraft = minecraft;
+        this.draft = draft;
         this.folder = minecraft.gameDirectory.toPath().resolve(BlazePackRequest.FOLDER);
         this.file = read();
-    }
-
-    @Override
-    String title() {
-        return "Shader packs";
+        this.pack = draft.value("shaderPack", this::current, this::select);
+        draft.onApplied(this::writeOptions);
     }
 
     @Override
@@ -51,72 +53,89 @@ final class ShaderPackPage extends SettingsPage {
 
     @Override
     List<SettingsRow> rows() {
+        if (optionsView && !pack.get().equals(current())) optionsView = false;
         return optionsView ? optionRows() : packRows();
     }
 
     private List<SettingsRow> packRows() {
         List<SettingsRow> rows = new ArrayList<>();
         List<Path> packs = packs();
-        rows.add(new SettingsRow.Header("Installed, " + packs.size()));
-        rows.add(guarded(new SettingsRow.Action(Component.literal("Off"), "No shader pack. The world draws with the game's own shaders", () -> select(null), () -> "")
-                .selectedWhen(() -> current().isEmpty())));
-        for (Path pack : packs) {
-            String name = pack.getFileName().toString();
-            String kind = Files.isDirectory(pack) ? "Folder" : "Zip archive";
-            rows.add(guarded(new SettingsRow.Action(Component.literal(name), kind + " in shaderpacks. Selecting it compiles the pack and runs it on the next frame",
-                    () -> select(name), () -> "").selectedWhen(() -> name.equals(current()))));
+        rows.add(new SettingsRow.Header(text("section.installed"), () -> String.valueOf(packs.size())));
+        rows.add(choice("", text("off.name"), text("off.desc")));
+        for (Path entry : packs) {
+            String name = entry.getFileName().toString();
+            rows.add(choice(name, name, text(Files.isDirectory(entry) ? "folder.desc" : "zip.desc")));
         }
-        rows.add(new SettingsRow.Header("Pack"));
-        rows.add(guarded(new SettingsRow.Action(Component.literal("Pack options"), "The selected pack's switches. Changes apply together", this::openOptions, () -> "›")
-                .enabledWhen(() -> !current().isEmpty())));
-        rows.add(new SettingsRow.Action(Component.literal("Reload pack"), "Compiles the selected pack again, after its files changed on disk", BlazePackRequest::reload, () -> "")
+        rows.add(new SettingsRow.Header(text("section.pack")));
+        rows.add(new SettingsRow.Action(text("options.name"), text("options.desc"), SettingsIcon.NEXT, () -> text("options.open"), this::openOptions)
+                .enabledWhen(() -> !current().isEmpty() && !pack.changed()).note(() -> pack.changed() ? text("options.apply_first") : null));
+        rows.add(new SettingsRow.Action(text("reload.name"), text("reload.desc"), SettingsIcon.RELOAD, () -> text("reload.run"), BlazePackRequest::reload)
                 .enabledWhen(() -> !current().isEmpty()));
-        rows.add(new SettingsRow.Action(Component.literal("Open shader pack folder"), "Put zip archives or folders here, or drop them on this screen", this::openFolder, () -> ""));
+        rows.add(new SettingsRow.Action(text("folder.name"), text("folder.open.desc"), SettingsIcon.FOLDER, () -> text("folder.open"), this::openFolder));
         return rows;
+    }
+
+    private SettingsRow choice(String name, String label, String description) {
+        return new SettingsRow.Action(label, description, null, () -> name.equals(pack.get()) ? text("chosen") : text("choose"), () -> pack.set(name))
+                .selectedWhen(() -> name.equals(pack.get())).changedWhen(() -> pack.changed() && name.equals(pack.get()))
+                .enabledWhen(() -> !BlazePackRequest.launchOverride())
+                .note(() -> BlazePackRequest.launchOverride() ? OverhaulLang.get("overhaul.ui.launch_override", "-Doverhaul.shaderPack") : null);
     }
 
     private List<SettingsRow> optionRows() {
         List<SettingsRow> rows = new ArrayList<>();
-        rows.add(new SettingsRow.Action(Component.literal("Back"), "Return to the pack list", () -> { optionsView = false; refresh.run(); }, () -> "‹"));
-        rows.add(new SettingsRow.Action(Component.literal("Apply"), "Writes the options and compiles the pack again", this::applyOptions,
-                () -> dirty ? "Unsaved" : "").enabledWhen(() -> dirty));
-        rows.add(new SettingsRow.Action(Component.literal("Reset to defaults"), "Every option back to the pack's default. Press Apply to run it",
-                () -> { pending.clear(); dirty = true; }, () -> ""));
+        rows.add(new SettingsRow.Action(text("back.name"), text("back.desc"), SettingsIcon.PREV, () -> OverhaulLang.get("overhaul.ui.back"), () -> {
+            optionsView = false;
+            refresh.run();
+        }));
         if (!error.isEmpty()) {
-            rows.add(new SettingsRow.Header("Options cannot be read"));
-            rows.add(new SettingsRow.Action(Component.literal(error), error, () -> { }, () -> "").enabledWhen(() -> false));
+            rows.add(new SettingsRow.Header(text("options.unreadable")));
+            rows.add(new SettingsRow.Info(error, error, () -> ""));
             return rows;
         }
-        rows.add(new SettingsRow.Header(current() + ", " + defaults.size() + " options"));
-        for (var entry : defaults.entrySet()) {
-            String name = entry.getKey();
-            boolean fallback = entry.getValue();
-            rows.add(new SettingsRow.Toggle(Component.literal(name), "Pack option " + name + ". Default " + (fallback ? "on" : "off"),
-                    () -> pending.getOrDefault(name, fallback), value -> { pending.put(name, value); dirty = true; }));
-        }
+        String name = current();
+        Map<String, Boolean> written = written();
+        rows.add(new SettingsRow.Action(text("defaults.name"), text("defaults.desc"), SettingsIcon.RELOAD, () -> OverhaulLang.get("overhaul.ui.reset"),
+                () -> defaults.forEach((option, fallback) -> option(name, option, fallback, written).set(fallback))));
+        rows.add(new SettingsRow.Header(name, () -> String.valueOf(defaults.size())));
+        defaults.forEach((option, fallback) -> rows.add(new SettingsRow.Toggle(option,
+                text("option.desc", option, OverhaulLang.get(fallback ? "overhaul.ui.on" : "overhaul.ui.off")), option(name, option, fallback, written))));
         return rows;
     }
 
-    private SettingsRow guarded(SettingsRow row) {
-        return row.note(() -> BlazePackRequest.launchOverride() ? "The launch argument -Doverhaul.shaderPack overrides this choice" : null);
+    private SettingsDraft.Value<Boolean> option(String name, String option, boolean fallback, Map<String, Boolean> written) {
+        return draft.value("shaderPack." + name + "." + option, () -> written.getOrDefault(option, fallback), value -> {
+            pendingPack = name;
+            pending.put(option, value);
+        });
+    }
+
+    /** The options the file holds for the running pack: only those that differ from the pack's defaults. */
+    private Map<String, Boolean> written() {
+        Map<String, Boolean> values = new LinkedHashMap<>();
+        for (String token : file.getProperty("options", "").split(",")) {
+            int separator = token.indexOf('=');
+            if (separator > 0) values.put(token.substring(0, separator).trim(), Boolean.parseBoolean(token.substring(separator + 1).trim()));
+        }
+        return values;
     }
 
     private List<Path> packs() {
         if (!Files.isDirectory(folder)) return List.of();
         try (Stream<Path> entries = Files.list(folder)) {
-            return entries.filter(p -> Files.isDirectory(p) || p.getFileName().toString().toLowerCase().endsWith(".zip"))
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString().toLowerCase())).toList();
+            return entries.filter(entry -> Files.isDirectory(entry) || entry.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
+                    .sorted(Comparator.comparing(entry -> entry.getFileName().toString().toLowerCase(Locale.ROOT))).toList();
         } catch (IOException failure) {
             LOG.warn("Cannot list {}", folder, failure);
             return List.of();
         }
     }
 
-    /** The selected pack's file name, or empty for none. */
+    /** The file name of the pack the configuration names, or empty for none. */
     private String current() {
-        String pack = file.getProperty("pack", "").trim();
-        if (pack.isEmpty()) return "";
-        Path name = Path.of(pack).getFileName();
+        String path = file.getProperty("pack", "").trim();
+        if (path.isEmpty()) return "";
+        Path name = Path.of(path).getFileName();
         return name == null ? "" : name.toString();
     }
 
@@ -124,7 +143,7 @@ final class ShaderPackPage extends SettingsPage {
     private void select(String name) {
         String previous = current();
         if (!previous.isEmpty()) file.setProperty(SAVED + previous, file.getProperty("options", ""));
-        if (name == null) {
+        if (name.isEmpty()) {
             file.setProperty("pack", "");
             file.setProperty("options", "");
         } else {
@@ -137,14 +156,8 @@ final class ShaderPackPage extends SettingsPage {
     private void openOptions() {
         defaults = Map.of();
         error = "";
-        pending.clear();
-        dirty = false;
         try {
             defaults = BlazePackRequest.options(folder.resolve(current()));
-            for (String token : file.getProperty("options", "").split(",")) {
-                int separator = token.indexOf('=');
-                if (separator > 0) pending.put(token.substring(0, separator).trim(), Boolean.parseBoolean(token.substring(separator + 1).trim()));
-            }
         } catch (IOException | RuntimeException failure) {
             error = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
         }
@@ -153,17 +166,22 @@ final class ShaderPackPage extends SettingsPage {
     }
 
     /** Only values that differ from the pack's defaults are written, so a pack update can move its defaults. */
-    private void applyOptions() {
-        StringBuilder options = new StringBuilder();
-        pending.forEach((name, value) -> {
-            if (defaults.containsKey(name) && defaults.get(name) != value.booleanValue()) {
-                if (!options.isEmpty()) options.append(',');
-                options.append(name).append('=').append(value);
-            }
-        });
-        file.setProperty("options", options.toString());
-        write();
-        dirty = false;
+    private void writeOptions() {
+        if (pending.isEmpty()) return;
+        if (pendingPack.equals(current())) {
+            Map<String, Boolean> values = written();
+            values.putAll(pending);
+            StringBuilder options = new StringBuilder();
+            values.forEach((name, value) -> {
+                if (defaults.containsKey(name) && defaults.get(name) != value.booleanValue()) {
+                    if (!options.isEmpty()) options.append(',');
+                    options.append(name).append('=').append(value);
+                }
+            });
+            file.setProperty("options", options.toString());
+            write();
+        }
+        pending.clear();
     }
 
     private void openFolder() {
@@ -179,7 +197,7 @@ final class ShaderPackPage extends SettingsPage {
     void filesDropped(List<Path> files) {
         for (Path source : files) {
             String name = source.getFileName().toString();
-            if (!Files.isDirectory(source) && !name.toLowerCase().endsWith(".zip")) continue;
+            if (!Files.isDirectory(source) && !name.toLowerCase(Locale.ROOT).endsWith(".zip")) continue;
             try {
                 Files.createDirectories(folder);
                 copy(source, folder.resolve(name));
@@ -222,8 +240,14 @@ final class ShaderPackPage extends SettingsPage {
     }
 
     @Override
+    String readout() {
+        String name = pack.get();
+        return name.isEmpty() ? OverhaulLang.get("overhaul.ui.off") : name;
+    }
+
+    @Override
     String status() {
-        if (minecraft.level == null) return "Open a world to see the pack run";
+        if (minecraft.level == null) return text("status.menu");
         return BlazePackRequest.status();
     }
 

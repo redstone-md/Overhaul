@@ -37,8 +37,8 @@ final class BenchmarkWorld {
 
     /** Creates and joins the world; returns why it cannot, or null once it is on its way. */
     static String start(Minecraft minecraft, Screen back, Consumer<BenchmarkResult> finished) {
-        if (minecraft.level != null) return "Leave the world first; the benchmark runs from the main menu";
-        if (!clear(minecraft)) return "A world named \"" + NAME + "\" is in the way; rename it to run the benchmark";
+        if (minecraft.level != null) return OverhaulLang.get("overhaul.benchmark.error.in_world");
+        if (!clear(minecraft)) return OverhaulLang.get("overhaul.benchmark.error.world_exists", NAME);
         GameRules rules = new GameRules();
         rules.getRule(GameRules.RULE_DAYLIGHT).set(false, null);
         rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, null);
@@ -50,7 +50,7 @@ final class BenchmarkWorld {
             Files.writeString(folder.resolve(MARKER), "Made by the Overhaul benchmark; deleted when it ends\n");
         } catch (IOException e) {
             LOGGER.warn("Overhaul benchmark could not prepare its world", e);
-            return "Could not create the test world: " + e.getMessage();
+            return OverhaulLang.get("overhaul.benchmark.error.create", e.getMessage());
         }
         BenchmarkWorld.back = back;
         BenchmarkWorld.finished = finished;

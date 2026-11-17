@@ -5,65 +5,45 @@ import dev.overhaul.minecraft.blaze.BlazeOptimization;
 import dev.overhaul.minecraft.blaze.BlazeRenderer;
 import dev.overhaul.minecraft.blaze.BlazeUpscale;
 import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import net.minecraft.network.chat.Component;
+import java.util.Locale;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
- * Image quality, upscaling and ray tracing, laid out the way games offer them: anti-aliasing, sharpening and texture
- * filtering, one upscaler with a quality mode, and the ray traced effects. Every change applies to the next frame. While the card's preset decides, the first change here
- * writes out what the preset picked, so nothing else moves, and the page is custom from then on.
+ * Image quality and upscaling, laid out the way games offer them: anti-aliasing, sharpening and texture filtering,
+ * then one upscaler with a quality mode.
  */
 final class UpscalingPage extends SettingsPage {
-    /** The options this page owns, which the optimisation page leaves out. */
-    static final Set<BlazeOptimization> OPTIONS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
-            BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
-            BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.SHADING_SHAFTS, BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final String FSR_QUALITY = "fsr2Quality", DLSS_QUALITY = "dlssQuality", SHARPNESS = "fsr2Sharpness", DISTANCE = "rtDistance",
             ANTI_ALIASING = "antiAliasing", SHARPENING = "sharpening", ANISOTROPY = "anisotropy";
     private static final List<Integer> ANISOTROPY_LEVELS = List.of(1, 2, 4, 8, 16);
 
     /** How edges are smoothed: by a pass over the finished frame or by an upscaler drawing at full resolution. */
     private enum AntiAliasing {
-        OFF("Off"), FXAA("FXAA"), TAA("TAA  FSR 2"), DLAA("DLAA");
-
-        final String label;
-
-        AntiAliasing(String label) {
-            this.label = label;
-        }
+        OFF, FXAA, TAA, DLAA
     }
 
     private enum Upscaler {
-        OFF("Off"), FSR2("FSR 2"), DLSS("DLSS");
-
-        final String label;
-
-        Upscaler(String label) {
-            this.label = label;
-        }
+        OFF, FSR2, DLSS
     }
 
     /** A quality mode with the share of the window's width the world draws at. */
     private enum Mode {
-        NATIVE("Native AA", "native", 100), DLAA("DLAA", "dlaa", 100), QUALITY("Quality", "quality", 67), BALANCED("Balanced", "balanced", 58),
-        PERFORMANCE("Performance", "performance", 50), ULTRA("Ultra performance", "ultra", 33);
+        NATIVE("native", 100), DLAA("dlaa", 100), QUALITY("quality", 67), BALANCED("balanced", 58), PERFORMANCE("performance", 50), ULTRA("ultra", 33);
 
-        final String label, value;
+        final String value;
         final int percent;
 
-        Mode(String label, String value, int percent) {
-            this.label = label;
+        Mode(String value, int percent) {
             this.value = value;
             this.percent = percent;
         }
 
         static Mode of(String value) {
-            for (Mode mode : values()) if (mode.value.equalsIgnoreCase(value.trim())) return mode;
-            return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
+            String name = value.trim().toLowerCase(Locale.ROOT);
+            for (Mode mode : values()) if (mode.value.equals(name)) return mode;
+            return switch (name) {
                 case "ultraperformance", "ultra_performance" -> ULTRA;
                 case "nativeaa" -> NATIVE;
                 default -> QUALITY;
@@ -71,13 +51,11 @@ final class UpscalingPage extends SettingsPage {
         }
     }
 
-    UpscalingPage(Runnable refresh) {
-        super(refresh);
-    }
+    private final OptimizationValues values;
 
-    @Override
-    String title() {
-        return "Graphics";
+    UpscalingPage(OptimizationValues values, Runnable refresh) {
+        super("upscaling", SettingsIcon.UPSCALE, refresh);
+        this.values = values;
     }
 
     @Override
@@ -88,111 +66,79 @@ final class UpscalingPage extends SettingsPage {
     @Override
     List<SettingsRow> rows() {
         List<SettingsRow> rows = new ArrayList<>();
-        rows.add(new SettingsRow.Header("Preset"));
-        rows.add(new SettingsRow.Action(Component.literal("Recommended for this card"),
-                "Sets this page to what the card affords",
-                this::recommend, () -> BlazeOptimization.GPU_PRESET.on() ? "In use" : "Apply"));
-        rows.add(new SettingsRow.Header("Image quality"));
-        rows.add(new SettingsRow.Choice<>(Component.literal("Anti-aliasing"),
-                "FXAA smooths edges for almost nothing; TAA and DLAA smooth more, shimmer less and cost more",
-                List.of(AntiAliasing.values()), this::antiAliasing, this::antiAliasing, value -> value.label)
-                .enabledWhen(() -> !scaledDown() && !locked(BlazeOptimization.FSR2) && !locked(BlazeOptimization.DLSS))
-                .note(() -> scaledDown() ? "The upscaler smooths the image" : null));
-        rows.add(new SettingsRow.Slider(Component.literal("Sharpening"), "Contrast adaptive sharpening of the finished frame", 0, 100, 5,
-                () -> (int) number(BlazeOptimization.value(SHARPENING, "0"), 0), value -> saveValue(SHARPENING, String.valueOf(value)),
-                value -> value == 0 ? "Off" : value + "%").enabledWhen(() -> upscaler() == Upscaler.OFF)
-                .note(() -> upscaler() == Upscaler.OFF ? null : "The upscaler sharpens the image"));
-        rows.add(new SettingsRow.Choice<>(Component.literal("Anisotropic filtering"), "Keeps textures sharp on floors and walls seen at an angle",
-                ANISOTROPY_LEVELS, () -> anisotropy(), value -> saveValue(ANISOTROPY, String.valueOf(value)), value -> value == 1 ? "Off" : value + "x"));
-        rows.add(new SettingsRow.Header("Upscaling"));
+        rows.add(new SettingsRow.Header(text("section.preset")));
+        rows.add(new SettingsRow.Action(text("recommended.name"), text("recommended.desc"), SettingsIcon.CHECK,
+                () -> on(BlazeOptimization.GPU_PRESET) ? text("recommended.used") : text("recommended.set"), this::recommend));
+        rows.add(new SettingsRow.Header(text("section.image")));
+        rows.add(new SettingsRow.Choice<>(text("aa.name"), text("aa.desc"), List.of(AntiAliasing.values()), this.<AntiAliasing>picked(this::antiAliasing, this::antiAliasing),
+                value -> text("aa." + value.name().toLowerCase(Locale.ROOT)))
+                .enabledWhen(() -> !scaledDown() && !locked()).note(() -> scaledDown() ? text("aa.upscaled") : null));
+        rows.add(new SettingsRow.Slider(text("sharpening.name"), text("sharpening.desc"), 0, 100, 5,
+                values.text(SHARPENING, "0").as(value -> Math.round(number(value, 0)), String::valueOf),
+                value -> value == 0 ? OverhaulLang.get("overhaul.ui.off") : value + "%")
+                .enabledWhen(() -> upscaler() == Upscaler.OFF).note(() -> upscaler() == Upscaler.OFF ? null : text("sharpening.upscaled")));
+        rows.add(new SettingsRow.Choice<>(text("anisotropy.name"), text("anisotropy.desc"), ANISOTROPY_LEVELS,
+                values.text(ANISOTROPY, "1").as(UpscalingPage::anisotropy, String::valueOf), value -> value == 1 ? OverhaulLang.get("overhaul.ui.off") : value + "x"));
+        rows.add(new SettingsRow.Header(text("section.upscaling")));
         Upscaler upscaler = upscaler();
-        rows.add(new SettingsRow.Choice<>(Component.literal("Upscaler"),
-                "FSR 2 runs on any card; DLSS needs NVIDIA RTX and falls back to FSR 2",
-                List.of(Upscaler.values()), this::upscaler, this::upscaler, value -> value.label)
-                .enabledWhen(() -> !locked(BlazeOptimization.FSR2) && !locked(BlazeOptimization.DLSS))
-                .note(this::upscalerNote));
+        rows.add(new SettingsRow.Choice<>(text("upscaler.name"), text("upscaler.desc"), List.of(Upscaler.values()), this.<Upscaler>picked(this::upscaler, this::upscaler),
+                value -> value == Upscaler.OFF ? OverhaulLang.get("overhaul.ui.off") : value == Upscaler.FSR2 ? "FSR 2" : "DLSS")
+                .enabledWhen(() -> !locked()).note(this::upscalerNote));
         if (upscaler != Upscaler.OFF) {
-            String key = qualityKey(upscaler);
-            rows.add(new SettingsRow.Choice<>(Component.literal("Quality mode"),
-                    (upscaler == Upscaler.DLSS ? "DLAA" : "Native AA") + " smooths at full resolution; lower modes give more frames",
-                    modes(upscaler), () -> Mode.of(BlazeOptimization.value(key, "quality")), mode -> saveValue(key, mode.value),
-                    mode -> mode.label + "  " + mode.percent + "%"));
+            rows.add(new SettingsRow.Choice<>(text("mode.name"), text("mode.desc"), modes(upscaler),
+                    values.text(qualityKey(upscaler), "quality").as(Mode::of, mode -> mode.value),
+                    mode -> text("mode." + mode.value) + "  " + mode.percent + "%"));
             if (upscaler == Upscaler.FSR2) {
-                rows.add(new SettingsRow.Slider(Component.literal("Sharpness"), "How much FSR 2 sharpens the upscaled frame", 0, 100, 5,
-                        () -> Math.round(number(BlazeOptimization.value(SHARPNESS, "0.3"), 0.3f) * 100),
-                        value -> saveValue(SHARPNESS, String.valueOf(value / 100f)), value -> value + "%"));
+                rows.add(new SettingsRow.Slider(text("sharpness.name"), text("sharpness.desc"), 0, 100, 5,
+                        values.text(SHARPNESS, "0.3").as(value -> Math.round(number(value, 0.3f) * 100), value -> String.valueOf(value / 100f)), value -> value + "%"));
             }
-            rows.add(toggle(BlazeOptimization.UPSCALE_MIP_BIAS, "Sharp textures",
-                    "Textures keep full resolution detail while the world draws smaller"));
-            rows.add(toggle(BlazeOptimization.PACK_UPSCALE, "Under shader packs",
-                    "The pack draws at the lower resolution too; turn off its own TAA"));
-            rows.add(new SettingsRow.Action(Component.literal("Now drawing"), "Render resolution and window resolution this frame",
-                    () -> {}, () -> {
-                        String shown = BlazeUpscale.get().describe();
-                        return shown == null ? "Full resolution" : shown;
-                    }));
+            rows.add(values.toggle(BlazeOptimization.UPSCALE_MIP_BIAS, text("mip_bias.name"), text("mip_bias.desc")));
+            rows.add(values.toggle(BlazeOptimization.PACK_UPSCALE, text("packs.name"), text("packs.desc")));
         }
-        rows.add(new SettingsRow.Header("Shading"));
-        rows.add(toggle(BlazeOptimization.OVERHAUL_SHADING, "Overhaul shading",
-                "Sunlight, sky light and warm torch light on terrain without a shader pack; shadows traced with ray tracing on"));
-        rows.add(toggle(BlazeOptimization.SHADING_BLOOM, "Bloom", "Bright surfaces glow softly over what is around them").enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_EXPOSURE, "Auto exposure", "The picture brightens in the dark and dims in full sun, like an eye adapting")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_SCREEN_SHADOWS, "Screen shadows", "Sun shadows of what is on screen, for cards without ray traced shadows")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_SHAFTS, "Sun shafts", "The air catches the sun: light fans out around it and what stands before it cuts shafts into that light")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_OCCLUSION, "Corner shading", "Corners and creases darken where what lies beside a surface stands before it")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_CLOUDS, "Soft clouds", "The sky carries soft clouds of its own, shaded by the sun, in place of the game's flat ones")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(toggle(BlazeOptimization.SHADING_WATER, "Water reflections", "Water mirrors the sky at shallow angles and catches the glint of the sun")
-                .enabledWhen(BlazeOptimization.OVERHAUL_SHADING::on));
-        rows.add(new SettingsRow.Header("Ray tracing"));
-        rows.add(toggle(BlazeOptimization.RAY_TRACING, "Ray traced lighting",
-                "Traced shadows, occlusion and reflections; replaces a shader pack and waits while one is on")
-                .note(this::rayNote));
-        rows.add(toggle(BlazeOptimization.RT_SHADOWS, "Shadows", "Sun and moon shadows traced against the terrain").enabledWhen(this::tracing));
-        rows.add(toggle(BlazeOptimization.RT_LIGHTING, "Lighting", "Coloured sun, sky and block light in place of the flat game lighting").enabledWhen(this::tracing));
-        rows.add(toggle(BlazeOptimization.RT_AO, "Ambient occlusion", "Soft darkening in corners and under overhangs").enabledWhen(this::tracing));
-        rows.add(toggle(BlazeOptimization.RT_GI, "Global illumination", "Sunlight and block light bounce once off the terrain").enabledWhen(this::tracing));
-        rows.add(toggle(BlazeOptimization.RT_REFLECTIONS, "Reflections", "Reflections on water, glass and ice").enabledWhen(this::tracing));
-        rows.add(new SettingsRow.Slider(Component.literal("Ray distance"), "How far rays reach; farther costs more", 16, 256, 16,
-                () -> (int) number(BlazeOptimization.value(DISTANCE, "64"), 64), value -> saveValue(DISTANCE, String.valueOf(value)), value -> value + " blocks")
-                .enabledWhen(this::tracing));
-        rows.add(new SettingsRow.Header("Startup"));
-        rows.add(toggle(BlazeOptimization.UPSCALE_READY, "Switch without restart",
-                "Loads upscaling and ray tracing at startup so this page applies at once")
-                .note(() -> BlazeOptimization.UPSCALE_READY.saved() != BlazeOptimization.UPSCALE_READY.launched() ? "Applies after a restart" : null));
+        rows.add(new SettingsRow.Info(text("drawing.name"), text("drawing.desc"), this::readout));
+        rows.add(new SettingsRow.Header(text("section.startup")));
+        rows.add(values.toggle(BlazeOptimization.UPSCALE_READY, text("ready.name"), text("ready.desc")));
         return rows;
     }
 
-    private SettingsRow toggle(BlazeOptimization option, String label, String description) {
-        return new SettingsRow.Toggle(Component.literal(label), description, option.live() ? option::on : option::saved, value -> set(Map.of(option, value)))
-                .enabledWhen(() -> !locked(option))
-                .note(() -> locked(option) ? "Set by -Doverhaul.opt." + option.key() + ", the screen cannot change it" : null);
+    /** A choice that moves several values of the draft at once, and with them which rows the page lists. */
+    private <T> SettingsDraft.Setting<T> picked(Supplier<T> get, Consumer<T> set) {
+        return new SettingsDraft.Setting<>() {
+            @Override
+            public T get() {
+                return get.get();
+            }
+
+            @Override
+            public void set(T value) {
+                set.accept(value);
+                refresh.run();
+            }
+
+            @Override
+            public boolean changed() {
+                return values.flag(BlazeOptimization.FSR2).changed() || values.flag(BlazeOptimization.DLSS).changed() || values.text(ANTI_ALIASING, "off").changed();
+            }
+        };
     }
 
-    private static boolean locked(BlazeOptimization option) {
-        return option.launchOverride();
+    private boolean on(BlazeOptimization option) {
+        return values.flag(option).get();
     }
 
-    private boolean tracing() {
-        return BlazeOptimization.RAY_TRACING.on();
+    private static boolean locked() {
+        return BlazeOptimization.FSR2.launchOverride() || BlazeOptimization.DLSS.launchOverride();
     }
 
     private Upscaler upscaler() {
-        if (BlazeOptimization.DLSS.on()) return Upscaler.DLSS;
-        return BlazeOptimization.FSR2.on() ? Upscaler.FSR2 : Upscaler.OFF;
+        if (on(BlazeOptimization.DLSS)) return Upscaler.DLSS;
+        return on(BlazeOptimization.FSR2) ? Upscaler.FSR2 : Upscaler.OFF;
     }
 
     /** DLSS keeps FSR 2 on beneath it, so a card without DLSS still upscales. */
     private void upscaler(Upscaler upscaler) {
-        Map<BlazeOptimization, Boolean> values = new EnumMap<>(BlazeOptimization.class);
-        values.put(BlazeOptimization.FSR2, upscaler != Upscaler.OFF);
-        values.put(BlazeOptimization.DLSS, upscaler == Upscaler.DLSS);
-        set(values);
-        refresh.run();
+        values.flag(BlazeOptimization.FSR2).set(upscaler != Upscaler.OFF);
+        values.flag(BlazeOptimization.DLSS).set(upscaler == Upscaler.DLSS);
     }
 
     /** An upscaler at full resolution is the anti-aliasing; at any lower one it has no separate choice. */
@@ -200,14 +146,14 @@ final class UpscalingPage extends SettingsPage {
         Upscaler upscaler = upscaler();
         if (upscaler == Upscaler.DLSS) return AntiAliasing.DLAA;
         if (upscaler == Upscaler.FSR2) return AntiAliasing.TAA;
-        return BlazeOptimization.value(ANTI_ALIASING, "off").equalsIgnoreCase("fxaa") ? AntiAliasing.FXAA : AntiAliasing.OFF;
+        return values.text(ANTI_ALIASING, "off").get().equalsIgnoreCase("fxaa") ? AntiAliasing.FXAA : AntiAliasing.OFF;
     }
 
     private void antiAliasing(AntiAliasing choice) {
         switch (choice) {
-            case TAA -> saveValue(FSR_QUALITY, "native");
-            case DLAA -> saveValue(DLSS_QUALITY, "dlaa");
-            default -> saveValue(ANTI_ALIASING, choice == AntiAliasing.FXAA ? "fxaa" : "off");
+            case TAA -> values.text(FSR_QUALITY, "quality").set("native");
+            case DLAA -> values.text(DLSS_QUALITY, "quality").set("dlaa");
+            default -> values.text(ANTI_ALIASING, "off").set(choice == AntiAliasing.FXAA ? "fxaa" : "off");
         }
         upscaler(choice == AntiAliasing.DLAA ? Upscaler.DLSS : choice == AntiAliasing.TAA ? Upscaler.FSR2 : Upscaler.OFF);
     }
@@ -215,12 +161,11 @@ final class UpscalingPage extends SettingsPage {
     /** Whether an upscaler draws below full resolution, which leaves anti-aliasing to it. */
     private boolean scaledDown() {
         Upscaler upscaler = upscaler();
-        return upscaler != Upscaler.OFF && Mode.of(BlazeOptimization.value(qualityKey(upscaler), "quality")).percent < 100;
+        return upscaler != Upscaler.OFF && Mode.of(values.text(qualityKey(upscaler), "quality").get()).percent < 100;
     }
 
-    private static int anisotropy() {
-        int wanted = (int) number(BlazeOptimization.value(ANISOTROPY, "1"), 1);
-        int chosen = 1;
+    private static int anisotropy(String value) {
+        int wanted = Math.round(number(value, 1)), chosen = 1;
         for (int level : ANISOTROPY_LEVELS) if (level <= wanted) chosen = level;
         return chosen;
     }
@@ -230,28 +175,19 @@ final class UpscalingPage extends SettingsPage {
     }
 
     private static List<Mode> modes(Upscaler upscaler) {
-        Mode full = upscaler == Upscaler.DLSS ? Mode.DLAA : Mode.NATIVE;
-        return List.of(full, Mode.QUALITY, Mode.BALANCED, Mode.PERFORMANCE, Mode.ULTRA);
+        return List.of(upscaler == Upscaler.DLSS ? Mode.DLAA : Mode.NATIVE, Mode.QUALITY, Mode.BALANCED, Mode.PERFORMANCE, Mode.ULTRA);
     }
 
     private String upscalerNote() {
-        BlazeRenderer renderer = BlazeFrontend.current();
+        if (locked()) return OverhaulLang.get("overhaul.ui.launch_override", "-Doverhaul.opt." + BlazeOptimization.FSR2.key());
         if (upscaler() == Upscaler.OFF) return null;
-        if (!hookLoaded()) return "Restart the game to apply";
+        if (!hookLoaded()) return OverhaulLang.get("overhaul.ui.restart");
         if (upscaler() != Upscaler.DLSS) return null;
-        if (renderer == null || !renderer.streamlineLoaded()) {
-            return BlazeOptimization.DLSS.launched() || BlazeOptimization.UPSCALE_READY.launched()
-                    ? "DLSS is unavailable here, FSR 2 upscales instead" : "Restart the game to load DLSS; FSR 2 upscales until then";
-        }
-        return Boolean.FALSE.equals(BlazeUpscale.get().dlssAvailable()) ? "This card has no DLSS, FSR 2 upscales instead" : null;
-    }
-
-    private String rayNote() {
-        if (!BlazeOptimization.RAY_TRACING.on()) return null;
         BlazeRenderer renderer = BlazeFrontend.current();
-        if (renderer == null || renderer.context().rayQuery()) return null;
-        boolean asked = BlazeOptimization.RAY_TRACING.launched() || BlazeOptimization.GPU_PRESET.launched() || BlazeOptimization.UPSCALE_READY.launched();
-        return asked ? "This card or driver has no hardware ray queries" : "Restart the game to apply";
+        if (renderer == null || !renderer.streamlineLoaded()) {
+            return BlazeOptimization.DLSS.launched() || BlazeOptimization.UPSCALE_READY.launched() ? text("dlss.unavailable") : text("dlss.restart");
+        }
+        return Boolean.FALSE.equals(BlazeUpscale.get().dlssAvailable()) ? text("dlss.unsupported") : null;
     }
 
     /** The world pass hook loads at startup while any of these is on. */
@@ -260,42 +196,26 @@ final class UpscalingPage extends SettingsPage {
                 || BlazeOptimization.GPU_PRESET.launched();
     }
 
-    /** Writes out what the card's class picks and leaves the preset off, so later changes stay as made. */
+    /** Stages what the card's class picks and leaves the preset off, so later changes stay as made. */
     private void recommend() {
-        Map<BlazeOptimization, Boolean> values = new EnumMap<>(BlazeOptimization.class);
-        values.put(BlazeOptimization.FSR2, BlazeOptimization.FSR2.recommended());
-        values.put(BlazeOptimization.DLSS, false);
-        values.put(BlazeOptimization.RAY_TRACING, BlazeOptimization.RAY_TRACING.recommended());
-        values.put(BlazeOptimization.GPU_PRESET, false);
-        values.keySet().removeIf(BlazeOptimization::launchOverride);
-        BlazeOptimization.save(values);
-        for (String key : List.of(FSR_QUALITY, DLSS_QUALITY, DISTANCE)) {
-            BlazeOptimization.saveValue(key, BlazeOptimization.recommendedValue(key, key.equals(DISTANCE) ? "64" : "quality"), "Set from the upscaling page");
-        }
-        BlazeOptimization.saveValue(ANISOTROPY, BlazeOptimization.recommendedValue(ANISOTROPY, "16"), "Set from the upscaling page");
-        BlazeOptimization.saveValue(ANTI_ALIASING, BlazeOptimization.recommendedValue(ANTI_ALIASING, "fxaa"), "Set from the upscaling page");
+        stage(BlazeOptimization.FSR2, BlazeOptimization.FSR2.recommended());
+        stage(BlazeOptimization.DLSS, false);
+        stage(BlazeOptimization.RAY_TRACING, BlazeOptimization.RAY_TRACING.recommended());
+        stage(BlazeOptimization.GPU_PRESET, false);
+        recommend(FSR_QUALITY, "quality");
+        recommend(DLSS_QUALITY, "quality");
+        recommend(DISTANCE, "64");
+        recommend(ANISOTROPY, "16");
+        recommend(ANTI_ALIASING, "fxaa");
         refresh.run();
     }
 
-    private void set(Map<BlazeOptimization, Boolean> values) {
-        leavePreset();
-        BlazeOptimization.save(values);
+    private void stage(BlazeOptimization option, boolean value) {
+        if (!option.launchOverride()) values.flag(option).set(value);
     }
 
-    private void saveValue(String key, String value) {
-        leavePreset();
-        BlazeOptimization.saveValue(key, value, "Set from the upscaling page");
-    }
-
-    /** The preset's picks become the file's, so turning it off changes nothing on screen. */
-    private static void leavePreset() {
-        if (!BlazeOptimization.GPU_PRESET.on() || BlazeOptimization.GPU_PRESET.launchOverride()) return;
-        Map<BlazeOptimization, Boolean> values = new EnumMap<>(BlazeOptimization.class);
-        for (BlazeOptimization option : List.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.RAY_TRACING)) {
-            if (!option.launchOverride()) values.put(option, option.on());
-        }
-        values.put(BlazeOptimization.GPU_PRESET, false);
-        BlazeOptimization.save(values);
+    private void recommend(String key, String fallback) {
+        values.text(key, fallback).set(BlazeOptimization.recommendedValue(key, fallback));
     }
 
     private static float number(String value, float fallback) {
@@ -307,8 +227,18 @@ final class UpscalingPage extends SettingsPage {
     }
 
     @Override
-    String status() {
+    String readout() {
         String shown = BlazeUpscale.get().describe();
-        return shown == null ? "Changes apply at once" : "Drawing " + shown;
+        return shown == null ? text("full") : shown;
+    }
+
+    @Override
+    String status() {
+        return BlazeOptimization.UPSCALE_READY.saved() != BlazeOptimization.UPSCALE_READY.launched() ? OverhaulLang.get("overhaul.ui.restart") : "";
+    }
+
+    @Override
+    boolean statusIsPending() {
+        return true;
     }
 }
