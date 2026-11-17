@@ -80,11 +80,11 @@ public final class BlazeRayTracing {
 
     /**
      * The terrain around the camera as acceleration structures, for {@link BlazeShading}'s sun shadows, reaching as
-     * far as {@link #reach}, with {@code words} left just before its hit table; null where the scene cannot be built this frame.
+     * far as {@link #reach}, with {@code words} left just before its hit table and {@code trailer} after it; null where the scene cannot be built this frame.
      */
-    BlazeRayScene.Frame shadowScene(BlazeRenderer renderer, ClientLevel world, ViewArea area, Vec3 position, long words) {
+    BlazeRayScene.Frame shadowScene(BlazeRenderer renderer, ClientLevel world, ViewArea area, Vec3 position, long words, float[] trailer) {
         prepare(renderer, world);
-        return scene.prepare(area, position.x, position.y, position.z, distance, new float[BlazeRayShader.TRAILER_FLOATS], words);
+        return scene.prepare(area, position.x, position.y, position.z, distance, trailer, words);
     }
 
     /** How far rays reach, in blocks. */

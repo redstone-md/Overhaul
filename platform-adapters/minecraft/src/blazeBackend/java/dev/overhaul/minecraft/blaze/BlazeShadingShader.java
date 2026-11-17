@@ -51,6 +51,10 @@ final class BlazeShadingShader {
             // The blocks that volume was spread through, a tile of sixteen layers to a section: what each lets pass.
             layout(binding = 10) uniform sampler2D lightBlocks;
             #endif
+            #ifdef BOUNCED
+            // The light that came back off terrain at half size, then the distance it was found at.
+            layout(binding = 11) uniform sampler2D bounced;
+            #endif
             """ + FRAME;
     /** Between the colours the screen shows and linear light, and the filmic curve that brings light back to the screen. */
     static final String TONE = """
@@ -314,62 +318,11 @@ final class BlazeShadingShader {
             #endif
             }
 
-            #ifdef COLORED
-            // Where the camera is in the light volume, which wraps every 128 by 64 by 128 blocks.
-            vec3 volumeCamera() {
-                return vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0
-                        + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
-            }
-
-            // What the sun's light is left with on its way to a place: it takes the colour of the stained glass, ice
-            // or leaves it crosses within twenty blocks, the deepest of them, and loses no strength to it.
-            vec3 sunThrough(vec3 position, vec3 normal) {
-                vec3 camera = volumeCamera();
-                vec3 at = position + normal * 0.6 + light.xyz * 0.5;
-                vec3 left = vec3(1.0);
-                for (int i = 0; i < 20; i++) {
-                    vec3 away = abs(at);
-                    if (max(away.x, away.z) > 54.0 || away.y > 22.0) break;
-                    ivec3 voxel = ivec3(floor(at + camera)) & ivec3(127, 63, 127);
-                    ivec3 slot = voxel >> 4, inside = voxel & 15;
-                    int tile = slot.x + slot.z * 8 + slot.y * 64;
-                    vec4 block = texelFetch(lightBlocks, ivec2((tile & 15) * 64 + inside.x + (inside.y & 3) * 16, (tile >> 4) * 64 + inside.z + (inside.y >> 2) * 16), 0);
-                    // Solid blocks, lights and fluids are not this walk's to judge.
-                    if (block.a == 0.0 && block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
-                    at += light.xyz;
-                }
-                float most = max(left.r, max(left.g, left.b));
-                if (most <= 0.0) return vec3(1.0);
-                left /= most;
-                float grey = dot(left, vec3(0.3, 0.59, 0.11));
-                return max(mix(vec3(grey), left, 1.6), 0.0);
-            }
-            #endif
-
-            // The colour of the block light at a place: that of the lights whose light reaches it, tinted by what it
-            // came through, as the volume around the camera holds it; warm where the volume ends or knows of none.
-            vec3 torchAt(vec3 position, vec3 normal) {
-                vec3 warm = vec3(1.0, 0.66, 0.38);
-            #ifdef COLORED
-                vec3 away = abs(position);
-                float known = (1.0 - smoothstep(44.0, 54.0, max(away.x, away.z))) * (1.0 - smoothstep(16.0, 22.0, away.y));
-                if (known <= 0.0) return warm;
-                vec3 found = textureLod(lightColors, (position + volumeCamera() + normal * 0.5) / vec3(128.0, 64.0, 128.0), 0.0).rgb;
-                float most = max(found.r, max(found.g, found.b));
-                if (most <= 0.0) return warm;
-                vec3 hue = found / most;
-                float grey = dot(hue, vec3(0.3, 0.59, 0.11));
-                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room.
-                hue *= mix(1.0, min(0.72 / max(grey, 0.05), 2.5), 0.5);
-                return mix(warm, hue, known * smoothstep(0.0, 0.04, most));
-            #else
-                return warm;
-            #endif
-            }
-
+            """;
+    private static final String LIGHTING = """
             // Lights one pixel onto the screen with its share of the sun, of the open space before it and of the light
             // the air catches; gives its linear light back, with 1 beside it where terrain is.
-            vec4 lightOf(Seen seen, float shadow, float open, float shaft, ivec2 pixel) {
+            vec4 lightOf(Seen seen, float shadow, float open, float shaft, vec3 indirect, ivec2 pixel) {
                 if (!seen.inside) return vec4(0.0);
                 if (!seen.terrain) {
                     imageStore(lit, pixel, vec4(skyOf(seen.color.rgb, pixel, shaft), seen.color.a));
@@ -380,7 +333,7 @@ final class BlazeShadingShader {
             #ifdef COLORED
                 sunFilter = shadow > 0.0 && light.w > 0.0 ? sunThrough(seen.position, normal) : vec3(1.0);
             #endif
-                vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) * open;
+                vec3 shaded = linear(seen.color.rgb) * (daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) + indirect) * open;
                 // The eye loses colour in the dark, away from fire.
                 float dim = 0.55 * (1.0 - day()) * (1.0 - smoothstep(0.0, 0.45, seen.blockLevel));
                 shaded = mix(shaded, vec3(0.75, 0.95, 1.2) * dot(shaded, vec3(0.3, 0.59, 0.11)), dim);
@@ -427,6 +380,12 @@ final class BlazeShadingShader {
                     break;
                 }
                 for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
+            #ifdef BOUNCED
+                // The light that came back is gathered coarsely: each pixel takes it from the nine around that lie as far as it does.
+                vec4 back[9];
+                ivec2 last = textureSize(bounced, 0) - 1;
+                for (int i = 0; i < 9; i++) back[i] = texelFetch(bounced, clamp(cell + ivec2(i % 3 - 1, i / 3 - 1), ivec2(0), last), 0);
+            #endif
                 for (int i = 0; i < 4; i++) {
                     float shadow = 0.0, open = 0.0, weight = 0.0, distance = length(seen[i].position);
                     if (seen[i].terrain) for (int j = 0; j < 4; j++) {
@@ -436,7 +395,19 @@ final class BlazeShadingShader {
                         open += opens[j];
                         weight += 1.0;
                     }
-                    sum += lightOf(seen[i], (weight > 0.0 ? shadow / weight : 0.0) * cloudy, weight > 0.0 ? open / weight : 1.0, shaft, cell * 2 + ivec2(i & 1, i >> 1));
+                    vec3 indirect = vec3(0.0);
+            #ifdef BOUNCED
+                    float found = 0.0;
+                    if (seen[i].terrain) for (int j = 0; j < 9; j++) {
+                        if (back[j].a <= 0.0) continue;
+                        float gap = (back[j].a - distance) / (0.1 + 0.03 * distance);
+                        float near = exp(-gap * gap) * (j == 4 ? 2.0 : 1.0);
+                        indirect += back[j].rgb * near;
+                        found += near;
+                    }
+                    indirect = found > 0.001 ? indirect / found : vec3(0.0);
+            #endif
+                    sum += lightOf(seen[i], (weight > 0.0 ? shadow / weight : 0.0) * cloudy, weight > 0.0 ? open / weight : 1.0, shaft, indirect, cell * 2 + ivec2(i & 1, i >> 1));
                 }
             #ifdef LINEAR
                 if (all(lessThan(cell, imageSize(spread)))) imageStore(spread, cell, sum * 0.25);
@@ -447,12 +418,13 @@ final class BlazeShadingShader {
     /**
      * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
      * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before;
-     * with {@code shafts} the air catches the sun's light; with {@code occlusion} corners and creases darken.
+     * with {@code shafts} the air catches the sun's light; with {@code occlusion} corners and creases darken; with
+     * {@code bounced} terrain also takes the light {@link BlazeShadingBounce} found coming back to it.
      */
-    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored) {
-        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "") + (colored ? "#define COLORED\n" : "");
-        if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY;
-        return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY;
+    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored, boolean bounced) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "") + (colored ? "#define COLORED\n" : "") + (bounced ? "#define BOUNCED\n" : "");
+        if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY + BlazeLightVolume.READING + LIGHTING;
+        return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY + BlazeLightVolume.READING + LIGHTING;
     }
 
     private BlazeShadingShader() {}

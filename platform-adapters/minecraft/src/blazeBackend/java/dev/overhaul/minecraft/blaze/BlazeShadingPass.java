@@ -32,20 +32,21 @@ import static org.lwjgl.vulkan.VK10.*;
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
-    private final boolean traced, linear, shafts, occlusion, colored;
+    private final boolean traced, linear, shafts, occlusion, colored, bounced;
     private final GpuSampler sampler;
     private long setLayout, pipelineLayout, pipeline;
     private GpuImage output;
     private GpuImageView outputView;
     private Binding binding;
 
-    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored) {
+    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored, boolean bounced) {
         this.owner = owner;
         this.traced = traced;
         this.linear = linear;
         this.shafts = shafts;
         this.occlusion = occlusion;
         this.colored = colored;
+        this.bounced = bounced;
         context = owner.context();
         sampler = owner.allocator().createSampler(new SamplerSettings(SamplerSettings.Filter.NEAREST,
                 SamplerSettings.Filter.NEAREST, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
@@ -59,7 +60,7 @@ final class BlazeShadingPass implements AutoCloseable {
     }
 
     private int[] sampled() {
-        int[] slots = new int[2 + (traced ? 1 : 0) + (linear ? 2 : 0) + (colored ? 2 : 0)];
+        int[] slots = new int[2 + (traced ? 1 : 0) + (linear ? 2 : 0) + (colored ? 2 : 0) + (bounced ? 1 : 0)];
         int at = 0;
         slots[at++] = 1;
         slots[at++] = 2;
@@ -70,8 +71,9 @@ final class BlazeShadingPass implements AutoCloseable {
         }
         if (colored) {
             slots[at++] = 9;
-            slots[at] = 10;
+            slots[at++] = 10;
         }
+        if (bounced) slots[at] = 11;
         return slots;
     }
 
@@ -96,7 +98,7 @@ final class BlazeShadingPass implements AutoCloseable {
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "shading pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : "") + (occlusion ? "_occlusion" : "") + (colored ? "_colored" : ""), BlazeShadingShader.source(traced, linear, shafts, occlusion, colored), ShaderStage.COMPUTE).directBuffer();
+            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : "") + (occlusion ? "_occlusion" : "") + (colored ? "_colored" : ""), BlazeShadingShader.source(traced, linear, shafts, occlusion, colored, bounced), ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "shading module");
             long module = pointer.get(0);
             try {
@@ -142,9 +144,9 @@ final class BlazeShadingPass implements AutoCloseable {
 
     /**
      * Queues the lighting of {@code target}'s colour from {@code surfaces}, which it leaves wiped where terrain was.
-     * A linear pass reads and writes the images {@code glow} gives it.
+     * A linear pass reads and writes the images {@code glow} gives it; a bounced one reads {@code bounce}.
      */
-    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, BlazeShadingGlow.Light glow) {
+    void shade(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, Lighting lighting, BlazeShadingGlow.Light glow, GpuImageView bounce) {
         int width = target.width(), height = target.height();
         // Each pixel is read and written by the one invocation that lights it, so a colour image that can be stored to
         // is lit where it lies; any other is lit into an image of this pass and copied over.
@@ -175,6 +177,10 @@ final class BlazeShadingPass implements AutoCloseable {
             samplers.add(lighting.colors().sampler());
             views.add(lighting.colors().blocks());
             samplers.add(lighting.colors().exact());
+        }
+        if (bounced) {
+            views.add(bounce);
+            samplers.add(sampler.handle());
         }
         GpuImageView lit = inPlace ? target.colorView() : outputView;
         List<GpuImageView> written = linear ? List.of(lit, surfaces, glow.spread()) : List.of(lit, surfaces);

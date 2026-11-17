@@ -38,8 +38,11 @@ public final class BlazeShading {
     private BlazeTarget main, target;
     private GpuImage surfaces;
     private GpuImageView surfacesView, forColor, forDepth;
-    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners, 16 for block light in colour. */
-    private final BlazeShadingPass[] passes = new BlazeShadingPass[32];
+    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners, 16 for block light in colour, 32 for the light that comes back off terrain. */
+    private final BlazeShadingPass[] passes = new BlazeShadingPass[64];
+    /** Gathers the light that comes back off terrain; once it fails it stays off until the settings change. */
+    private BlazeShadingBounce bounce;
+    private boolean bounceFailed;
     private BlazeShadingGlow glow;
     private BlazeLightVolume colors;
     private int revision = -1;
@@ -96,7 +99,7 @@ public final class BlazeShading {
         collecting = lit = direct = cloudy = false;
         if (revision != BlazeOptimization.revision()) {
             revision = BlazeOptimization.revision();
-            failed = false;
+            failed = bounceFailed = false;
         }
         if (client.level != null) BlazeDevClock.hold(client.level);
         BlazeDevCommands.run(client);
@@ -169,14 +172,15 @@ public final class BlazeShading {
             long clouds = BlazeShadingClouds.words(client, world, position, partialTick);
             boolean traced = area != null && owner.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on();
             BlazeTextures.Sampled atlas = traced ? owner.textures().resolve(client.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)) : null;
-            BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position, clouds) : null;
+            boolean colored = BlazeOptimization.SHADING_COLORED_LIGHT.on();
+            float[] trailer = atlas != null && BlazeOptimization.RT_GI.on() ? bounceTrailer(colored, viewProjection, position) : null;
+            BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position, clouds,
+                    trailer != null ? trailer : new float[BlazeRayShader.TRAILER_FLOATS]) : null;
             traced = scene != null;
             boolean bloom = BlazeOptimization.SHADING_BLOOM.on(), adapt = BlazeOptimization.SHADING_EXPOSURE.on(), linear = bloom || adapt;
             boolean shafts = BlazeOptimization.SHADING_SHAFTS.on();
             boolean occlusion = BlazeOptimization.SHADING_OCCLUSION.on();
-            boolean colored = BlazeOptimization.SHADING_COLORED_LIGHT.on();
             int variant = (traced ? 1 : 0) | (linear ? 2 : 0) | (shafts ? 4 : 0) | (occlusion ? 8 : 0) | (colored ? 16 : 0);
-            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion, colored);
             if (colored && colors == null) colors = new BlazeLightVolume(owner);
             if (!colored && colors != null) {
                 owner.retire(colors);
@@ -188,7 +192,10 @@ public final class BlazeShading {
                     mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), reach(traced), clouds,
                     BlazeShadingPass.Lighting.place(position.x, position.y, position.z), colored ? colors.update(world, position) : null);
-            passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
+            GpuImageView back = traced && trailer != null ? bounced(atlas, scene, lighting) : null;
+            if (back != null) variant |= 32;
+            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion, colored, back != null);
+            passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null, back);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
             lit = clean = true;
@@ -197,6 +204,39 @@ public final class BlazeShading {
         } catch (RuntimeException | Error failure) {
             fail(failure);
         }
+    }
+
+    /** What the scene's hit table carries for the bounce this frame, null once the bounce cannot be made. */
+    private float[] bounceTrailer(boolean colored, Matrix4f viewProjection, net.minecraft.world.phys.Vec3 position) {
+        if (bounceFailed) return null;
+        try {
+            if (bounce != null && bounce.colored() != colored) {
+                owner.retire(bounce);
+                bounce = null;
+            }
+            if (bounce == null) bounce = new BlazeShadingBounce(owner, colored);
+            return bounce.trailer(main.width(), main.height(), viewProjection, position.x, position.y, position.z);
+        } catch (RuntimeException | Error failure) {
+            bounceFailed(failure);
+            return null;
+        }
+    }
+
+    /** The light that comes back to this frame's terrain, null once gathering it fails: terrain is then lit without it. */
+    private GpuImageView bounced(BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, BlazeShadingPass.Lighting lighting) {
+        try {
+            GpuImageView back = bounce.gather(main, surfacesView, atlas, scene, lighting);
+            owner.gpuMark("shadingBounce");
+            return back;
+        } catch (RuntimeException | Error failure) {
+            bounceFailed(failure);
+            return null;
+        }
+    }
+
+    private void bounceFailed(Throwable failure) {
+        bounceFailed = true;
+        LoggerFactory.getLogger(BlazeShading.class).error("Overhaul shading goes on without bounced light until the settings change", failure);
     }
 
     /** Works out the frame's light: the sun or moon, the sky, and where the eye is and when. */
@@ -253,12 +293,15 @@ public final class BlazeShading {
         java.util.Arrays.fill(passes, null);
         glow = null;
         colors = null;
+        bounce = null;
         renderer.closeWith(() -> {
             if (owner != renderer) return;
             for (BlazeShadingPass pass : passes) if (pass != null) pass.close();
             if (glow != null) glow.close();
             if (colors != null) colors.close();
             colors = null;
+            if (bounce != null) bounce.close();
+            bounce = null;
             if (target != null) target.close();
             if (surfaces != null) surfaces.close();
             java.util.Arrays.fill(passes, null);

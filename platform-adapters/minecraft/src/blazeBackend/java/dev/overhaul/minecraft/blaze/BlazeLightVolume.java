@@ -86,6 +86,71 @@ final class BlazeLightVolume implements AutoCloseable {
             }
             """;
 
+    /**
+     * How a shader reads the volume: the colour of block light at a place and what the sun's light passed on its way
+     * there; needs {@code light} and {@code options} of the lighting passes' frame and, with {@code COLORED} defined,
+     * {@code lightColors} and {@code lightBlocks}.
+     */
+    static final String READING = """
+            #ifdef COLORED
+            // Where the camera is in the light volume, which wraps every 128 by 64 by 128 blocks.
+            vec3 volumeCamera() {
+                return vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0
+                        + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
+            }
+
+            // What the block at a place near the camera lets pass, and with what strength it gives light.
+            vec4 volumeBlock(vec3 at) {
+                ivec3 voxel = ivec3(floor(at + volumeCamera())) & ivec3(127, 63, 127);
+                ivec3 slot = voxel >> 4, inside = voxel & 15;
+                int tile = slot.x + slot.z * 8 + slot.y * 64;
+                return texelFetch(lightBlocks, ivec2((tile & 15) * 64 + inside.x + (inside.y & 3) * 16, (tile >> 4) * 64 + inside.z + (inside.y >> 2) * 16), 0);
+            }
+
+            // What the sun's light is left with on its way to a place: it takes the colour of the stained glass, ice
+            // or leaves it crosses within twenty blocks, the deepest of them, and loses no strength to it.
+            vec3 sunThrough(vec3 position, vec3 normal) {
+                vec3 at = position + normal * 0.6 + light.xyz * 0.5;
+                vec3 left = vec3(1.0);
+                for (int i = 0; i < 20; i++) {
+                    vec3 away = abs(at);
+                    if (max(away.x, away.z) > 54.0 || away.y > 22.0) break;
+                    vec4 block = volumeBlock(at);
+                    // Solid blocks, lights and fluids are not this walk's to judge.
+                    if (block.a == 0.0 && block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
+                    at += light.xyz;
+                }
+                float most = max(left.r, max(left.g, left.b));
+                if (most <= 0.0) return vec3(1.0);
+                left /= most;
+                float grey = dot(left, vec3(0.3, 0.59, 0.11));
+                return max(mix(vec3(grey), left, 1.6), 0.0);
+            }
+            #endif
+
+            // The colour of the block light at a place: that of the lights whose light reaches it, tinted by what it
+            // came through, as the volume around the camera holds it; warm where the volume ends or knows of none.
+            vec3 torchAt(vec3 position, vec3 normal) {
+                vec3 warm = vec3(1.0, 0.66, 0.38);
+            #ifdef COLORED
+                vec3 away = abs(position);
+                float known = (1.0 - smoothstep(44.0, 54.0, max(away.x, away.z))) * (1.0 - smoothstep(16.0, 22.0, away.y));
+                if (known <= 0.0) return warm;
+                vec3 found = textureLod(lightColors, (position + volumeCamera() + normal * 0.5) / vec3(128.0, 64.0, 128.0), 0.0).rgb;
+                float most = max(found.r, max(found.g, found.b));
+                if (most <= 0.0) return warm;
+                vec3 hue = found / most;
+                float grey = dot(hue, vec3(0.3, 0.59, 0.11));
+                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room.
+                hue *= mix(1.0, min(0.72 / max(grey, 0.05), 2.5), 0.5);
+                return mix(warm, hue, known * smoothstep(0.0, 0.04, most));
+            #else
+                return warm;
+            #endif
+            }
+
+            """;
+
     /** What the lighting pass reads: the volume and the blocks, how to sample each, and which sixteen blocks of them the camera is in. */
     record Sampled(GpuImageView view, long sampler, GpuImageView blocks, long exact, int cell) {}
 
