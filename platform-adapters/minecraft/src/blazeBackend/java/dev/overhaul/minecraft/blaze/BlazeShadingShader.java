@@ -84,6 +84,14 @@ final class BlazeShadingShader {
             }
             """;
     private static final String BODY = """
+            // Where on the sun's disc a pixel aims: each of the four pixels that share what they find takes its own spot,
+            // turned from one four to the next, so a shadow's edge softens the further it falls from what casts it.
+            vec3 sunSpot(ivec2 pixel, float part, float wide) {
+                float turn = 6.2831853 * (part * 0.25 + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715)))));
+                vec3 across = normalize(cross(light.xyz, vec3(0.0, 1.0, 0.01)));
+                return normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * wide * sqrt((part + 0.5) * 0.25));
+            }
+
             #ifndef TRACED
             // From the world around the camera back to the screen, and what gives the depth in front of the camera
             // from a place on screen; main works them out once for its four pixels.
@@ -100,7 +108,8 @@ final class BlazeShadingShader {
                 // What throws a shadow worth seeing stands within a few blocks: the steps stay short enough to meet a blade.
                 float far = reach * 0.11 * clamp(distance / 32.0, 1.0, 2.5);
                 float offset = (part + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715))))) * 0.25;
-                vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(light.xyz * far, 0.0);
+                vec3 aim = sunSpot(pixel, part, 0.07);
+                vec4 from = viewProjection * vec4(origin, 1.0), toward = viewProjection * vec4(aim * far, 0.0);
                 for (int i = 0; i < 24; i++) {
                     float along = (float(i) + offset) / 24.0;
                     along *= 0.6 + 0.4 * along;
@@ -110,7 +119,7 @@ final class BlazeShadingShader {
                     if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) break;
                     ivec2 at = ivec2(uv * vec2(size.xy));
                     if (at == pixel) continue;
-                    float deep = length(origin + light.xyz * (far * along)), gap = deep - length(positionOf(at));
+                    float deep = length(origin + aim * (far * along)), gap = deep - length(positionOf(at));
                     float slack = 0.03 + deep * 0.003;
                     if (gap > slack && gap < 1.5 + slack) {
                         vec2 edge = min(uv, 1.0 - uv);
@@ -128,11 +137,7 @@ final class BlazeShadingShader {
             #ifdef TRACED
                 if (distance < reach) {
                     vec3 origin = position + normal * (0.03 + distance * 0.002);
-                    // Each of the four pixels that share what they find aims at its own spot on the sun's disc, turned
-                    // from one four to the next, so a shadow's edge softens the further it falls from what casts it.
-                    float turn = 6.2831853 * (part * 0.25 + fract(52.9829189 * fract(dot(vec2(pixel >> 1), vec2(0.06711056, 0.00583715)))));
-                    vec3 across = normalize(cross(light.xyz, vec3(0.0, 1.0, 0.01)));
-                    vec3 toward = normalize(light.xyz + (across * cos(turn) + cross(light.xyz, across) * sin(turn)) * 0.035 * sqrt((part + 0.5) * 0.25));
+                    vec3 toward = sunSpot(pixel, part, 0.035);
                     float traced = blocked(origin, toward, 256.0) ? 0.0 : transmitted(origin, toward, 256.0);
                     return mix(traced, guess, smoothstep(0.75 * reach, reach, distance));
                 }
