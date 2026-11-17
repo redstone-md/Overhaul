@@ -299,8 +299,8 @@ final class BlazeShadingShader {
                 shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position)) * (1.0 - 0.75 * duskAir());
                 // Far terrain under the open sky sinks into the air's own colour, the one the sky has at the horizon.
                 float dusk = duskAir();
-                vec3 air = linear(sky.rgb);
-                air = mix(air, mix(vec3(0.42, 0.72, 1.0) * 0.95, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
+                vec3 air = mix(linear(sky.rgb), linear(unpackUnorm4x8(options.x).rgb), day() * (1.0 - dusk));
+                air = mix(air, mix(vec3(0.4, 0.8, 1.0) * 0.82, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
                 air = mix(air, DUSK * 0.3, dusk * 0.85);
                 float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.7 * dusk);
                 imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure, display(air), dusk), display(air), sunk), seen.color.a));
