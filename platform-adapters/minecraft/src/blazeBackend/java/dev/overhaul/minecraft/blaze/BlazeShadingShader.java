@@ -52,8 +52,12 @@ final class BlazeShadingShader {
             vec3 display(vec3 color) { return mix(color * 12.92, 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, color)); }
 
             // A filmic curve: straight through the shadows, so shade keeps its colour and detail, and a soft shoulder
-            // toward white.
-            vec3 filmic(vec3 x) { x = max(x * 2.7, 0.0); return x * inversesqrt(1.0 + x * x); }
+            // toward white. Bending each channel alone pales a bright colour, so most of the bend follows brightness.
+            vec3 filmic(vec3 x) {
+                x = max(x * 2.7, 0.0);
+                float bright = dot(x, vec3(0.3, 0.59, 0.11));
+                return mix(x * inversesqrt(1.0 + x * x), min(x * inversesqrt(1.0 + bright * bright), 1.0), 0.6);
+            }
 
             """;
     /** From linear light to the screen: the filmic curve, then the game's fog; needs {@link #FRAME} and {@code sceneDepth}. */
@@ -296,7 +300,7 @@ final class BlazeShadingShader {
                 float dim = 0.55 * (1.0 - day()) * (1.0 - brightness(seen.blockLevel));
                 shaded = mix(shaded, vec3(0.75, 0.95, 1.2) * dot(shaded, vec3(0.3, 0.59, 0.11)), dim);
                 // Daylight keeps colours rich.
-                shaded = max(mix(vec3(dot(shaded, vec3(0.3, 0.59, 0.11))), shaded, 1.0 + 0.06 * day()), 0.0);
+                shaded = max(mix(vec3(dot(shaded, vec3(0.3, 0.59, 0.11))), shaded, 1.0 + 0.12 * day()), 0.0);
                 vec3 shown = shaded;
                 float exposure = 1.0;
             #ifdef LINEAR
@@ -304,7 +308,7 @@ final class BlazeShadingShader {
                 vec4 around = textureLod(glow, (vec2(pixel) + 0.5) / vec2(size.xy), 0.0);
                 if (around.a > 0.0) shown = mix(shaded, around.rgb / around.a, 0.04);
                 float average = texelFetch(measured, ivec2(0), 0).r;
-                if (average > 0.0) exposure = clamp(sqrt(0.2 / average), 0.5, 1.0 + day() * smoothstep(0.05, 0.45, light.y));
+                if (average > 0.0) exposure = clamp(sqrt(0.13 / average), 0.4, 1.0 + 0.6 * day() * smoothstep(0.05, 0.45, light.y));
             #endif
                 // The further a surface, the more lit air lies before it.
                 shown += sunColor() * light.w * 0.35 * shaft * smoothstep(4.0, 96.0, length(seen.position)) * (1.0 - 0.75 * duskAir());
@@ -313,7 +317,7 @@ final class BlazeShadingShader {
                 vec3 air = mix(linear(sky.rgb), linear(unpackUnorm4x8(options.x).rgb), day() * (1.0 - dusk));
                 air = mix(air, mix(vec3(0.4, 0.8, 1.0) * 0.82, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir() * 4.5;
                 air = mix(air, DUSK * 0.42, dusk * 0.85);
-                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.4 * dusk);
+                float sunk = min(1.0 - exp(-length(seen.position) / 700.0), 0.55) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.4 * dusk);
                 imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure, display(air), dusk), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }

@@ -170,7 +170,9 @@ final class BlazeShadingSource {
                 float shadow = (facing > 0.0 || soft) && light.w > 0.0 ? smoothstep(0.8, 0.97, levels.y) : 0.0;
                 if (soft) shadow = mix(shadow, 1.0, 0.4 * smoothstep(0.5, 0.95, levels.y));
                 vec3 shaded = linear(own) * daylight(normal, levels, shadow, soft);
-                fragColor.rgb = mix(display(filmic(shaded * 0.5)), shadingFog, shadingFogged);
+                // No eye adapts on this path, so the open day is taken down by what an eye in the sun would.
+                float exposure = 1.0 - 0.5 * day() * smoothstep(0.3, 0.9, levels.y);
+                fragColor.rgb = mix(display(filmic(shaded * 0.5 * exposure)), shadingFog, shadingFogged);
             }
             """;
 
