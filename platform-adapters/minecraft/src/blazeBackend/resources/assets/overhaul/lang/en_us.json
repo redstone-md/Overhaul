@@ -286,6 +286,8 @@
   "overhaul.page.lighting.shading_bloom.name": "Bloom",
   "overhaul.page.lighting.shading_clouds.desc": "Soft clouds lit by the sun in place of the game's flat ones",
   "overhaul.page.lighting.shading_clouds.name": "Volumetric clouds",
+  "overhaul.page.lighting.shading_colored_light.desc": "Block light takes the colour of its source and is tinted by glass, leaves and water it passes through",
+  "overhaul.page.lighting.shading_colored_light.name": "Coloured light",
   "overhaul.page.lighting.shading_exposure.desc": "The picture brightens in the dark and dims in full sun, the way an eye adapts",
   "overhaul.page.lighting.shading_exposure.name": "Eye adaptation",
   "overhaul.page.lighting.shading_occlusion.desc": "Corners and creases darken",

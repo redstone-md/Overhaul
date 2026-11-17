@@ -17,7 +17,7 @@ final class OptimizationValues {
     static final Set<BlazeOptimization> GRAPHICS = EnumSet.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.PACK_UPSCALE, BlazeOptimization.UPSCALE_MIP_BIAS,
             BlazeOptimization.RAY_TRACING, BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI, BlazeOptimization.RT_REFLECTIONS,
             BlazeOptimization.OVERHAUL_SHADING, BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS, BlazeOptimization.SHADING_SHAFTS,
-            BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
+            BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.SHADING_COLORED_LIGHT, BlazeOptimization.UPSCALE_READY, BlazeOptimization.GPU_PRESET);
     private static final List<BlazeOptimization> PRESET_PICKS = List.of(BlazeOptimization.FSR2, BlazeOptimization.DLSS, BlazeOptimization.RAY_TRACING);
     private static final String REASON = "Set from the settings screen";
     private final SettingsDraft draft;

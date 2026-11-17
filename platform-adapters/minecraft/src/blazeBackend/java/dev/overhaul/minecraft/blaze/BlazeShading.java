@@ -38,9 +38,10 @@ public final class BlazeShading {
     private BlazeTarget main, target;
     private GpuImage surfaces;
     private GpuImageView surfacesView, forColor, forDepth;
-    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners. */
-    private final BlazeShadingPass[] passes = new BlazeShadingPass[16];
+    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners, 16 for block light in colour. */
+    private final BlazeShadingPass[] passes = new BlazeShadingPass[32];
     private BlazeShadingGlow glow;
+    private BlazeLightVolume colors;
     private int revision = -1;
     private boolean collecting, lit, failed;
     /** Whether this frame's sky carries the clouds of {@link BlazeShadingClouds}, so the game draws none. */
@@ -106,7 +107,7 @@ public final class BlazeShading {
             if (renderer != owner) adopt(renderer);
             main = renderer.target(client.getMainRenderTarget().frameBufferId);
             if (main == null || main.depthView() == null) return;
-            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on() && !BlazeOptimization.SHADING_SHAFTS.on() && !BlazeOptimization.SHADING_OCCLUSION.on() && !BlazeShadingClouds.wanted(client)
+            if (!BlazeOptimization.SHADING_SCREEN_SHADOWS.on() && !BlazeOptimization.SHADING_BLOOM.on() && !BlazeOptimization.SHADING_EXPOSURE.on() && !BlazeOptimization.SHADING_SHAFTS.on() && !BlazeOptimization.SHADING_OCCLUSION.on() && !BlazeOptimization.SHADING_COLORED_LIGHT.on() && !BlazeShadingClouds.wanted(client)
                     && !(renderer.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on())) {
                 light(client.level, camera.getPosition(), partialTick);
                 lit = direct = true;
@@ -173,14 +174,20 @@ public final class BlazeShading {
             boolean bloom = BlazeOptimization.SHADING_BLOOM.on(), adapt = BlazeOptimization.SHADING_EXPOSURE.on(), linear = bloom || adapt;
             boolean shafts = BlazeOptimization.SHADING_SHAFTS.on();
             boolean occlusion = BlazeOptimization.SHADING_OCCLUSION.on();
-            int variant = (traced ? 1 : 0) | (linear ? 2 : 0) | (shafts ? 4 : 0) | (occlusion ? 8 : 0);
-            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion);
+            boolean colored = BlazeOptimization.SHADING_COLORED_LIGHT.on();
+            int variant = (traced ? 1 : 0) | (linear ? 2 : 0) | (shafts ? 4 : 0) | (occlusion ? 8 : 0) | (colored ? 16 : 0);
+            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion, colored);
+            if (colored && colors == null) colors = new BlazeLightVolume(owner);
+            if (!colored && colors != null) {
+                owner.retire(colors);
+                colors = null;
+            }
             if (linear && glow == null) glow = new BlazeShadingGlow(owner);
             light(world, position, partialTick);
             var lighting = new BlazeShadingPass.Lighting(viewProjection.invert(new Matrix4f()), mirrorLight.get(BlazeShadingSource.SUN),
                     mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), reach(traced), clouds,
-                    BlazeShadingPass.Lighting.place(position.x, position.y, position.z));
+                    BlazeShadingPass.Lighting.place(position.x, position.y, position.z), colored ? colors.update(world, position) : null);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
@@ -245,10 +252,13 @@ public final class BlazeShading {
         surfacesView = forColor = forDepth = null;
         java.util.Arrays.fill(passes, null);
         glow = null;
+        colors = null;
         renderer.closeWith(() -> {
             if (owner != renderer) return;
             for (BlazeShadingPass pass : passes) if (pass != null) pass.close();
             if (glow != null) glow.close();
+            if (colors != null) colors.close();
+            colors = null;
             if (target != null) target.close();
             if (surfaces != null) surfaces.close();
             java.util.Arrays.fill(passes, null);

@@ -443,6 +443,8 @@
   "overhaul.page.lighting.shading_bloom.name": "Свечение",
   "overhaul.page.lighting.shading_clouds.desc": "Мягкие облака, освещённые солнцем, вместо плоских игровых",
   "overhaul.page.lighting.shading_clouds.name": "Объёмные облака",
+  "overhaul.page.lighting.shading_colored_light.desc": "Свет блоков берёт цвет источника и окрашивается стеклом, листвой и водой, сквозь которые проходит",
+  "overhaul.page.lighting.shading_colored_light.name": "Цветной свет",
   "overhaul.page.lighting.shading_exposure.desc": "Картинка светлеет в темноте и темнеет на солнце, как привыкает глаз",
   "overhaul.page.lighting.shading_exposure.name": "Адаптация глаза",
   "overhaul.page.lighting.shading_occlusion.desc": "Углы и складки темнеют",

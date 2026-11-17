@@ -165,6 +165,9 @@ final class BlazeRayShader {
                 return mix(vec3(1.0, 0.55, 0.3), vec3(1.0, 0.96, 0.88), smoothstep(0.0, 0.45, light.y));
             }
 
+            // The colour of block light: warm, unless a shader knows the colour of the light that falls here.
+            vec3 torchColor = vec3(1.0, 0.66, 0.38);
+
             // The light on a surface of terrain: a sun warmer than the sun itself over a sky bluer than the sky, the
             // way film sees daylight, and warm block light. The sun is strong against the sky so shadows read, and a
             // low sun, which only grazes the ground, is given more strength to keep the golden hour bright. Leaves
@@ -174,7 +177,7 @@ final class BlazeRayShader {
                 float facing = dot(normal, light.xyz);
                 vec3 sun = sunColor() * vec3(0.93, 0.97, 1.0) * light.w * (soft ? 0.25 + 0.6 * max(light.y, 0.0) + 0.15 * facing : max(facing, 0.0)) * shadow * (1.7 - (soft ? 1.0 : 0.9) * low);
                 vec3 ambient = mix(vec3(0.55, 0.8, 1.25), mix(vec3(0.9, 1.0, 1.12), skyTint(), 0.85), sky.w) * brightness(levels.y) * (0.05 + 0.21 * sky.w) * (1.0 - 0.68 * low) * (0.32 + 0.68 * normal.y);
-                vec3 torch = vec3(1.0, 0.66, 0.38) * brightness(levels.x) * 1.45;
+                vec3 torch = torchColor * brightness(levels.x) * 1.45;
                 return sun + ambient + torch + 0.012;
             }
 
@@ -259,13 +262,13 @@ final class BlazeRayShader {
             }
 
             float fadeAt(float distance) {
-                float reach = uintBitsToFloat(options.z);
+                float reach = uintBitsToFloat(options.z & 0xFFFFFF00u);
                 return 1.0 - smoothstep(0.75 * reach, reach, distance);
             }
 
             // Whether the pixel shows nothing to light: the sky, or beyond the traced terrain.
             bool unlit(ivec2 pixel, float distance) {
-                return texelFetch(sceneDepth, pixel, 0).r >= 1.0 || distance > uintBitsToFloat(options.z) || distance < 0.05;
+                return texelFetch(sceneDepth, pixel, 0).r >= 1.0 || distance > uintBitsToFloat(options.z & 0xFFFFFF00u) || distance < 0.05;
             }
 
             // Whether the camera ray first meets water, glass or ice at the depth's distance: 1 for upward facing

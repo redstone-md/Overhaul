@@ -45,6 +45,10 @@ final class BlazeShadingShader {
             layout(binding = 7) uniform sampler2D measured;
             layout(binding = 8, rgba16f) writeonly uniform image2D spread;
             #endif
+            #ifdef COLORED
+            // The colour of block light around the camera, a block to a texel, wrapping.
+            layout(binding = 9) uniform sampler3D lightColors;
+            #endif
             """ + FRAME;
     /** Between the colours the screen shows and linear light, and the filmic curve that brings light back to the screen. */
     static final String TONE = """
@@ -154,7 +158,7 @@ final class BlazeShadingShader {
             float shadowAt(vec3 position, vec3 normal, float skyLevel, float distance, ivec2 pixel, float part) {
                 float guess = smoothstep(0.8, 0.97, skyLevel);
                 // With rays the reach is theirs, below zero where the screen is not to be walked past them.
-                float reach = uintBitsToFloat(options.z);
+                float reach = uintBitsToFloat(options.z & 0xFFFFFF00u);
             #ifdef TRACED
                 bool walks = reach > 0.0;
                 reach = abs(reach);
@@ -308,6 +312,28 @@ final class BlazeShadingShader {
             #endif
             }
 
+            // The colour of the block light at a place: that of the lights whose light reaches it, tinted by what it
+            // came through, as the volume around the camera holds it; warm where the volume ends or knows of none.
+            vec3 torchAt(vec3 position, vec3 normal) {
+                vec3 warm = vec3(1.0, 0.66, 0.38);
+            #ifdef COLORED
+                vec3 away = abs(position);
+                float known = (1.0 - smoothstep(44.0, 54.0, max(away.x, away.z))) * (1.0 - smoothstep(16.0, 22.0, away.y));
+                if (known <= 0.0) return warm;
+                vec3 camera = vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0
+                        + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
+                vec3 found = textureLod(lightColors, (position + camera + normal * 0.5) / vec3(128.0, 64.0, 128.0), 0.0).rgb;
+                float most = max(found.r, max(found.g, found.b));
+                if (most <= 0.0) return warm;
+                vec3 hue = found / most;
+                // A dim colour is lifted half way to the warm light's brightness, so blue lamps still light a room.
+                hue *= mix(1.0, min(0.72 / max(dot(hue, vec3(0.3, 0.59, 0.11)), 0.05), 2.5), 0.5);
+                return mix(warm, hue, known * smoothstep(0.0, 0.04, most));
+            #else
+                return warm;
+            #endif
+            }
+
             // Lights one pixel onto the screen with its share of the sun, of the open space before it and of the light
             // the air catches; gives its linear light back, with 1 beside it where terrain is.
             vec4 lightOf(Seen seen, float shadow, float open, float shaft, ivec2 pixel) {
@@ -317,6 +343,7 @@ final class BlazeShadingShader {
                     return vec4(0.0);
                 }
                 vec3 normal = seen.normal;
+                torchColor = seen.blockLevel > 0.0 ? torchAt(seen.position, normal) : vec3(1.0, 0.66, 0.38);
                 vec3 shaded = linear(seen.color.rgb) * daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) * open;
                 // The eye loses colour in the dark, away from fire.
                 float dim = 0.55 * (1.0 - day()) * (1.0 - brightness(seen.blockLevel));
@@ -348,7 +375,7 @@ final class BlazeShadingShader {
             // on one surface share the mean, which is as good as four times the steps.
             void main() {
                 ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
-                if (uintBitsToFloat(options.z) != 0.0) {
+                if (uintBitsToFloat(options.z & 0xFFFFFF00u) != 0.0) {
                     viewProjection = inverse(inverseViewProjection);
                     depthRow = vec4(inverseViewProjection[0][3], inverseViewProjection[1][3], inverseViewProjection[2][3], inverseViewProjection[3][3]);
                 }
@@ -386,8 +413,8 @@ final class BlazeShadingShader {
      * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before;
      * with {@code shafts} the air catches the sun's light; with {@code occlusion} corners and creases darken.
      */
-    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion) {
-        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "");
+    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "") + (colored ? "#define COLORED\n" : "");
         if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY;
         return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY;
     }

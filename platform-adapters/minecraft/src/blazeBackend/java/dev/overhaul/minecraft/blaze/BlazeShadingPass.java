@@ -32,19 +32,20 @@ import static org.lwjgl.vulkan.VK10.*;
 final class BlazeShadingPass implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
-    private final boolean traced, linear, shafts, occlusion;
+    private final boolean traced, linear, shafts, occlusion, colored;
     private final GpuSampler sampler;
     private long setLayout, pipelineLayout, pipeline;
     private GpuImage output;
     private GpuImageView outputView;
     private Binding binding;
 
-    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts, boolean occlusion) {
+    BlazeShadingPass(BlazeRenderer owner, boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored) {
         this.owner = owner;
         this.traced = traced;
         this.linear = linear;
         this.shafts = shafts;
         this.occlusion = occlusion;
+        this.colored = colored;
         context = owner.context();
         sampler = owner.allocator().createSampler(new SamplerSettings(SamplerSettings.Filter.NEAREST,
                 SamplerSettings.Filter.NEAREST, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
@@ -58,8 +59,17 @@ final class BlazeShadingPass implements AutoCloseable {
     }
 
     private int[] sampled() {
-        if (linear) return traced ? new int[]{1, 2, 3, 6, 7} : new int[]{1, 2, 6, 7};
-        return traced ? new int[]{1, 2, 3} : new int[]{1, 2};
+        int[] slots = new int[2 + (traced ? 1 : 0) + (linear ? 2 : 0) + (colored ? 1 : 0)];
+        int at = 0;
+        slots[at++] = 1;
+        slots[at++] = 2;
+        if (traced) slots[at++] = 3;
+        if (linear) {
+            slots[at++] = 6;
+            slots[at++] = 7;
+        }
+        if (colored) slots[at] = 9;
+        return slots;
     }
 
     /** The images written: the screen colour, the surfaces, then with a glow the half size light. */
@@ -83,7 +93,7 @@ final class BlazeShadingPass implements AutoCloseable {
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "shading pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : "") + (occlusion ? "_occlusion" : ""), BlazeShadingShader.source(traced, linear, shafts, occlusion), ShaderStage.COMPUTE).directBuffer();
+            var code = compiler.compile("overhaul_shading" + (traced ? "_traced" : "") + (linear ? "_linear" : "") + (shafts ? "_shafts" : "") + (occlusion ? "_occlusion" : "") + (colored ? "_colored" : ""), BlazeShadingShader.source(traced, linear, shafts, occlusion, colored), ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "shading module");
             long module = pointer.get(0);
             try {
@@ -102,7 +112,7 @@ final class BlazeShadingPass implements AutoCloseable {
      * them, the fog's colour, start and end, how far shadows are looked for: traced, or walked on screen by the plain variant,
      * and {@link BlazeShadingClouds}' words.
      */
-    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach, long clouds, int place) {
+    record Lighting(Matrix4f inverseViewProjection, float[] light, float[] sky, float[] fogColor, float fogStart, float fogEnd, float reach, long clouds, int place, BlazeLightVolume.Sampled colors) {
         /** A camera position as the shaders read it: where it is in a cube of sixteen blocks, a sixty-fourth of a block fine. */
         static int place(double x, double y, double z) {
             return part(x) | part(y) << 10 | part(z) << 20;
@@ -115,6 +125,11 @@ final class BlazeShadingPass implements AutoCloseable {
         /** Both ends of the fog in one word, a sixteenth of a block fine. */
         int fog() {
             return sixteenths(fogStart) | sixteenths(fogEnd) << 16;
+        }
+
+        /** The reach's bits, with the light volume's word for the camera in the lowest byte, which a reach in whole blocks leaves empty. */
+        int reachBits() {
+            return Float.floatToRawIntBits((float) Math.round(reach)) & ~0xFF | (colors == null ? 0 : colors.cell());
         }
 
         private static int sixteenths(float blocks) {
@@ -152,6 +167,10 @@ final class BlazeShadingPass implements AutoCloseable {
             views.add(glow.measured());
             samplers.add(sampler.handle());
         }
+        if (colored) {
+            views.add(lighting.colors().view());
+            samplers.add(lighting.colors().sampler());
+        }
         GpuImageView lit = inPlace ? target.colorView() : outputView;
         List<GpuImageView> written = linear ? List.of(lit, surfaces, glow.spread()) : List.of(lit, surfaces);
         BlazeRayStructures.Structure top = traced ? scene.top() : null;
@@ -172,7 +191,7 @@ final class BlazeShadingPass implements AutoCloseable {
         float[] fog = lighting.fogColor();
         int packed = 0;
         for (int i = 0; i < 4; i++) packed |= Math.round(Math.max(0, Math.min(1, fog[i])) * 255) << (i * 8);
-        push.putInt(112, packed).putInt(116, lighting.fog()).putFloat(120, lighting.reach()).putInt(124, lighting.place());
+        push.putInt(112, packed).putInt(116, lighting.fog()).putInt(120, lighting.reachBits()).putInt(124, lighting.place());
     }
 
     /** One descriptor set over a target's views, the surfaces, the images written, and for the traced variant the scene and the atlas. */
