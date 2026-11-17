@@ -56,12 +56,13 @@ final class BlazeShadingClouds {
             }
 
             // How thick the cloud is at a place in blocks and a height through the layer, 0 at its underside and 1 at
-            // its top: broad masses with smaller shapes on them, flat below and heaped above.
+            // its top: broad masses with smaller shapes on them, flat below and heaped above, highest where a mass is fullest.
             float cloudAt(vec2 at, float height, bool fine) {
                 vec2 unit = at / 2048.0;
-                float shape = cloudNoise(unit * 9.0, 9.0) * 0.56 + cloudNoise(unit * 26.0 + 3.7, 26.0) * 0.24;
+                float broad = cloudNoise(unit * 9.0, 9.0);
+                float shape = broad * 0.56 + cloudNoise(unit * 26.0 + 3.7, 26.0) * 0.24;
                 shape += fine ? cloudNoise(unit * 80.0 + 9.1, 80.0) * 0.14 + cloudNoise(unit * 240.0, 240.0) * 0.06 : 0.1;
-                float edge = 0.515 + 0.085 * lowSun() + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
+                float edge = 0.515 + 0.085 * lowSun() + (0.44 - 0.42 * broad) * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
                 return clamp((shape - edge) * 7.0, 0.0, 1.0);
             }
 
@@ -69,17 +70,17 @@ final class BlazeShadingClouds {
             // up into the middle of the layer.
             float cloudShadeAt(vec3 position) {
                 uvec2 words = cloudWords();
-                float up = uintBitsToFloat(words.y) + 15.0 - position.y;
+                float up = uintBitsToFloat(words.y) + 20.0 - position.y;
                 if (words.y == 0u || up <= 0.0) return 1.0;
                 vec2 at = vec2(words.x & 0xFFFFu, words.x >> 16) / 32.0 + position.xz + light.xz * (up / max(light.y, 0.15));
-                return mix(1.0, 0.45, smoothstep(0.0, 0.8, cloudAt(at, 0.5, false)));
+                return mix(1.0, 0.45, smoothstep(0.0, 0.8, cloudAt(at, 0.33, false)));
             }
 
             // The layer along a ray from the eye into the sky: its light, already weighed by how much it covers, then
             // how much it covers.
             vec4 cloudsAt(vec3 toward, ivec2 pixel) {
-                const float THICK = 30.0;
-                const int STEPS = 5;
+                const float THICK = 60.0;
+                const int STEPS = 6;
                 uvec2 words = cloudWords();
                 float under = uintBitsToFloat(words.y), over = under + THICK;
                 // No layer, or the eye inside it.
@@ -109,7 +110,7 @@ final class BlazeShadingClouds {
                     // What the sun's light passes on its way here, and less of it deep in the cloud's underside.
                     float between = cloudAt(at + sunward, min(height + 0.3, 1.0), false);
                     float shade = max(exp(-2.4 * between), 0.4 * exp(-0.5 * between)) * (0.6 + 0.4 * height);
-                    float covers = 1.0 - exp(-thick * through / float(STEPS) * 0.24);
+                    float covers = 1.0 - exp(-thick * through / float(STEPS) * 0.15);
                     lit += left * covers * (air * (0.72 + 0.28 * height) * (1.0 - 0.35 * low * (1.0 - height)) + sun * shade + rim * exp(-3.0 * (thick + between)));
                     left *= 1.0 - covers;
                 }
