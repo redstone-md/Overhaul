@@ -119,11 +119,17 @@ final class BlazeLightVolume implements AutoCloseable {
             }
 
             // What the sun's light is left with on its way to a place: it takes the colour of the stained glass, ice
-            // or leaves it crosses within twenty blocks, the deepest of them, and loses no strength to it.
-            vec3 sunThrough(vec3 position, vec3 normal) {
-                vec3 at = position + normal * 0.6 + light.xyz * 0.5;
+            // or leaves it crosses, the deepest of them, and loses no strength to it. The walk goes block by block,
+            // toward the spot of the sun the place was lit from, so glass a single block wide is never stepped over.
+            vec3 sunThrough(vec3 position, vec3 normal, vec3 toward) {
+                vec3 start = position + normal * 0.6;
+                vec3 way = toward + vec3(equal(toward, vec3(0.0))) * 1e-4;
+                vec3 from = start + volumeCamera();
+                vec3 cell = floor(from), turn = sign(way);
+                vec3 next = (cell + max(turn, 0.0) - from) / way, each = abs(1.0 / way);
                 vec3 left = vec3(1.0);
-                for (int i = 0; i < 20; i++) {
+                for (int i = 0; i < 40; i++) {
+                    vec3 at = cell + 0.5 - volumeCamera();
                     vec3 away = abs(at);
                     if (max(away.x, away.z) > 54.0 || away.y > 22.0) break;
                     vec4 block = volumeBlock(at);
@@ -131,9 +137,12 @@ final class BlazeLightVolume implements AutoCloseable {
                     // its edge, so the glass beside it colours the light.
                     if (block.a == 0.0) {
                         if (block.r + block.g + block.b > 0.0) left = min(left, block.rgb);
-                        else left = min(left, beside(at));
+                        else if (i > 0) left = min(left, beside(at));
                     }
-                    at += light.xyz;
+                    vec3 first = vec3(lessThanEqual(next, min(next.yzx, next.zxy)));
+                    if (first.x + first.y + first.z > 1.0) first = first.x > 0.0 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, first.y, 1.0 - first.y);
+                    next += first * each;
+                    cell += first * turn;
                 }
                 float most = max(left.r, max(left.g, left.b));
                 if (most <= 0.0) return vec3(1.0);

@@ -330,9 +330,6 @@ final class BlazeShadingShader {
                 }
                 vec3 normal = seen.normal;
                 torchColor = seen.blockLevel > 0.0 ? torchAt(seen.position, normal) : vec3(1.0, 0.66, 0.38);
-            #ifdef COLORED
-                sunFilter = shadow > 0.0 && light.w > 0.0 ? sunThrough(seen.position, normal) : vec3(1.0);
-            #endif
                 vec3 shaded = linear(seen.color.rgb) * (daylight(normal, vec2(seen.blockLevel, seen.skyLevel), shadow, seen.soft) + indirect) * open;
                 // The eye loses colour in the dark, away from fire.
                 float dim = 0.55 * (1.0 - day()) * (1.0 - smoothstep(0.0, 0.45, seen.blockLevel));
@@ -380,6 +377,16 @@ final class BlazeShadingShader {
                     break;
                 }
                 for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
+            #ifdef COLORED
+                // What colours the sun on its way to each pixel, along the very line its share of the sun was found on.
+                vec3 tints[4];
+                for (int i = 0; i < 4; i++) {
+                    tints[i] = vec3(0.0);
+                    if (!seen[i].terrain || seen[i].shadow <= 0.0 || light.w <= 0.0) continue;
+                    vec3 toward = dot(seen[i].normal, light.xyz) > 0.0 ? seen[i].normal : -seen[i].normal;
+                    tints[i] = seen[i].shadow * sunThrough(seen[i].position, toward, sunSpot(grainAt(seen[i].position, toward), float(i), 0.035));
+                }
+            #endif
             #ifdef BOUNCED
                 // The light that came back is gathered coarsely: each pixel takes it from the nine around that lie as far as it does.
                 vec4 back[9];
@@ -388,10 +395,14 @@ final class BlazeShadingShader {
             #endif
                 for (int i = 0; i < 4; i++) {
                     float shadow = 0.0, open = 0.0, weight = 0.0, distance = length(seen[i].position);
+                    vec3 tint = vec3(0.0);
                     if (seen[i].terrain) for (int j = 0; j < 4; j++) {
                         if (!seen[j].terrain || dot(seen[i].normal, seen[j].normal) < 0.9) continue;
                         if (abs(length(seen[j].position) - distance) > 0.1 + 0.02 * distance) continue;
                         shadow += seen[j].shadow;
+            #ifdef COLORED
+                        tint += tints[j];
+            #endif
                         open += opens[j];
                         weight += 1.0;
                     }
@@ -407,6 +418,7 @@ final class BlazeShadingShader {
                     }
                     indirect = found > 0.001 ? indirect / found : vec3(0.0);
             #endif
+                    sunFilter = shadow > 0.0 && tint.r + tint.g + tint.b > 0.0 ? tint / shadow : vec3(1.0);
                     sum += lightOf(seen[i], (weight > 0.0 ? shadow / weight : 0.0) * cloudy, weight > 0.0 ? open / weight : 1.0, shaft, indirect, cell * 2 + ivec2(i & 1, i >> 1));
                 }
             #ifdef LINEAR

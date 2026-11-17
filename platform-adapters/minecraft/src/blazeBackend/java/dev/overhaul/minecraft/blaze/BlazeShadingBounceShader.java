@@ -62,7 +62,7 @@ final class BlazeShadingBounceShader {
                 sunFilter = vec3(1.0);
                 vec3 glowing = vec3(0.0);
             #ifdef COLORED
-                if (shadow > 0.0) sunFilter = sunThrough(point, facing);
+                if (shadow > 0.0) sunFilter = sunThrough(point, facing, light.xyz);
                 vec3 away = abs(point);
                 if (max(away.x, away.z) < 54.0 && away.y < 22.0) {
                     vec4 block = volumeBlock(point - facing * 0.4);
