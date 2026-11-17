@@ -61,7 +61,7 @@ final class BlazeShadingClouds {
                 vec2 unit = at / 2048.0;
                 float shape = cloudNoise(unit * 9.0, 9.0) * 0.56 + cloudNoise(unit * 26.0 + 3.7, 26.0) * 0.24;
                 shape += fine ? cloudNoise(unit * 80.0 + 9.1, 80.0) * 0.14 + cloudNoise(unit * 240.0, 240.0) * 0.06 : 0.1;
-                float edge = 0.515 + 0.04 * lowSun() + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
+                float edge = 0.515 + 0.085 * lowSun() + 0.16 * height * height + 0.12 * (1.0 - smoothstep(0.0, 0.12, height));
                 return clamp((shape - edge) * 7.0, 0.0, 1.0);
             }
 

@@ -222,7 +222,7 @@ final class BlazeShadingShader {
                 float band = pow(1.0 - clamp(abs(toward.y), 0.0, 1.0), 2.5);
                 air = mix(air, DUSK * (0.6 + 0.8 * near * near), dusk * min(band * 1.25, 1.0) * 0.95);
                 // The rest of the dusk sky warms with it.
-                air = mix(air, dot(air, vec3(0.3, 0.59, 0.11)) * vec3(1.3, 0.85, 0.55), dusk * 0.6 * (1.0 - 0.75 * high)) * (1.0 - 0.4 * dusk * high);
+                air = mix(air, dot(air, vec3(0.3, 0.59, 0.11)) * vec3(1.36, 0.78, 0.4), dusk * 0.7 * (1.0 - 0.75 * high)) * (1.0 - 0.4 * dusk * high);
                 // High above a low sun the sky is already a dark slate blue.
                 air = mix(air, vec3(0.02, 0.032, 0.055), dusk * smoothstep(0.08, 0.42, toward.y) * 0.85);
                 vec3 glow = mix(sunColor(), vec3(1.0, 0.38, 0.1), dusk) * lit * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
@@ -308,8 +308,8 @@ final class BlazeShadingShader {
                 float dusk = duskAir();
                 vec3 air = mix(linear(sky.rgb), linear(unpackUnorm4x8(options.x).rgb), day() * (1.0 - dusk));
                 air = mix(air, mix(vec3(0.4, 0.8, 1.0) * 0.82, sunColor() * 1.15, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.3, 0.75) + nightAir();
-                air = mix(air, DUSK * 0.3, dusk * 0.85);
-                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.7 * dusk);
+                air = mix(air, DUSK * 0.42, dusk * 0.85);
+                float sunk = min(1.0 - exp(-length(seen.position) / 280.0), 0.75) * smoothstep(0.3, 0.9, seen.skyLevel) * (1.0 - 0.4 * dusk);
                 imageStore(lit, pixel, vec4(mix(screened(shown, seen.position, exposure, display(air), dusk), display(air), sunk), seen.color.a));
                 return vec4(shaded, 1.0);
             }
