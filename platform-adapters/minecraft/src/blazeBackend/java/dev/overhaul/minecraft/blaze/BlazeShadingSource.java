@@ -84,7 +84,7 @@ final class BlazeShadingSource {
                 float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
                 vec3 base = mix(ShadingSky.rgb, FogColor.rgb, day * (1.0 - dusk));
                 vec3 air = mix(base, mix(vec3(0.4, 0.8, 1.0) * 0.82, sun * 0.6, dusk) * dot(base, vec3(0.3, 0.59, 0.11)) * 1.15, 0.75) * mix(0.5, 1.0, day);
-                float sunk = max(min(1.0 - exp(-far / 280.0), 0.75) * clear * (1.0 - 0.6 * dusk), (1.0 - clear) * day);
+                float sunk = max(min(1.0 - exp(-far / 280.0), 0.75) * clear * (1.0 - 0.6 * dusk), (1.0 - clear) * day * 0.86);
                 fragColor.rgb = mix(fragColor.rgb, air, sunk);
                 fragColor.a = max(fragColor.a, sunk);
             }
