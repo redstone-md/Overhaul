@@ -217,6 +217,8 @@ final class BlazeShadingShader {
                 air *= mix(vec3(1.0), vec3(0.86, 1.0, 1.04), day() * (1.0 - dusk));
                 float high = smoothstep(0.05, 0.8, toward.y);
                 air = mix(air, haze, mix(mix(0.85, 0.7, dusk), 0.05, smoothstep(0.0, 0.3, toward.y))) * mix(0.85, 0.42, high) * (1.0 - 0.72 * dusk);
+                // The day's blue is a soft one, not a pure one.
+                air = mix(air, vec3(dot(air, vec3(0.3, 0.59, 0.11))), 0.2 * (1.0 - dusk));
                 // Overhead the blue deepens.
                 air = max(mix(vec3(dot(air, vec3(0.3, 0.59, 0.11))), air, 1.0 + 0.25 * high), 0.0) + nightAir();
                 // A low sun turns the air along the horizon orange, strongest beneath itself.
