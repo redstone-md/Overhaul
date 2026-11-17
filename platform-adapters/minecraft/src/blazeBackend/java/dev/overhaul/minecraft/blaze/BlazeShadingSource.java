@@ -69,6 +69,9 @@ final class BlazeShadingSource {
                 vec3 bounced = reflect(toward, normal);
                 vec3 above = mix(FogColor.rgb, ShadingSky.rgb, clamp(bounced.y * 2.5, 0.0, 1.0));
                 float day = step(0.235, ShadingSky.w);
+                // At night the water is dark slate, not the sky's blue.
+                above = mix(dot(above, vec3(0.3, 0.59, 0.11)) * vec3(0.5, 0.62, 0.75), above, day);
+                fragColor.rgb = mix(dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.45, 0.6, 0.75), fragColor.rgb, day);
                 // Under a low sun the water mirrors the dusk's dim warm air, not the day's blue.
                 above = mix(above, dot(above, vec3(0.3, 0.59, 0.11)) * vec3(1.1, 0.62, 0.38), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.85);
                 fragColor.rgb = mix(fragColor.rgb, dot(fragColor.rgb, vec3(0.3, 0.59, 0.11)) * vec3(0.9, 0.62, 0.46), day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y)) * 0.75);
@@ -79,8 +82,8 @@ final class BlazeShadingSource {
                 fragColor.a = max(fragColor.a, mirror * clear);
                 // Far water sinks into the air's colour the way far land does.
                 float dusk = day * (1.0 - smoothstep(0.05, 0.45, ShadingSun.y));
-                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.6, 0.86, 1.0) * 1.2, sun, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.75);
-                float sunk = min(1.0 - exp(-far / 280.0), 0.75) * clear;
+                vec3 air = mix(ShadingSky.rgb, mix(vec3(0.42, 0.72, 1.0) * 0.95, sun * 0.6, dusk) * dot(ShadingSky.rgb, vec3(0.3, 0.59, 0.11)) * 1.15, 0.75) * mix(0.5, 1.0, day);
+                float sunk = min(1.0 - exp(-far / 280.0), 0.75) * clear * (1.0 - 0.6 * dusk);
                 fragColor.rgb = mix(fragColor.rgb, air, sunk);
                 fragColor.a = max(fragColor.a, sunk);
             }
