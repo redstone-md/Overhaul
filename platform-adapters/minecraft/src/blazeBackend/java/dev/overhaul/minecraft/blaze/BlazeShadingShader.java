@@ -200,7 +200,7 @@ final class BlazeShadingShader {
                 float dusk = sunLit() ? (1.0 - smoothstep(0.05, 0.45, light.y)) * min(light.w * 8.0, 1.0) * smoothstep(0.235, 0.3, sky.w) : 0.0;
                 float lit = max(light.w, 0.75 * dusk);
                 // Haze pales the blue toward the horizon, and takes the low sun's colour.
-                vec3 haze = mix(vec3(0.5, 0.84, 1.0) * 1.2, vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.12;
+                vec3 haze = mix(vec3(0.4, 0.8, 1.0) * 1.2, vec3(1.0, 0.5, 0.2) * 1.3, dusk) * dot(air, vec3(0.3, 0.59, 0.11)) * 1.12;
                 // The day's blue leans to cyan, not violet.
                 air *= mix(vec3(1.0), vec3(0.86, 1.0, 1.04), day() * (1.0 - dusk));
                 float high = smoothstep(0.05, 0.8, toward.y);
@@ -213,7 +213,7 @@ final class BlazeShadingShader {
                 // The rest of the dusk sky warms with it.
                 air = mix(air, dot(air, vec3(0.3, 0.59, 0.11)) * vec3(1.3, 0.85, 0.55), dusk * 0.6 * (1.0 - 0.75 * high)) * (1.0 - 0.4 * dusk * high);
                 // High above a low sun the sky is already a dark slate blue.
-                air = mix(air, vec3(0.022, 0.034, 0.055), dusk * high * 0.7);
+                air = mix(air, vec3(0.02, 0.032, 0.055), dusk * smoothstep(0.08, 0.42, toward.y) * 0.85);
                 vec3 glow = mix(sunColor(), vec3(1.0, 0.38, 0.1), dusk) * lit * (0.18 * pow(near, 6.0) + 0.5 * pow(near, 96.0) + 0.12 * low * (0.3 + 0.7 * near) + 0.3 * shaft
                         + dusk * (band * 0.1 + 0.9 * pow(near, 40.0))) + vec3(1.0, 0.3, 0.06) * lit * dusk * band * (0.25 + 0.6 * near * near);
                 vec4 cloud = cloudsAt(toward, pixel);
