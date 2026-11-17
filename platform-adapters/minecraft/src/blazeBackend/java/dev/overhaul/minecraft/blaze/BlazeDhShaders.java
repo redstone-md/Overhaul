@@ -177,6 +177,8 @@ final class BlazeDhShaders {
     /** DH's fog pass, shared by the two passes that put LOD colour on the frame: its render target was only ever read by them. */
     private static final String COMPOSITE_HEAD = """
             #version 450
+            // The depth LODs leave in the frame: behind all the frame's own terrain, yet no longer open sky.
+            const float LOD_DEPTH = 0.9999999;
             layout(set=0,binding=0,std140) uniform Composite {
                 mat4 uInvMvmProj;
                 vec4 uFogColor;
@@ -238,6 +240,7 @@ final class BlazeDhShaders {
                 if (color.a == 0.0) discard;
                 vec3 position = unproject(uInvMvmProj, texture(uDhDepth, texCoord).r);
                 fragColor = vec4(fogged(color.rgb, position), color.a * (1.0 - smoothstep(uFadeStart, uFadeEnd, length(position))));
+                gl_FragDepth = LOD_DEPTH;
             }
             """;
 
@@ -251,7 +254,7 @@ final class BlazeDhShaders {
                 vec4 color = texture(uDhColor, texCoord);
                 if (color.a == 0.0) discard;
                 float mcDepth = texture(uMcDepth, texCoord).r;
-                if (mcDepth >= 1.0) discard;
+                if (mcDepth >= LOD_DEPTH - 1e-7) discard;
                 vec3 position = unproject(uInvMvmProj, texture(uDhDepth, texCoord).r);
                 if (position.y > uMaxLevelHeight) discard;
                 fragColor = vec4(fogged(color.rgb, position), smoothstep(uFadeStart, uFadeEnd, length(unproject(uMcInvMvmProj, mcDepth))));

@@ -227,7 +227,7 @@ public final class BlazeDh implements AutoCloseable {
         frameDepth = depthTexture;
         compositeFrame = owner.frame();
         var textures = owner.textures();
-        var pass = new BlazeTerrainPass(owner, target, overlay(target), (bytes, width, height) -> compositeUniforms(bytes, inverseMvmProjection, fadeStart, fadeEnd),
+        var pass = new BlazeTerrainPass(owner, target, overlay(target, true), (bytes, width, height) -> compositeUniforms(bytes, inverseMvmProjection, fadeStart, fadeEnd),
                 composite, this::pipeline, name -> textures.resolve(name.equals("uDhColor") ? colorTexture : depthTexture), "uDhColor");
         pass.add((command, layout, multiDraw) -> vkCmdDraw(command, 3, 1, 0, 0));
         owner.enqueue(pass);
@@ -248,7 +248,7 @@ public final class BlazeDh implements AutoCloseable {
         var mcDepth = textures.resolve(mcDepthTexture);
         if (frame.depth() != mcDepth.view().image()) return;
         BlazeTarget target = fadeTarget(frame.colorView());
-        var pass = new BlazeTerrainPass(owner, target, overlay(target), (bytes, width, height) -> {
+        var pass = new BlazeTerrainPass(owner, target, overlay(target, false), (bytes, width, height) -> {
             compositeUniforms(bytes, dhInverse, fadeStart, fadeEnd);
             bytes.putFloat(148, maxLevelHeight);
             bytes.position(160);
@@ -283,8 +283,9 @@ public final class BlazeDh implements AutoCloseable {
         return fadeTarget;
     }
 
-    private static BlazeDrawState.Snapshot overlay(BlazeTarget target) {
-        return new BlazeDrawState.Snapshot(new NativeGraphicsPipeline.Depth(false, false, VK_COMPARE_OP_ALWAYS, 0, 0),
+    /** {@code behind} keeps the overlay behind what the frame has drawn and leaves its own depth there, so later passes can tell it from sky. */
+    private static BlazeDrawState.Snapshot overlay(BlazeTarget target, boolean behind) {
+        return new BlazeDrawState.Snapshot(new NativeGraphicsPipeline.Depth(behind, behind, behind ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_ALWAYS, 0, 0),
                 new NativeGraphicsPipeline.Color(true, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD,
                         VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, WRITE_RGBA),
                 NativeGraphicsPipeline.ColorLogic.disabled(), VK_CULL_MODE_NONE, VK_POLYGON_MODE_FILL, 1,
