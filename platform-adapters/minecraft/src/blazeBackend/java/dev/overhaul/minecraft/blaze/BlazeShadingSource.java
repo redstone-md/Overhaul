@@ -52,7 +52,7 @@ final class BlazeShadingSource {
     // A surface seen at a shallow angle shows the sky above it and the sun's glint; one facing up also ripples.
     private static final String MIRROR_FRAGMENT_MAIN = """
 
-            const vec3 NIGHT_AIR = vec3(0.075, 0.13, 0.17);
+            const vec3 NIGHT_AIR = vec3(0.095, 0.19, 0.25);
 
             void main() {
                 shading_main();
