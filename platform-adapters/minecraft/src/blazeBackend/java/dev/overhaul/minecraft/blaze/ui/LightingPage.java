@@ -11,7 +11,7 @@ import java.util.Locale;
 final class LightingPage extends SettingsPage {
     private static final String DISTANCE = "rtDistance";
     private static final List<BlazeOptimization> SHADING = List.of(BlazeOptimization.SHADING_BLOOM, BlazeOptimization.SHADING_EXPOSURE, BlazeOptimization.SHADING_SCREEN_SHADOWS,
-            BlazeOptimization.SHADING_SHAFTS, BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.SHADING_COLORED_LIGHT);
+            BlazeOptimization.SHADING_SHAFTS, BlazeOptimization.SHADING_OCCLUSION, BlazeOptimization.SHADING_CLOUDS, BlazeOptimization.SHADING_WATER, BlazeOptimization.SHADING_COLORED_LIGHT, BlazeOptimization.PATH_TRACING);
     private static final List<BlazeOptimization> TRACED = List.of(BlazeOptimization.RT_SHADOWS, BlazeOptimization.RT_LIGHTING, BlazeOptimization.RT_AO, BlazeOptimization.RT_GI,
             BlazeOptimization.RT_REFLECTIONS);
     private final OptimizationValues values;

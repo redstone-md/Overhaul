@@ -105,11 +105,14 @@ final class BlazeShadingShader {
             // camera, per ever larger cells further off so a cell never shrinks under a pixel. What is scattered by it
             // stands still while the camera moves. The cells repeat every sixteen blocks, as the camera's place does.
             // Neighbouring cells get numbers far apart, so what is scattered comes out as an even weave, not in clumps.
+            // Up close a texel covers many pixels, which would all scatter alike and show it as a block; there each
+            // two by two pixels turn the number their own way, and the weave is as fine as the screen.
             float grainAt(vec3 position, vec3 normal) {
                 float cells = 16.0 / exp2(max(ceil(log2(length(position) / 24.0)), 0.0));
                 vec3 camera = vec3(options.w & 1023u, (options.w >> 10u) & 1023u, (options.w >> 20u) & 1023u) / 64.0;
                 vec3 at = mod(floor((position + camera - normal * 0.02) * cells), 16.0 * cells);
-                return fract(52.9829189 * fract(dot(at, vec3(0.06711056, 0.0291, 0.00583715))));
+                float fine = fract(52.9829189 * fract(dot(vec2(gl_GlobalInvocationID.xy), vec2(0.06711056, 0.00583715))));
+                return fract(52.9829189 * fract(dot(at, vec3(0.06711056, 0.0291, 0.00583715))) + fine);
             }
 
             // How many more spots of the sun each pixel aims at where a shadow's edge passes.
@@ -425,9 +428,16 @@ final class BlazeShadingShader {
                 for (int i = 0; i < 4; i++) opens[i] = openAt(seen[i], cell * 2 + ivec2(i & 1, i >> 1), float(i));
             #ifdef BOUNCED
                 // The light that came back is gathered coarsely: each pixel takes it from the nine around that lie as far as it does.
-                vec4 back[9];
+            #ifdef PATHS
+                // Paths leave more grain than one bounce, so theirs is gathered from further around.
+                const int REACH = 2;
+            #else
+                const int REACH = 1;
+            #endif
+                const int WIDE = 2 * REACH + 1, AROUND = WIDE * WIDE;
+                vec4 back[AROUND];
                 ivec2 last = textureSize(bounced, 0) - 1;
-                for (int i = 0; i < 9; i++) back[i] = texelFetch(bounced, clamp(cell + ivec2(i % 3 - 1, i / 3 - 1), ivec2(0), last), 0);
+                for (int i = 0; i < AROUND; i++) back[i] = texelFetch(bounced, clamp(cell + ivec2(i % WIDE - REACH, i / WIDE - REACH), ivec2(0), last), 0);
             #endif
                 for (int i = 0; i < 4; i++) {
                     float shadow = 0.0, open = 0.0, weight = 0.0, distance = length(seen[i].position);
@@ -443,14 +453,20 @@ final class BlazeShadingShader {
                     vec3 indirect = vec3(0.0);
             #ifdef BOUNCED
                     float found = 0.0;
-                    if (seen[i].terrain) for (int j = 0; j < 9; j++) {
+                    if (seen[i].terrain) for (int j = 0; j < AROUND; j++) {
                         if (back[j].a <= 0.0) continue;
                         float gap = (back[j].a - distance) / (0.1 + 0.03 * distance);
-                        float near = exp(-gap * gap) * (j == 4 ? 2.0 : 1.0);
+                        vec2 off = vec2(j % WIDE - REACH, j / WIDE - REACH);
+                        float near = exp(-gap * gap - dot(off, off) * 0.25) * (j == AROUND / 2 ? 1.6 : 1.0);
                         indirect += back[j].rgb * near;
                         found += near;
                     }
                     indirect = found > 0.001 ? indirect / found : vec3(0.0);
+            #ifdef PATHS
+                    // Paths brought the sky's light where they were traced; the sky light level gives the rest, and a little
+                    // everywhere, so what paths seldom reach is never left without a shape.
+                    skyKept = found > 0.001 ? 1.0 - 0.85 * pathShare(seen[i].position) : 1.0;
+            #endif
             #endif
                     sunFilter = shadow > 0.0 && tint.r + tint.g + tint.b > 0.0 ? tint / shadow : vec3(1.0);
                     sum += lightOf(seen[i], (weight > 0.0 ? shadow / weight : 0.0) * cloudy, weight > 0.0 ? open / weight : 1.0, shaft, indirect, cell * 2 + ivec2(i & 1, i >> 1));
@@ -465,12 +481,15 @@ final class BlazeShadingShader {
      * The plain variant's source, or with {@code traced} the one finding sun shadows with ray queries; with
      * {@code linear} it also leaves linear light at half size and shows the glow and exposure made of the frame before;
      * with {@code shafts} the air catches the sun's light; with {@code occlusion} corners and creases darken; with
-     * {@code bounced} terrain also takes the light {@link BlazeShadingBounce} found coming back to it.
+     * {@code bounced} terrain also takes the light {@link BlazeShadingBounce} found coming back to it, which with
+     * {@code paths} holds the sky's light too.
      */
-    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored, boolean bounced) {
-        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "") + (colored ? "#define COLORED\n" : "") + (bounced ? "#define BOUNCED\n" : "");
-        if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + SCREEN + BODY + BlazeLightVolume.READING + LIGHTING;
-        return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + SCREEN + BODY + BlazeLightVolume.READING + LIGHTING;
+    static String source(boolean traced, boolean linear, boolean shafts, boolean occlusion, boolean colored, boolean bounced, boolean paths) {
+        String head = HEAD + (linear ? "#define LINEAR\n" : "") + (shafts ? "#define SHAFTS\n" : "") + (occlusion ? "#define OCCLUSION\n" : "") + (colored ? "#define COLORED\n" : "")
+                + (bounced ? "#define BOUNCED\n" : "") + (paths ? "#define PATHS\n" : "");
+        String body = SCREEN + BODY + BlazeLightVolume.READING + BlazeShadingPathShader.WITHIN + LIGHTING;
+        if (!traced) return head + BINDINGS + BlazeRayShader.LIGHTS + body;
+        return head + TRACED_HEAD + BINDINGS + BlazeRayShader.BUFFERS + BlazeRayShader.SCENE + BlazeRayShader.LIGHTS + body;
     }
 
     private BlazeShadingShader() {}

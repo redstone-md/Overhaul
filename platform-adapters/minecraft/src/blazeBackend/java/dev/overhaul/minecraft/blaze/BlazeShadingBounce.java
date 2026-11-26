@@ -7,6 +7,7 @@ import dev.overhaul.vulkan.GpuImage;
 import dev.overhaul.vulkan.GpuImageView;
 import dev.overhaul.vulkan.GpuSampler;
 import dev.overhaul.vulkan.ImageFormat;
+import dev.overhaul.vulkan.ImageRegion;
 import dev.overhaul.vulkan.SamplerSettings;
 import dev.overhaul.vulkan.VulkanContext;
 import dev.overhaul.vulkan.VulkanStack;
@@ -21,16 +22,21 @@ import static org.lwjgl.vulkan.KHRAccelerationStructure.VK_DESCRIPTOR_TYPE_ACCEL
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
- * Runs {@link BlazeShadingBounceShader} before the lighting pass: one dispatch at half the main target's size reads
- * the surfaces terrain wrote and the depth, traces the scene and writes the light that came back into one of two
- * histories, which take turns as last frame's and this frame's. The lighting pass then reads this frame's. The
- * pipeline lives as long as this pass; the histories follow the target's size.
+ * Runs {@link BlazeShadingBounceShader}, or with paths {@link BlazeShadingPathShader}, before the lighting pass: one
+ * dispatch at half the main target's size reads the surfaces terrain wrote and the depth, traces the scene and writes
+ * the light that came back into one of two histories, which take turns as last frame's and this frame's. The lighting
+ * pass then reads this frame's. A pass that is not traced has no scene: it walks the light volume's blocks, and what
+ * the scene's hit table would carry of last frame reaches it in a small image. The pipeline lives as long as this
+ * pass; the histories follow the target's size.
  */
 final class BlazeShadingBounce implements AutoCloseable {
     private final BlazeRenderer owner;
     private final VulkanContext context;
-    private final boolean colored;
+    private final boolean colored, paths, traced;
     private final GpuSampler sampler, historySampler;
+    /** Last frame's view projection and the motion since, for a pass without a scene. */
+    private GpuImage former;
+    private GpuImageView formerView;
     private long setLayout, pipelineLayout, pipeline;
     private final GpuImage[] histories = new GpuImage[2];
     private final GpuImageView[] historyViews = new GpuImageView[2];
@@ -41,9 +47,11 @@ final class BlazeShadingBounce implements AutoCloseable {
     private final Matrix4f previousViewProjection = new Matrix4f();
     private double previousX, previousY, previousZ;
 
-    BlazeShadingBounce(BlazeRenderer owner, boolean colored) {
+    BlazeShadingBounce(BlazeRenderer owner, boolean colored, boolean paths, boolean traced) {
         this.owner = owner;
         this.colored = colored;
+        this.paths = paths;
+        this.traced = traced;
         context = owner.context();
         sampler = owner.allocator().createSampler(new SamplerSettings(SamplerSettings.Filter.NEAREST,
                 SamplerSettings.Filter.NEAREST, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
@@ -52,6 +60,10 @@ final class BlazeShadingBounce implements AutoCloseable {
                 SamplerSettings.Filter.LINEAR, SamplerSettings.Mipmap.NEAREST, SamplerSettings.Address.CLAMP,
                 SamplerSettings.Address.CLAMP, SamplerSettings.Address.CLAMP, 0, 0, 1, SamplerSettings.Compare.NONE));
         try {
+            if (!traced) {
+                former = owner.allocator().createImage(ImageFormat.RGBA32_SFLOAT, BlazeRayShader.TRAILER_FLOATS / 4, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+                formerView = former.view(0, 1, 0, 1);
+            }
             create();
         } catch (RuntimeException | Error failure) {
             close();
@@ -59,12 +71,23 @@ final class BlazeShadingBounce implements AutoCloseable {
         }
     }
 
-    /** Whether this pass reads the light volume. */
-    boolean colored() {
-        return colored;
+    /** Whether this pass is the one these settings ask for. */
+    boolean is(boolean colored, boolean paths, boolean traced) {
+        return this.colored == colored && this.paths == paths && this.traced == traced;
+    }
+
+    /** Whether this pass sends rays into the scene, which it then needs. */
+    boolean traced() {
+        return traced;
+    }
+
+    /** Whether this pass traces paths, which bring the sky's light too. */
+    boolean paths() {
+        return paths;
     }
 
     private int[] sampled() {
+        if (!traced) return new int[]{1, 2, 5, 9, 10, 12};
         return colored ? new int[]{1, 2, 3, 5, 9, 10} : new int[]{1, 2, 3, 5};
     }
 
@@ -73,18 +96,19 @@ final class BlazeShadingBounce implements AutoCloseable {
         try (MemoryStack stack = VulkanStack.push(); ShadercCompiler compiler = new ShadercCompiler(true)) {
             var pointer = stack.mallocLong(1);
             int[] sampled = sampled();
-            var bindings = VkDescriptorSetLayoutBinding.calloc(sampled.length + 2, stack);
+            var bindings = VkDescriptorSetLayoutBinding.calloc(sampled.length + (traced ? 2 : 1), stack);
             int at = 0;
             for (int slot : sampled) bindings.get(at++).binding(slot).descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
             bindings.get(at++).binding(6).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            bindings.get(at).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
+            if (traced) bindings.get(at).binding(0).descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
             BlazeFsr2Pipelines.check(vkCreateDescriptorSetLayout(device, VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default().pBindings(bindings), null, pointer), "bounce layout");
             setLayout = pointer.get(0);
             var range = VkPushConstantRange.calloc(1, stack).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).offset(0).size(BlazeShadingShader.PUSH_BYTES);
             BlazeFsr2Pipelines.check(vkCreatePipelineLayout(device, VkPipelineLayoutCreateInfo.calloc(stack).sType$Default().pSetLayouts(stack.longs(setLayout)).pPushConstantRanges(range),
                     null, pointer), "bounce pipeline layout");
             pipelineLayout = pointer.get(0);
-            var code = compiler.compile("overhaul_shading_bounce" + (colored ? "_colored" : ""), BlazeShadingBounceShader.source(colored), ShaderStage.COMPUTE).directBuffer();
+            var code = compiler.compile("overhaul_shading_" + (paths ? "paths" : "bounce") + (colored ? "_colored" : "") + (traced ? "" : "_walked"),
+                    paths ? BlazeShadingPathShader.source(colored, traced) : BlazeShadingBounceShader.source(colored), ShaderStage.COMPUTE).directBuffer();
             BlazeFsr2Pipelines.check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(code), null, pointer), "bounce module");
             long module = pointer.get(0);
             try {
@@ -101,7 +125,8 @@ final class BlazeShadingBounce implements AutoCloseable {
     /**
      * This frame's values for the hit table's trailer: last frame's view projection, where the camera stood then
      * relative to now and whether a history from it exists. Called once a frame before {@link #gather}; histories
-     * that no longer fit the target are made again here, and a fresh history counts as none.
+     * that no longer fit the target are made again here, and a fresh history counts as none. A pass without a scene
+     * takes the values into its own image.
      */
     float[] trailer(int width, int height, Matrix4f viewProjection, double x, double y, double z) {
         boolean ready = gathered && fits(width, height);
@@ -117,6 +142,11 @@ final class BlazeShadingBounce implements AutoCloseable {
         previousY = y;
         previousZ = z;
         gathered = false;
+        if (!traced) {
+            var pixels = org.lwjgl.BufferUtils.createByteBuffer(values.length * Float.BYTES);
+            pixels.asFloatBuffer().put(values);
+            owner.uploadImage(former, new ImageRegion(0, 0, 0, 0, values.length / 4, 1), pixels, 0);
+        }
         return values;
     }
 
@@ -139,25 +169,37 @@ final class BlazeShadingBounce implements AutoCloseable {
 
     /**
      * Queues the gathering of the light that comes back to the terrain of {@code target}, whose {@code surfaces} are
-     * still as terrain wrote them, and gives the image the lighting pass reads it from.
+     * still as terrain wrote them, and gives the image the lighting pass reads it from. A pass that is not traced
+     * takes neither {@code atlas} nor {@code scene}.
      */
     GpuImageView gather(BlazeTarget target, GpuImageView surfaces, BlazeTextures.Sampled atlas, BlazeRayScene.Frame scene, BlazeShadingPass.Lighting lighting) {
         int width = target.width(), height = target.height();
         resize(width, height);
         turn ^= 1;
-        List<GpuImageView> views = new ArrayList<>(List.of(surfaces, target.sampledDepthView(), atlas.view(), historyViews[turn ^ 1]));
-        List<Long> samplers = new ArrayList<>(List.of(sampler.handle(), sampler.handle(), atlas.sampler(), historySampler.handle()));
+        List<GpuImageView> views = new ArrayList<>(List.of(surfaces, target.sampledDepthView()));
+        List<Long> samplers = new ArrayList<>(List.of(sampler.handle(), sampler.handle()));
+        if (traced) {
+            views.add(atlas.view());
+            samplers.add(atlas.sampler());
+        }
+        views.add(historyViews[turn ^ 1]);
+        samplers.add(historySampler.handle());
         if (colored) {
             views.add(lighting.colors().view());
             samplers.add(lighting.colors().sampler());
             views.add(lighting.colors().blocks());
             samplers.add(lighting.colors().exact());
         }
+        if (!traced) {
+            views.add(formerView);
+            samplers.add(sampler.handle());
+        }
+        BlazeRayStructures.Structure top = traced ? scene.top() : null;
         Binding binding = bindings[turn];
-        if (binding == null || !binding.reads(scene.top(), views, samplers, historyViews[turn])) {
+        if (binding == null || !binding.reads(top, views, samplers, historyViews[turn])) {
             if (binding != null) owner.retire(binding);
             bindings[turn] = null;
-            binding = bindings[turn] = new Binding(scene.top(), views, samplers, atlas.general(), historyViews[turn]);
+            binding = bindings[turn] = new Binding(top, views, samplers, traced && atlas.general(), historyViews[turn]);
         }
         owner.enqueue(new Dispatch(binding, scene, lighting, width, height, frame++));
         gathered = true;
@@ -182,16 +224,16 @@ final class BlazeShadingBounce implements AutoCloseable {
             VkDevice device = context.device();
             try (MemoryStack stack = VulkanStack.push()) {
                 var pointer = stack.mallocLong(1);
-                var sizes = VkDescriptorPoolSize.calloc(3, stack);
+                var sizes = VkDescriptorPoolSize.calloc(traced ? 3 : 2, stack);
                 sizes.get(0).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(slots.length);
                 sizes.get(1).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(1);
-                sizes.get(2).type(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1);
+                if (traced) sizes.get(2).type(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR).descriptorCount(1);
                 BlazeFsr2Pipelines.check(vkCreateDescriptorPool(device, VkDescriptorPoolCreateInfo.calloc(stack).sType$Default().maxSets(1).pPoolSizes(sizes), null, pointer), "bounce pool");
                 pool = pointer.get(0);
                 BlazeFsr2Pipelines.check(vkAllocateDescriptorSets(device, VkDescriptorSetAllocateInfo.calloc(stack).sType$Default().descriptorPool(pool).pSetLayouts(stack.longs(setLayout)), pointer),
                         "bounce set");
                 set = pointer.get(0);
-                var writes = VkWriteDescriptorSet.calloc(slots.length + 2, stack);
+                var writes = VkWriteDescriptorSet.calloc(slots.length + (traced ? 2 : 1), stack);
                 int at = 0;
                 for (int i = 0; i < slots.length; i++) {
                     int layout = slots[i] == 3 && atlasGeneral ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -201,9 +243,11 @@ final class BlazeShadingBounce implements AutoCloseable {
                 }
                 writes.get(at++).sType$Default().dstSet(set).dstBinding(6).descriptorCount(1).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                         .pImageInfo(VkDescriptorImageInfo.calloc(1, stack).imageView(accumulated.handle()).imageLayout(VK_IMAGE_LAYOUT_GENERAL));
-                var structure = VkWriteDescriptorSetAccelerationStructureKHR.calloc(stack).sType$Default().pAccelerationStructures(stack.longs(top.handle()));
-                writes.get(at).sType$Default().pNext(structure.address()).dstSet(set).dstBinding(0).descriptorCount(1)
-                        .descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR);
+                if (traced) {
+                    var structure = VkWriteDescriptorSetAccelerationStructureKHR.calloc(stack).sType$Default().pAccelerationStructures(stack.longs(top.handle()));
+                    writes.get(at).sType$Default().pNext(structure.address()).dstSet(set).dstBinding(0).descriptorCount(1)
+                            .descriptorType(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR);
+                }
                 vkUpdateDescriptorSets(device, writes, null);
             }
         }
@@ -243,9 +287,9 @@ final class BlazeShadingBounce implements AutoCloseable {
             binding.transition(command, images);
             try (MemoryStack stack = VulkanStack.push()) {
                 var push = stack.malloc(BlazeShadingShader.PUSH_BYTES);
-                BlazeShadingPass.frame(push, lighting, width, height, scene.table());
+                BlazeShadingPass.frame(push, lighting, width, height, scene != null ? scene.table() : lighting.clouds());
                 // The fog's words are not read here: the frame's number and the scene's instances take their place.
-                push.putInt(112, number).putInt(116, scene.instances());
+                push.putInt(112, number).putInt(116, scene != null ? scene.instances() : 0);
                 vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, stack.longs(binding.set), null);
                 vkCmdPushConstants(command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
                 vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
@@ -269,6 +313,8 @@ final class BlazeShadingBounce implements AutoCloseable {
             bindings[i] = null;
             histories[i] = null;
         }
+        if (former != null) former.close();
+        former = null;
         VkDevice device = context.device();
         if (pipeline != 0) vkDestroyPipeline(device, pipeline, null);
         if (pipelineLayout != 0) vkDestroyPipelineLayout(device, pipelineLayout, null);

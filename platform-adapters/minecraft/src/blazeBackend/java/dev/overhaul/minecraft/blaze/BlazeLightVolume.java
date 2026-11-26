@@ -72,6 +72,8 @@ final class BlazeLightVolume implements AutoCloseable {
                 ivec3 voxel = ivec3(gl_GlobalInvocationID);
                 ivec3 within = (voxel - origin.xyz) & (SIZE - 1);
                 vec4 block = blockAt(voxel);
+                // A solid block's word carries its own colour, which is not light it lets pass.
+                if (abs(block.a * 255.0 - 2.0) < 0.5) block = vec4(0.0);
                 // A light's own word carries its level; the faintest mark is a fluid's.
                 bool gives = block.a > 0.03;
                 vec3 passes = gives ? vec3(1.0) : block.rgb;
@@ -99,12 +101,21 @@ final class BlazeLightVolume implements AutoCloseable {
                         + 16.0 * vec3(options.z & 7u, (options.z >> 3u) & 3u, (options.z >> 5u) & 7u);
             }
 
-            // What the block at a place near the camera lets pass, and with what strength it gives light.
-            vec4 volumeBlock(vec3 at) {
+            // The word of the block at a place near the camera.
+            vec4 volumeWord(vec3 at) {
                 ivec3 voxel = ivec3(floor(at + volumeCamera())) & ivec3(127, 63, 127);
                 ivec3 slot = voxel >> 4, inside = voxel & 15;
                 int tile = slot.x + slot.z * 8 + slot.y * 64;
                 return texelFetch(lightBlocks, ivec2((tile & 15) * 64 + inside.x + (inside.y & 3) * 16, (tile >> 4) * 64 + inside.z + (inside.y >> 2) * 16), 0);
+            }
+
+            // Whether a word is a solid block's, which carries the block's own colour.
+            bool solid(vec4 word) { return abs(word.a * 255.0 - 2.0) < 0.5; }
+
+            // What the block at a place near the camera lets pass, and with what strength it gives light.
+            vec4 volumeBlock(vec3 at) {
+                vec4 word = volumeWord(at);
+                return solid(word) ? vec4(0.0) : word;
             }
 
             // What the first of the four blocks beside a place lets pass, of those that colour light.

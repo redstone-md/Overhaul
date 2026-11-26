@@ -38,8 +38,8 @@ public final class BlazeShading {
     private BlazeTarget main, target;
     private GpuImage surfaces;
     private GpuImageView surfacesView, forColor, forDepth;
-    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners, 16 for block light in colour, 32 for the light that comes back off terrain. */
-    private final BlazeShadingPass[] passes = new BlazeShadingPass[64];
+    /** The lighting passes made so far, by what each does: 1 for traced shadows, 2 for leaving linear light, 4 for the air catching the sun, 8 for darkening corners, 16 for block light in colour, 32 for the light that comes back off terrain, 64 for that light holding the sky's. */
+    private final BlazeShadingPass[] passes = new BlazeShadingPass[128];
     /** Gathers the light that comes back off terrain; once it fails it stays off until the settings change. */
     private BlazeShadingBounce bounce;
     private boolean bounceFailed;
@@ -173,7 +173,9 @@ public final class BlazeShading {
             boolean traced = area != null && owner.context().rayQuery() && BlazeOptimization.RAY_TRACING.on() && BlazeOptimization.RT_SHADOWS.on();
             BlazeTextures.Sampled atlas = traced ? owner.textures().resolve(client.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS)) : null;
             boolean colored = BlazeOptimization.SHADING_COLORED_LIGHT.on();
-            float[] trailer = atlas != null && BlazeOptimization.RT_GI.on() ? bounceTrailer(colored, viewProjection, position) : null;
+            // Paths take the place of the single bounce, and without rays walk the light volume's blocks.
+            boolean paths = BlazeOptimization.PATH_TRACING.on() && (atlas != null || colored);
+            float[] trailer = paths || atlas != null && BlazeOptimization.RT_GI.on() ? bounceTrailer(colored, paths, atlas != null, viewProjection, position) : null;
             BlazeRayScene.Frame scene = atlas != null ? BlazeRayTracing.get().shadowScene(owner, world, area, position, clouds,
                     trailer != null ? trailer : new float[BlazeRayShader.TRAILER_FLOATS]) : null;
             traced = scene != null;
@@ -192,9 +194,11 @@ public final class BlazeShading {
                     mirrorLight.get(BlazeShadingSource.SKY), RenderSystem.getShaderFogColor().clone(), RenderSystem.getShaderFogStart(),
                     RenderSystem.getShaderFogEnd(), reach(traced), clouds,
                     BlazeShadingPass.Lighting.place(position.x, position.y, position.z), colored ? colors.update(world, position) : null);
-            GpuImageView back = traced && trailer != null ? bounced(atlas, scene, lighting) : null;
-            if (back != null) variant |= 32;
-            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion, colored, back != null);
+            // A bounce made for a scene waits while there is none.
+            GpuImageView back = trailer != null && bounce.traced() == traced ? bounced(atlas, scene, lighting) : null;
+            paths = back != null && bounce.paths();
+            if (back != null) variant |= paths ? 96 : 32;
+            if (passes[variant] == null) passes[variant] = new BlazeShadingPass(owner, traced, linear, shafts, occlusion, colored, back != null, paths);
             passes[variant].shade(main, surfacesView, atlas, scene, lighting, linear ? glow.light(main.width(), main.height(), bloom, adapt) : null, back);
             if (linear) glow.finish(bloom, adapt);
             owner.gpuMark("shading");
@@ -207,14 +211,14 @@ public final class BlazeShading {
     }
 
     /** What the scene's hit table carries for the bounce this frame, null once the bounce cannot be made. */
-    private float[] bounceTrailer(boolean colored, Matrix4f viewProjection, net.minecraft.world.phys.Vec3 position) {
+    private float[] bounceTrailer(boolean colored, boolean paths, boolean traced, Matrix4f viewProjection, net.minecraft.world.phys.Vec3 position) {
         if (bounceFailed) return null;
         try {
-            if (bounce != null && bounce.colored() != colored) {
+            if (bounce != null && !bounce.is(colored, paths, traced)) {
                 owner.retire(bounce);
                 bounce = null;
             }
-            if (bounce == null) bounce = new BlazeShadingBounce(owner, colored);
+            if (bounce == null) bounce = new BlazeShadingBounce(owner, colored, paths, traced);
             return bounce.trailer(main.width(), main.height(), viewProjection, position.x, position.y, position.z);
         } catch (RuntimeException | Error failure) {
             bounceFailed(failure);

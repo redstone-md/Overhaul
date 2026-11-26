@@ -18,14 +18,17 @@ import java.util.Map;
 
 /**
  * What a block is to coloured light, as one word a {@link BlazeLightVolume} stores per block: red, green and blue in
- * the low bytes and the light level times seventeen in the high one, or one there for a fluid. A block that gives light carries the colour of
- * its light, taken from the bright part of its texture; any other carries what it lets through: white for air,
- * nothing for a solid block, and its own colour, paled, for glass, ice, leaves and water. Answers are kept per block
+ * the low bytes and the light level times seventeen in the high one, or one there for a fluid and two for a solid
+ * block. A block that gives light carries the colour of its light, taken from the bright part of its texture; a solid
+ * one its own colour as maps show it, for the paths of light that turn on it; any other carries what it lets through:
+ * white for air, and its own colour, paled, for glass, ice, leaves and water. Answers are kept per block
  * state and per texture, so a texture is read once.
  */
 final class BlazeLightColors {
     /** Air: every colour passes, no light of its own. */
     static final int CLEAR = 0x00FFFFFF;
+    /** The high byte of a solid block's word. */
+    private static final int SOLID = 2;
     /** Never a block's word, so it can mean a state not asked about yet. */
     private static final int UNKNOWN = 1;
     private static final int WARM = pack(1f, 0.66f, 0.38f);
@@ -56,7 +59,11 @@ final class BlazeLightColors {
         if (state.isAir()) return CLEAR;
         int level = Math.min(15, state.getLightEmission());
         if (level > 0) return glow(state) | level * 17 << 24;
-        if (state.getLightBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO) >= 15) return 0;
+        if (state.getLightBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO) >= 15) {
+            int own = state.getMapColor(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).col;
+            if (own == 0) own = 0x7F7F7F;
+            return pack((own >> 16 & 255) / 255f, (own >> 8 & 255) / 255f, (own & 255) / 255f) | SOLID << 24;
+        }
         Block block = state.getBlock();
         boolean fluid = !state.getFluidState().isEmpty(), leaves = block instanceof LeavesBlock;
         if (!fluid && !leaves && !(block instanceof HalfTransparentBlock) && !(block instanceof StainedGlassPaneBlock)) return CLEAR;
