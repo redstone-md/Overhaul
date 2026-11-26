@@ -248,7 +248,7 @@ public final class BlazeTextures implements AutoCloseable {
     private void transfer(GpuImage image,ImageRegion region,int format,int type,ByteBuffer destination){
         if(image.format().isDepth()!=(format==GL_DEPTH_COMPONENT))throw new UnsupportedOperationException("Pixel transfer aspect does not match source image");
         var layout=pixels.layout(true,region.width(),region.height(),BlazePixels.bytes(format,type));
-        var bytes=immediate().readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().bytesPerPixel(),destination,layout,region.width(),region.height(),format,type);
+        var bytes=immediate().readback(image,region,0);BlazePixels.pack(bytes,image.format().isDepth(),image.format().readbackBytes(),destination,layout,region.width(),region.height(),format,type);
     }
     public void copy(BlazeTarget source,int target,int level,int xOffset,int yOffset,int x,int y,int width,int height){
         kind(target);if(width==0||height==0||source==null)return;var texture=current(target);

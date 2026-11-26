@@ -13,11 +13,20 @@ final class ImageTransfers {
         execute(ImageCommand.upload(context,image,region,pixels,pitch));
     }
     ByteBuffer readback(GpuImage image,ImageRegion region,int pitch) {
+        if (image.format()==ImageFormat.D32_SFLOAT_S8_UINT) return readDepth(image,region);
         ImageCommand.validateImage(context,image,region,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         int bytes=region.byteSize(image,pitch);
         try (GpuBuffer target=image.allocator().hostBuffer(bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
             target.write(ByteBuffer.allocate(bytes));
             copyImageToBuffer(image,region,target,0,pitch);
+            return target.read();
+        }
+    }
+    private ByteBuffer readDepth(GpuImage image,ImageRegion region) {
+        int bytes=Math.multiplyExact(Math.multiplyExact(region.width(),region.height()),4);
+        try (GpuBuffer target=image.allocator().hostBuffer(bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
+            target.write(ByteBuffer.allocate(bytes));
+            execute(ImageCommand.copyDepthToBuffer(context,image,region,target));
             return target.read();
         }
     }

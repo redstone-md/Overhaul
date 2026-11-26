@@ -38,6 +38,8 @@ public enum ImageFormat {
     public boolean hasStencil(){return (aspects&VK_IMAGE_ASPECT_STENCIL_BIT)!=0;}
     /** The one aspect a sampled view reads: shaders sample the depth of a combined depth/stencil image. */
     public int sampledAspect(){return isDepth()?VK_IMAGE_ASPECT_DEPTH_BIT:aspects;}
+    /** Bytes per texel a readback returns: a float depth/stencil image hands back its depth alone. */
+    public int readbackBytes(){return this==D32_SFLOAT_S8_UINT?4:bytes;}
     public static ImageFormat fromVk(int format){
         for(ImageFormat value:values())if(value.format==format)return value;
         throw new IllegalArgumentException("Unsupported uncompressed Vulkan image format: "+format);

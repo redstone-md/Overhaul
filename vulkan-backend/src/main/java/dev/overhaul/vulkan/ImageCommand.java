@@ -102,6 +102,32 @@ public final class ImageCommand implements AutoCloseable {
         });
     }
 
+    /** Reads the float depth of a combined depth/stencil image into tightly packed rows; its stencil stays behind. */
+    static ImageCommand copyDepthToBuffer(VulkanContext context,GpuImage source,ImageRegion region,GpuBuffer target) {
+        validateWhole(context,source,region,VK_IMAGE_USAGE_TRANSFER_SRC_BIT); requireSingleSampled(source);
+        if (source.format()!=ImageFormat.D32_SFLOAT_S8_UINT) throw new IllegalArgumentException("Depth readback needs a float depth/stencil image");
+        long bytes=4L*region.width()*region.height();
+        if (target.context()!=context || (target.usage()&VK_BUFFER_USAGE_TRANSFER_DST_BIT)==0 || target.size()<bytes)
+            throw new IllegalArgumentException("Buffer owner/transfer usage differs");
+        return new ImageCommand(context,(operation,command)-> {
+            requireDefined(source,region);
+            int before=source.layout(region.mipLevel(),region.arrayLayer());
+            operation.transition(source,region,command,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            try (MemoryStack stack=VulkanStack.push()) {
+                VkBufferImageCopy.Buffer copy=VkBufferImageCopy.calloc(1,stack);
+                copy.imageSubresource().aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT).mipLevel(region.mipLevel()).baseArrayLayer(region.arrayLayer()).layerCount(1);
+                copy.imageOffset().set(region.x(),region.y(),region.slice()); copy.imageExtent().set(region.width(),region.height(),1);
+                vkCmdCopyImageToBuffer(command,source.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,target.handle(),copy);
+                VkMemoryBarrier.Buffer host=VkMemoryBarrier.calloc(1,stack).sType$Default()
+                        .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_HOST_READ_BIT|VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
+                vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,0,host,null,null);
+            }
+            operation.transition(source,region,command,before);
+        });
+    }
+
     public static ImageCommand copy(VulkanContext context,GpuImage source,ImageRegion from,GpuImage target,ImageRegion to) {
         validateWhole(context,source,from,VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         validateWhole(context,target,to,VK_IMAGE_USAGE_TRANSFER_DST_BIT);
